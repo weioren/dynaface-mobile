@@ -1,0 +1,762 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A1D7E2762E4849EA0030ABFA /* PracticePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D7E2752E4849EA0030ABFA /* PracticePage.swift */; };
+		A1D7E2782E4857100030ABFA /* Players.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D7E2772E4857100030ABFA /* Players.swift */; };
+		DB0564A52E39C8C400BEB570 /* PastExerciseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0564A42E39C8A900BEB570 /* PastExerciseView.swift */; };
+		DB0564A82E39F04E00BEB570 /* AuthSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0564A72E39F04E00BEB570 /* AuthSelector.swift */; };
+		DB2159BE2C90E7D100DD84DD /* Authentication.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB2159BD2C90E7D100DD84DD /* Authentication.swift */; };
+		DB2159C02C90E7EF00DD84DD /* SignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB2159BF2C90E7EF00DD84DD /* SignIn.swift */; };
+		DB533AFB2D560256003BFD1C /* CameraRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB533AFA2D560249003BFD1C /* CameraRecorderView.swift */; };
+		DB533AFD2D56026E003BFD1C /* RecordingPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB533AFC2D560267003BFD1C /* RecordingPage.swift */; };
+		DB533AFF2D56060C003BFD1C /* ExercisesPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB533AFE2D560601003BFD1C /* ExercisesPage.swift */; };
+		DB533B012D560622003BFD1C /* ExerciseHistoryPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB533B002D560618003BFD1C /* ExerciseHistoryPage.swift */; };
+		DB533B032D560641003BFD1C /* ProfilePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB533B022D56063E003BFD1C /* ProfilePage.swift */; };
+		DB533B052D560665003BFD1C /* HomePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB533B042D560661003BFD1C /* HomePage.swift */; };
+		DB5F94972EB31ABF00AA3301 /* HalfSmile.MOV in Resources */ = {isa = PBXBuildFile; fileRef = DB5F94962EB31ABF00AA3301 /* HalfSmile.MOV */; };
+		DB5F94982EB31ABF00AA3301 /* FullSmile.MOV in Resources */ = {isa = PBXBuildFile; fileRef = DB5F94952EB31ABF00AA3301 /* FullSmile.MOV */; };
+		DB6164952E5FAE9E008DD0B7 /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = DB6164942E5FAE9E008DD0B7 /* Auth */; };
+		DB6164972E5FAE9E008DD0B7 /* Functions in Frameworks */ = {isa = PBXBuildFile; productRef = DB6164962E5FAE9E008DD0B7 /* Functions */; };
+		DB6164992E5FAE9E008DD0B7 /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = DB6164982E5FAE9E008DD0B7 /* PostgREST */; };
+		DB61649B2E5FAE9E008DD0B7 /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = DB61649A2E5FAE9E008DD0B7 /* Realtime */; };
+		DB61649D2E5FAE9E008DD0B7 /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = DB61649C2E5FAE9E008DD0B7 /* Storage */; };
+		DB61649F2E5FAE9E008DD0B7 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = DB61649E2E5FAE9E008DD0B7 /* Supabase */; };
+		DB6164A12E5FAEE4008DD0B7 /* SupabaseConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB6164A02E5FAEE4008DD0B7 /* SupabaseConfig.swift */; };
+		DB6334672B7C914200601964 /* Dashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB6334662B7C914200601964 /* Dashboard.swift */; };
+		DBAB9FC12B59B8EF007B2B80 /* RevaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FC02B59B8EF007B2B80 /* RevaApp.swift */; };
+		DBAB9FC32B59B8EF007B2B80 /* SignUp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FC22B59B8EF007B2B80 /* SignUp.swift */; };
+		DBAB9FC52B59B8F1007B2B80 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DBAB9FC42B59B8F1007B2B80 /* Assets.xcassets */; };
+		DBAB9FC82B59B8F2007B2B80 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DBAB9FC72B59B8F2007B2B80 /* Preview Assets.xcassets */; };
+		DBAB9FD22B59B8F2007B2B80 /* RevaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FD12B59B8F2007B2B80 /* RevaTests.swift */; };
+		DBAB9FDC2B59B8F2007B2B80 /* RevaUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FDB2B59B8F2007B2B80 /* RevaUITests.swift */; };
+		DBAB9FDE2B59B8F2007B2B80 /* RevaUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FDD2B59B8F2007B2B80 /* RevaUITestsLaunchTests.swift */; };
+		DBAD9B2A2EA76049005F0C67 /* Blowfish.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = DBAD9B1F2EA76049005F0C67 /* Blowfish.mp4 */; };
+		DBAD9B2B2EA76049005F0C67 /* LipPurse.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = DBAD9B262EA76049005F0C67 /* LipPurse.mp4 */; };
+		DBAD9B2C2EA76049005F0C67 /* WeakEyeClosure.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = DBAD9B292EA76049005F0C67 /* WeakEyeClosure.mp4 */; };
+		DBAD9B2F2EA76049005F0C67 /* LipPucker.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = DBAD9B252EA76049005F0C67 /* LipPucker.mp4 */; };
+		DBAD9B302EA76049005F0C67 /* BrowFurrow.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = DBAD9B202EA76049005F0C67 /* BrowFurrow.mp4 */; };
+		DBAD9B312EA76049005F0C67 /* EyebrowRaise.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = DBAD9B212EA76049005F0C67 /* EyebrowRaise.mp4 */; };
+		DBAD9B322EA76049005F0C67 /* NoseWrinkle.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = DBAD9B272EA76049005F0C67 /* NoseWrinkle.mp4 */; };
+		DBAD9B332EA76049005F0C67 /* StrongEyeClosure.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = DBAD9B282EA76049005F0C67 /* StrongEyeClosure.mp4 */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		DBAB9FCE2B59B8F2007B2B80 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DBAB9FB52B59B8EF007B2B80 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DBAB9FBC2B59B8EF007B2B80;
+			remoteInfo = "Facial Palsy";
+		};
+		DBAB9FD82B59B8F2007B2B80 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DBAB9FB52B59B8EF007B2B80 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DBAB9FBC2B59B8EF007B2B80;
+			remoteInfo = "Facial Palsy";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		A1D7E2752E4849EA0030ABFA /* PracticePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticePage.swift; sourceTree = "<group>"; };
+		A1D7E2772E4857100030ABFA /* Players.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Players.swift; sourceTree = "<group>"; };
+		DB0564A42E39C8A900BEB570 /* PastExerciseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PastExerciseView.swift; sourceTree = "<group>"; };
+		DB0564A72E39F04E00BEB570 /* AuthSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSelector.swift; sourceTree = "<group>"; };
+		DB2159BD2C90E7D100DD84DD /* Authentication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Authentication.swift; sourceTree = "<group>"; };
+		DB2159BF2C90E7EF00DD84DD /* SignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignIn.swift; sourceTree = "<group>"; };
+		DB49134A2B802E9A0026B581 /* Icon_SignUp_Guided Tutorials.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Icon_SignUp_Guided Tutorials.png"; sourceTree = "<group>"; };
+		DB533AFA2D560249003BFD1C /* CameraRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraRecorderView.swift; sourceTree = "<group>"; };
+		DB533AFC2D560267003BFD1C /* RecordingPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingPage.swift; sourceTree = "<group>"; };
+		DB533AFE2D560601003BFD1C /* ExercisesPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExercisesPage.swift; sourceTree = "<group>"; };
+		DB533B002D560618003BFD1C /* ExerciseHistoryPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseHistoryPage.swift; sourceTree = "<group>"; };
+		DB533B022D56063E003BFD1C /* ProfilePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilePage.swift; sourceTree = "<group>"; };
+		DB533B042D560661003BFD1C /* HomePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomePage.swift; sourceTree = "<group>"; };
+		DB5F94952EB31ABF00AA3301 /* FullSmile.MOV */ = {isa = PBXFileReference; lastKnownFileType = video.quicktime; path = FullSmile.MOV; sourceTree = "<group>"; };
+		DB5F94962EB31ABF00AA3301 /* HalfSmile.MOV */ = {isa = PBXFileReference; lastKnownFileType = video.quicktime; path = HalfSmile.MOV; sourceTree = "<group>"; };
+		DB6164A02E5FAEE4008DD0B7 /* SupabaseConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseConfig.swift; sourceTree = "<group>"; };
+		DB6334662B7C914200601964 /* Dashboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dashboard.swift; sourceTree = "<group>"; };
+		DBAB9FBD2B59B8EF007B2B80 /* Reva.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Reva.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DBAB9FC02B59B8EF007B2B80 /* RevaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RevaApp.swift; sourceTree = "<group>"; };
+		DBAB9FC22B59B8EF007B2B80 /* SignUp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignUp.swift; sourceTree = "<group>"; };
+		DBAB9FC42B59B8F1007B2B80 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		DBAB9FC72B59B8F2007B2B80 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		DBAB9FCD2B59B8F2007B2B80 /* RevaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RevaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DBAB9FD12B59B8F2007B2B80 /* RevaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RevaTests.swift; sourceTree = "<group>"; };
+		DBAB9FD72B59B8F2007B2B80 /* RevaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RevaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DBAB9FDB2B59B8F2007B2B80 /* RevaUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RevaUITests.swift; sourceTree = "<group>"; };
+		DBAB9FDD2B59B8F2007B2B80 /* RevaUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RevaUITestsLaunchTests.swift; sourceTree = "<group>"; };
+		DBAD9B1F2EA76049005F0C67 /* Blowfish.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = Blowfish.mp4; sourceTree = "<group>"; };
+		DBAD9B202EA76049005F0C67 /* BrowFurrow.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = BrowFurrow.mp4; sourceTree = "<group>"; };
+		DBAD9B212EA76049005F0C67 /* EyebrowRaise.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = EyebrowRaise.mp4; sourceTree = "<group>"; };
+		DBAD9B252EA76049005F0C67 /* LipPucker.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = LipPucker.mp4; sourceTree = "<group>"; };
+		DBAD9B262EA76049005F0C67 /* LipPurse.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = LipPurse.mp4; sourceTree = "<group>"; };
+		DBAD9B272EA76049005F0C67 /* NoseWrinkle.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = NoseWrinkle.mp4; sourceTree = "<group>"; };
+		DBAD9B282EA76049005F0C67 /* StrongEyeClosure.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = StrongEyeClosure.mp4; sourceTree = "<group>"; };
+		DBAD9B292EA76049005F0C67 /* WeakEyeClosure.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = WeakEyeClosure.mp4; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		DBAB9FBA2B59B8EF007B2B80 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DB6164992E5FAE9E008DD0B7 /* PostgREST in Frameworks */,
+				DB6164972E5FAE9E008DD0B7 /* Functions in Frameworks */,
+				DB61649F2E5FAE9E008DD0B7 /* Supabase in Frameworks */,
+				DB6164952E5FAE9E008DD0B7 /* Auth in Frameworks */,
+				DB61649D2E5FAE9E008DD0B7 /* Storage in Frameworks */,
+				DB61649B2E5FAE9E008DD0B7 /* Realtime in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DBAB9FCA2B59B8F2007B2B80 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DBAB9FD42B59B8F2007B2B80 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		DB6164932E5FAE9E008DD0B7 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		DBAB9FB42B59B8EF007B2B80 = {
+			isa = PBXGroup;
+			children = (
+				DBAB9FBF2B59B8EF007B2B80 /* Reva */,
+				DBAB9FD02B59B8F2007B2B80 /* Reva Tests */,
+				DBAB9FDA2B59B8F2007B2B80 /* Reva UI Tests */,
+				DB6164932E5FAE9E008DD0B7 /* Frameworks */,
+				DBAB9FBE2B59B8EF007B2B80 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		DBAB9FBE2B59B8EF007B2B80 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				DBAB9FBD2B59B8EF007B2B80 /* Reva.app */,
+				DBAB9FCD2B59B8F2007B2B80 /* RevaTests.xctest */,
+				DBAB9FD72B59B8F2007B2B80 /* RevaUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		DBAB9FBF2B59B8EF007B2B80 /* Reva */ = {
+			isa = PBXGroup;
+			children = (
+				DB5F94952EB31ABF00AA3301 /* FullSmile.MOV */,
+				DB5F94962EB31ABF00AA3301 /* HalfSmile.MOV */,
+				DBAD9B1F2EA76049005F0C67 /* Blowfish.mp4 */,
+				DBAD9B202EA76049005F0C67 /* BrowFurrow.mp4 */,
+				DBAD9B212EA76049005F0C67 /* EyebrowRaise.mp4 */,
+				DBAD9B252EA76049005F0C67 /* LipPucker.mp4 */,
+				DBAD9B262EA76049005F0C67 /* LipPurse.mp4 */,
+				DBAD9B272EA76049005F0C67 /* NoseWrinkle.mp4 */,
+				DBAD9B282EA76049005F0C67 /* StrongEyeClosure.mp4 */,
+				DBAD9B292EA76049005F0C67 /* WeakEyeClosure.mp4 */,
+				DB0564A72E39F04E00BEB570 /* AuthSelector.swift */,
+				DB0564A42E39C8A900BEB570 /* PastExerciseView.swift */,
+				A1D7E2752E4849EA0030ABFA /* PracticePage.swift */,
+				DB533B042D560661003BFD1C /* HomePage.swift */,
+				DB533B022D56063E003BFD1C /* ProfilePage.swift */,
+				DB533B002D560618003BFD1C /* ExerciseHistoryPage.swift */,
+				DB533AFE2D560601003BFD1C /* ExercisesPage.swift */,
+				DB533AFC2D560267003BFD1C /* RecordingPage.swift */,
+				DB533AFA2D560249003BFD1C /* CameraRecorderView.swift */,
+				DBAB9FC02B59B8EF007B2B80 /* RevaApp.swift */,
+				DBAB9FC22B59B8EF007B2B80 /* SignUp.swift */,
+				DB2159BF2C90E7EF00DD84DD /* SignIn.swift */,
+				DB2159BD2C90E7D100DD84DD /* Authentication.swift */,
+				DB6164A02E5FAEE4008DD0B7 /* SupabaseConfig.swift */,
+				DB6334662B7C914200601964 /* Dashboard.swift */,
+				A1D7E2772E4857100030ABFA /* Players.swift */,
+				DBAB9FC42B59B8F1007B2B80 /* Assets.xcassets */,
+				DBAB9FC62B59B8F2007B2B80 /* Preview Content */,
+			);
+			path = Reva;
+			sourceTree = "<group>";
+		};
+		DBAB9FC62B59B8F2007B2B80 /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+				DB49134A2B802E9A0026B581 /* Icon_SignUp_Guided Tutorials.png */,
+				DBAB9FC72B59B8F2007B2B80 /* Preview Assets.xcassets */,
+			);
+			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		DBAB9FD02B59B8F2007B2B80 /* Reva Tests */ = {
+			isa = PBXGroup;
+			children = (
+				DBAB9FD12B59B8F2007B2B80 /* RevaTests.swift */,
+			);
+			path = "Reva Tests";
+			sourceTree = "<group>";
+		};
+		DBAB9FDA2B59B8F2007B2B80 /* Reva UI Tests */ = {
+			isa = PBXGroup;
+			children = (
+				DBAB9FDB2B59B8F2007B2B80 /* RevaUITests.swift */,
+				DBAB9FDD2B59B8F2007B2B80 /* RevaUITestsLaunchTests.swift */,
+			);
+			path = "Reva UI Tests";
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		DBAB9FBC2B59B8EF007B2B80 /* Reva */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DBAB9FE12B59B8F2007B2B80 /* Build configuration list for PBXNativeTarget "Reva" */;
+			buildPhases = (
+				DBAB9FB92B59B8EF007B2B80 /* Sources */,
+				DBAB9FBA2B59B8EF007B2B80 /* Frameworks */,
+				DBAB9FBB2B59B8EF007B2B80 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Reva;
+			productName = "Facial Palsy";
+			productReference = DBAB9FBD2B59B8EF007B2B80 /* Reva.app */;
+			productType = "com.apple.product-type.application";
+		};
+		DBAB9FCC2B59B8F2007B2B80 /* RevaTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DBAB9FE42B59B8F2007B2B80 /* Build configuration list for PBXNativeTarget "RevaTests" */;
+			buildPhases = (
+				DBAB9FC92B59B8F2007B2B80 /* Sources */,
+				DBAB9FCA2B59B8F2007B2B80 /* Frameworks */,
+				DBAB9FCB2B59B8F2007B2B80 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DBAB9FCF2B59B8F2007B2B80 /* PBXTargetDependency */,
+			);
+			name = RevaTests;
+			productName = "Facial PalsyTests";
+			productReference = DBAB9FCD2B59B8F2007B2B80 /* RevaTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		DBAB9FD62B59B8F2007B2B80 /* RevaUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DBAB9FE72B59B8F2007B2B80 /* Build configuration list for PBXNativeTarget "RevaUITests" */;
+			buildPhases = (
+				DBAB9FD32B59B8F2007B2B80 /* Sources */,
+				DBAB9FD42B59B8F2007B2B80 /* Frameworks */,
+				DBAB9FD52B59B8F2007B2B80 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DBAB9FD92B59B8F2007B2B80 /* PBXTargetDependency */,
+			);
+			name = RevaUITests;
+			productName = "Facial PalsyUITests";
+			productReference = DBAB9FD72B59B8F2007B2B80 /* RevaUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		DBAB9FB52B59B8EF007B2B80 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1520;
+				LastUpgradeCheck = 1620;
+				TargetAttributes = {
+					DBAB9FBC2B59B8EF007B2B80 = {
+						CreatedOnToolsVersion = 15.2;
+					};
+					DBAB9FCC2B59B8F2007B2B80 = {
+						CreatedOnToolsVersion = 15.2;
+						TestTargetID = DBAB9FBC2B59B8EF007B2B80;
+					};
+					DBAB9FD62B59B8F2007B2B80 = {
+						CreatedOnToolsVersion = 15.2;
+						TestTargetID = DBAB9FBC2B59B8EF007B2B80;
+					};
+				};
+			};
+			buildConfigurationList = DBAB9FB82B59B8EF007B2B80 /* Build configuration list for PBXProject "Reva" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = DBAB9FB42B59B8EF007B2B80;
+			packageReferences = (
+				DB6164922E5FACDE008DD0B7 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
+			productRefGroup = DBAB9FBE2B59B8EF007B2B80 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				DBAB9FBC2B59B8EF007B2B80 /* Reva */,
+				DBAB9FCC2B59B8F2007B2B80 /* RevaTests */,
+				DBAB9FD62B59B8F2007B2B80 /* RevaUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		DBAB9FBB2B59B8EF007B2B80 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DBAB9FC82B59B8F2007B2B80 /* Preview Assets.xcassets in Resources */,
+				DBAD9B2A2EA76049005F0C67 /* Blowfish.mp4 in Resources */,
+				DBAD9B2B2EA76049005F0C67 /* LipPurse.mp4 in Resources */,
+				DB5F94972EB31ABF00AA3301 /* HalfSmile.MOV in Resources */,
+				DB5F94982EB31ABF00AA3301 /* FullSmile.MOV in Resources */,
+				DBAD9B2C2EA76049005F0C67 /* WeakEyeClosure.mp4 in Resources */,
+				DBAD9B2F2EA76049005F0C67 /* LipPucker.mp4 in Resources */,
+				DBAD9B302EA76049005F0C67 /* BrowFurrow.mp4 in Resources */,
+				DBAD9B312EA76049005F0C67 /* EyebrowRaise.mp4 in Resources */,
+				DBAD9B322EA76049005F0C67 /* NoseWrinkle.mp4 in Resources */,
+				DBAD9B332EA76049005F0C67 /* StrongEyeClosure.mp4 in Resources */,
+				DBAB9FC52B59B8F1007B2B80 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DBAB9FCB2B59B8F2007B2B80 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DBAB9FD52B59B8F2007B2B80 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		DBAB9FB92B59B8EF007B2B80 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DB0564A52E39C8C400BEB570 /* PastExerciseView.swift in Sources */,
+				DB2159C02C90E7EF00DD84DD /* SignIn.swift in Sources */,
+				DB533B052D560665003BFD1C /* HomePage.swift in Sources */,
+				DBAB9FC32B59B8EF007B2B80 /* SignUp.swift in Sources */,
+				DB533B032D560641003BFD1C /* ProfilePage.swift in Sources */,
+				DB533B012D560622003BFD1C /* ExerciseHistoryPage.swift in Sources */,
+				DB0564A82E39F04E00BEB570 /* AuthSelector.swift in Sources */,
+				DB533AFF2D56060C003BFD1C /* ExercisesPage.swift in Sources */,
+				A1D7E2782E4857100030ABFA /* Players.swift in Sources */,
+				DB533AFD2D56026E003BFD1C /* RecordingPage.swift in Sources */,
+				A1D7E2762E4849EA0030ABFA /* PracticePage.swift in Sources */,
+				DB6334672B7C914200601964 /* Dashboard.swift in Sources */,
+				DBAB9FC12B59B8EF007B2B80 /* RevaApp.swift in Sources */,
+				DB2159BE2C90E7D100DD84DD /* Authentication.swift in Sources */,
+				DB533AFB2D560256003BFD1C /* CameraRecorderView.swift in Sources */,
+				DB6164A12E5FAEE4008DD0B7 /* SupabaseConfig.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DBAB9FC92B59B8F2007B2B80 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DBAB9FD22B59B8F2007B2B80 /* RevaTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DBAB9FD32B59B8F2007B2B80 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DBAB9FDE2B59B8F2007B2B80 /* RevaUITestsLaunchTests.swift in Sources */,
+				DBAB9FDC2B59B8F2007B2B80 /* RevaUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		DBAB9FCF2B59B8F2007B2B80 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DBAB9FBC2B59B8EF007B2B80 /* Reva */;
+			targetProxy = DBAB9FCE2B59B8F2007B2B80 /* PBXContainerItemProxy */;
+		};
+		DBAB9FD92B59B8F2007B2B80 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DBAB9FBC2B59B8EF007B2B80 /* Reva */;
+			targetProxy = DBAB9FD82B59B8F2007B2B80 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		DBAB9FDF2B59B8F2007B2B80 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		DBAB9FE02B59B8F2007B2B80 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		DBAB9FE22B59B8F2007B2B80 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"Reva/Preview Content\"";
+				DEVELOPMENT_TEAM = LL25GT5UY4;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to record facial exercise videos.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = co.leads.reva;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		DBAB9FE32B59B8F2007B2B80 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"Reva/Preview Content\"";
+				DEVELOPMENT_TEAM = LL25GT5UY4;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to record facial exercise videos.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = co.leads.reva;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		DBAB9FE52B59B8F2007B2B80 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = LL25GT5UY4;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "Co-Leads.Facial-PalsyTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Reva.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Reva";
+			};
+			name = Debug;
+		};
+		DBAB9FE62B59B8F2007B2B80 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = LL25GT5UY4;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "Co-Leads.Facial-PalsyTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Reva.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Reva";
+			};
+			name = Release;
+		};
+		DBAB9FE82B59B8F2007B2B80 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = LL25GT5UY4;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "Co-Leads.Facial-PalsyUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = "Facial Palsy";
+			};
+			name = Debug;
+		};
+		DBAB9FE92B59B8F2007B2B80 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = LL25GT5UY4;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "Co-Leads.Facial-PalsyUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = "Facial Palsy";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		DBAB9FB82B59B8EF007B2B80 /* Build configuration list for PBXProject "Reva" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DBAB9FDF2B59B8F2007B2B80 /* Debug */,
+				DBAB9FE02B59B8F2007B2B80 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DBAB9FE12B59B8F2007B2B80 /* Build configuration list for PBXNativeTarget "Reva" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DBAB9FE22B59B8F2007B2B80 /* Debug */,
+				DBAB9FE32B59B8F2007B2B80 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DBAB9FE42B59B8F2007B2B80 /* Build configuration list for PBXNativeTarget "RevaTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DBAB9FE52B59B8F2007B2B80 /* Debug */,
+				DBAB9FE62B59B8F2007B2B80 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DBAB9FE72B59B8F2007B2B80 /* Build configuration list for PBXNativeTarget "RevaUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DBAB9FE82B59B8F2007B2B80 /* Debug */,
+				DBAB9FE92B59B8F2007B2B80 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		DB6164922E5FACDE008DD0B7 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		DB6164942E5FAE9E008DD0B7 /* Auth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DB6164922E5FACDE008DD0B7 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Auth;
+		};
+		DB6164962E5FAE9E008DD0B7 /* Functions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DB6164922E5FACDE008DD0B7 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Functions;
+		};
+		DB6164982E5FAE9E008DD0B7 /* PostgREST */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DB6164922E5FACDE008DD0B7 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = PostgREST;
+		};
+		DB61649A2E5FAE9E008DD0B7 /* Realtime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DB6164922E5FACDE008DD0B7 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Realtime;
+		};
+		DB61649C2E5FAE9E008DD0B7 /* Storage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DB6164922E5FACDE008DD0B7 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Storage;
+		};
+		DB61649E2E5FAE9E008DD0B7 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DB6164922E5FACDE008DD0B7 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = DBAB9FB52B59B8EF007B2B80 /* Project object */;
+}
