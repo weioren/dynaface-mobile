@@ -17,7 +17,7 @@ struct AuthSelector: View {
                 Color.white.ignoresSafeArea()
 
                 VStack(spacing: 40 * heightScale) {
-                    Text("Reva")
+                    Text("Dynaface Mobile")
                         .font(.system(size: 48 * widthScale, weight: .bold))
                         .foregroundColor(Color(red: 0.12, green: 0.29, blue: 0.64))
                         .padding(.top, 100 * heightScale)

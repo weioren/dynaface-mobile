@@ -29,13 +29,13 @@
 		DB61649F2E5FAE9E008DD0B7 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = DB61649E2E5FAE9E008DD0B7 /* Supabase */; };
 		DB6164A12E5FAEE4008DD0B7 /* SupabaseConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB6164A02E5FAEE4008DD0B7 /* SupabaseConfig.swift */; };
 		DB6334672B7C914200601964 /* Dashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB6334662B7C914200601964 /* Dashboard.swift */; };
-		DBAB9FC12B59B8EF007B2B80 /* RevaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FC02B59B8EF007B2B80 /* RevaApp.swift */; };
+		DBAB9FC12B59B8EF007B2B80 /* DynafaceMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FC02B59B8EF007B2B80 /* DynafaceMobileApp.swift */; };
 		DBAB9FC32B59B8EF007B2B80 /* SignUp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FC22B59B8EF007B2B80 /* SignUp.swift */; };
 		DBAB9FC52B59B8F1007B2B80 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DBAB9FC42B59B8F1007B2B80 /* Assets.xcassets */; };
 		DBAB9FC82B59B8F2007B2B80 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DBAB9FC72B59B8F2007B2B80 /* Preview Assets.xcassets */; };
-		DBAB9FD22B59B8F2007B2B80 /* RevaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FD12B59B8F2007B2B80 /* RevaTests.swift */; };
-		DBAB9FDC2B59B8F2007B2B80 /* RevaUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FDB2B59B8F2007B2B80 /* RevaUITests.swift */; };
-		DBAB9FDE2B59B8F2007B2B80 /* RevaUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FDD2B59B8F2007B2B80 /* RevaUITestsLaunchTests.swift */; };
+		DBAB9FD22B59B8F2007B2B80 /* DynafaceMobileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FD12B59B8F2007B2B80 /* DynafaceMobileTests.swift */; };
+		DBAB9FDC2B59B8F2007B2B80 /* DynafaceMobileUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FDB2B59B8F2007B2B80 /* DynafaceMobileUITests.swift */; };
+		DBAB9FDE2B59B8F2007B2B80 /* DynafaceMobileUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FDD2B59B8F2007B2B80 /* DynafaceMobileUITestsLaunchTests.swift */; };
 		DBAD9B2A2EA76049005F0C67 /* Blowfish.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = DBAD9B1F2EA76049005F0C67 /* Blowfish.mp4 */; };
 		DBAD9B2B2EA76049005F0C67 /* LipPurse.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = DBAD9B262EA76049005F0C67 /* LipPurse.mp4 */; };
 		DBAD9B2C2EA76049005F0C67 /* WeakEyeClosure.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = DBAD9B292EA76049005F0C67 /* WeakEyeClosure.mp4 */; };
@@ -81,16 +81,16 @@
 		DB5F94962EB31ABF00AA3301 /* HalfSmile.MOV */ = {isa = PBXFileReference; lastKnownFileType = video.quicktime; path = HalfSmile.MOV; sourceTree = "<group>"; };
 		DB6164A02E5FAEE4008DD0B7 /* SupabaseConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseConfig.swift; sourceTree = "<group>"; };
 		DB6334662B7C914200601964 /* Dashboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dashboard.swift; sourceTree = "<group>"; };
-		DBAB9FBD2B59B8EF007B2B80 /* Reva.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Reva.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		DBAB9FC02B59B8EF007B2B80 /* RevaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RevaApp.swift; sourceTree = "<group>"; };
+		DBAB9FBD2B59B8EF007B2B80 /* Dynaface Mobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Dynaface Mobile.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		DBAB9FC02B59B8EF007B2B80 /* DynafaceMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynafaceMobileApp.swift; sourceTree = "<group>"; };
 		DBAB9FC22B59B8EF007B2B80 /* SignUp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignUp.swift; sourceTree = "<group>"; };
 		DBAB9FC42B59B8F1007B2B80 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DBAB9FC72B59B8F2007B2B80 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
-		DBAB9FCD2B59B8F2007B2B80 /* RevaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RevaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		DBAB9FD12B59B8F2007B2B80 /* RevaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RevaTests.swift; sourceTree = "<group>"; };
-		DBAB9FD72B59B8F2007B2B80 /* RevaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RevaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		DBAB9FDB2B59B8F2007B2B80 /* RevaUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RevaUITests.swift; sourceTree = "<group>"; };
-		DBAB9FDD2B59B8F2007B2B80 /* RevaUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RevaUITestsLaunchTests.swift; sourceTree = "<group>"; };
+		DBAB9FCD2B59B8F2007B2B80 /* Dynaface MobileTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Dynaface MobileTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		DBAB9FD12B59B8F2007B2B80 /* DynafaceMobileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynafaceMobileTests.swift; sourceTree = "<group>"; };
+		DBAB9FD72B59B8F2007B2B80 /* Dynaface MobileUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Dynaface MobileUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		DBAB9FDB2B59B8F2007B2B80 /* DynafaceMobileUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynafaceMobileUITests.swift; sourceTree = "<group>"; };
+		DBAB9FDD2B59B8F2007B2B80 /* DynafaceMobileUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynafaceMobileUITestsLaunchTests.swift; sourceTree = "<group>"; };
 		DBAD9B1F2EA76049005F0C67 /* Blowfish.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = Blowfish.mp4; sourceTree = "<group>"; };
 		DBAD9B202EA76049005F0C67 /* BrowFurrow.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = BrowFurrow.mp4; sourceTree = "<group>"; };
 		DBAD9B212EA76049005F0C67 /* EyebrowRaise.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = EyebrowRaise.mp4; sourceTree = "<group>"; };
@@ -142,9 +142,9 @@
 		DBAB9FB42B59B8EF007B2B80 = {
 			isa = PBXGroup;
 			children = (
-				DBAB9FBF2B59B8EF007B2B80 /* Reva */,
-				DBAB9FD02B59B8F2007B2B80 /* Reva Tests */,
-				DBAB9FDA2B59B8F2007B2B80 /* Reva UI Tests */,
+				DBAB9FBF2B59B8EF007B2B80 /* Dynaface Mobile */,
+				DBAB9FD02B59B8F2007B2B80 /* Dynaface Mobile Tests */,
+				DBAB9FDA2B59B8F2007B2B80 /* Dynaface Mobile UI Tests */,
 				DB6164932E5FAE9E008DD0B7 /* Frameworks */,
 				DBAB9FBE2B59B8EF007B2B80 /* Products */,
 			);
@@ -153,14 +153,14 @@
 		DBAB9FBE2B59B8EF007B2B80 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				DBAB9FBD2B59B8EF007B2B80 /* Reva.app */,
-				DBAB9FCD2B59B8F2007B2B80 /* RevaTests.xctest */,
-				DBAB9FD72B59B8F2007B2B80 /* RevaUITests.xctest */,
+				DBAB9FBD2B59B8EF007B2B80 /* Dynaface Mobile.app */,
+				DBAB9FCD2B59B8F2007B2B80 /* Dynaface MobileTests.xctest */,
+				DBAB9FD72B59B8F2007B2B80 /* Dynaface MobileUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		DBAB9FBF2B59B8EF007B2B80 /* Reva */ = {
+		DBAB9FBF2B59B8EF007B2B80 /* Dynaface Mobile */ = {
 			isa = PBXGroup;
 			children = (
 				DB5F94952EB31ABF00AA3301 /* FullSmile.MOV */,
@@ -182,7 +182,7 @@
 				DB533AFE2D560601003BFD1C /* ExercisesPage.swift */,
 				DB533AFC2D560267003BFD1C /* RecordingPage.swift */,
 				DB533AFA2D560249003BFD1C /* CameraRecorderView.swift */,
-				DBAB9FC02B59B8EF007B2B80 /* RevaApp.swift */,
+				DBAB9FC02B59B8EF007B2B80 /* DynafaceMobileApp.swift */,
 				DBAB9FC22B59B8EF007B2B80 /* SignUp.swift */,
 				DB2159BF2C90E7EF00DD84DD /* SignIn.swift */,
 				DB2159BD2C90E7D100DD84DD /* Authentication.swift */,
@@ -192,7 +192,7 @@
 				DBAB9FC42B59B8F1007B2B80 /* Assets.xcassets */,
 				DBAB9FC62B59B8F2007B2B80 /* Preview Content */,
 			);
-			path = Reva;
+			path = "Dynaface Mobile";
 			sourceTree = "<group>";
 		};
 		DBAB9FC62B59B8F2007B2B80 /* Preview Content */ = {
@@ -204,29 +204,29 @@
 			path = "Preview Content";
 			sourceTree = "<group>";
 		};
-		DBAB9FD02B59B8F2007B2B80 /* Reva Tests */ = {
+		DBAB9FD02B59B8F2007B2B80 /* Dynaface Mobile Tests */ = {
 			isa = PBXGroup;
 			children = (
-				DBAB9FD12B59B8F2007B2B80 /* RevaTests.swift */,
+				DBAB9FD12B59B8F2007B2B80 /* DynafaceMobileTests.swift */,
 			);
-			path = "Reva Tests";
+			path = "Dynaface Mobile Tests";
 			sourceTree = "<group>";
 		};
-		DBAB9FDA2B59B8F2007B2B80 /* Reva UI Tests */ = {
+		DBAB9FDA2B59B8F2007B2B80 /* Dynaface Mobile UI Tests */ = {
 			isa = PBXGroup;
 			children = (
-				DBAB9FDB2B59B8F2007B2B80 /* RevaUITests.swift */,
-				DBAB9FDD2B59B8F2007B2B80 /* RevaUITestsLaunchTests.swift */,
+				DBAB9FDB2B59B8F2007B2B80 /* DynafaceMobileUITests.swift */,
+				DBAB9FDD2B59B8F2007B2B80 /* DynafaceMobileUITestsLaunchTests.swift */,
 			);
-			path = "Reva UI Tests";
+			path = "Dynaface Mobile UI Tests";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		DBAB9FBC2B59B8EF007B2B80 /* Reva */ = {
+		DBAB9FBC2B59B8EF007B2B80 /* Dynaface Mobile */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = DBAB9FE12B59B8F2007B2B80 /* Build configuration list for PBXNativeTarget "Reva" */;
+			buildConfigurationList = DBAB9FE12B59B8F2007B2B80 /* Build configuration list for PBXNativeTarget "Dynaface Mobile" */;
 			buildPhases = (
 				DBAB9FB92B59B8EF007B2B80 /* Sources */,
 				DBAB9FBA2B59B8EF007B2B80 /* Frameworks */,
@@ -236,14 +236,14 @@
 			);
 			dependencies = (
 			);
-			name = Reva;
+			name = "Dynaface Mobile";
 			productName = "Facial Palsy";
-			productReference = DBAB9FBD2B59B8EF007B2B80 /* Reva.app */;
+			productReference = DBAB9FBD2B59B8EF007B2B80 /* Dynaface Mobile.app */;
 			productType = "com.apple.product-type.application";
 		};
-		DBAB9FCC2B59B8F2007B2B80 /* RevaTests */ = {
+		DBAB9FCC2B59B8F2007B2B80 /* Dynaface MobileTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = DBAB9FE42B59B8F2007B2B80 /* Build configuration list for PBXNativeTarget "RevaTests" */;
+			buildConfigurationList = DBAB9FE42B59B8F2007B2B80 /* Build configuration list for PBXNativeTarget "Dynaface MobileTests" */;
 			buildPhases = (
 				DBAB9FC92B59B8F2007B2B80 /* Sources */,
 				DBAB9FCA2B59B8F2007B2B80 /* Frameworks */,
@@ -254,14 +254,14 @@
 			dependencies = (
 				DBAB9FCF2B59B8F2007B2B80 /* PBXTargetDependency */,
 			);
-			name = RevaTests;
+			name = "Dynaface MobileTests";
 			productName = "Facial PalsyTests";
-			productReference = DBAB9FCD2B59B8F2007B2B80 /* RevaTests.xctest */;
+			productReference = DBAB9FCD2B59B8F2007B2B80 /* Dynaface MobileTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		DBAB9FD62B59B8F2007B2B80 /* RevaUITests */ = {
+		DBAB9FD62B59B8F2007B2B80 /* Dynaface MobileUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = DBAB9FE72B59B8F2007B2B80 /* Build configuration list for PBXNativeTarget "RevaUITests" */;
+			buildConfigurationList = DBAB9FE72B59B8F2007B2B80 /* Build configuration list for PBXNativeTarget "Dynaface MobileUITests" */;
 			buildPhases = (
 				DBAB9FD32B59B8F2007B2B80 /* Sources */,
 				DBAB9FD42B59B8F2007B2B80 /* Frameworks */,
@@ -272,9 +272,9 @@
 			dependencies = (
 				DBAB9FD92B59B8F2007B2B80 /* PBXTargetDependency */,
 			);
-			name = RevaUITests;
+			name = "Dynaface MobileUITests";
 			productName = "Facial PalsyUITests";
-			productReference = DBAB9FD72B59B8F2007B2B80 /* RevaUITests.xctest */;
+			productReference = DBAB9FD72B59B8F2007B2B80 /* Dynaface MobileUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
@@ -300,7 +300,7 @@
 					};
 				};
 			};
-			buildConfigurationList = DBAB9FB82B59B8EF007B2B80 /* Build configuration list for PBXProject "Reva" */;
+			buildConfigurationList = DBAB9FB82B59B8EF007B2B80 /* Build configuration list for PBXProject "Dynaface Mobile" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -316,9 +316,9 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				DBAB9FBC2B59B8EF007B2B80 /* Reva */,
-				DBAB9FCC2B59B8F2007B2B80 /* RevaTests */,
-				DBAB9FD62B59B8F2007B2B80 /* RevaUITests */,
+				DBAB9FBC2B59B8EF007B2B80 /* Dynaface Mobile */,
+				DBAB9FCC2B59B8F2007B2B80 /* Dynaface MobileTests */,
+				DBAB9FD62B59B8F2007B2B80 /* Dynaface MobileUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -376,7 +376,7 @@
 				DB533AFD2D56026E003BFD1C /* RecordingPage.swift in Sources */,
 				A1D7E2762E4849EA0030ABFA /* PracticePage.swift in Sources */,
 				DB6334672B7C914200601964 /* Dashboard.swift in Sources */,
-				DBAB9FC12B59B8EF007B2B80 /* RevaApp.swift in Sources */,
+				DBAB9FC12B59B8EF007B2B80 /* DynafaceMobileApp.swift in Sources */,
 				DB2159BE2C90E7D100DD84DD /* Authentication.swift in Sources */,
 				DB533AFB2D560256003BFD1C /* CameraRecorderView.swift in Sources */,
 				DB6164A12E5FAEE4008DD0B7 /* SupabaseConfig.swift in Sources */,
@@ -387,7 +387,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				DBAB9FD22B59B8F2007B2B80 /* RevaTests.swift in Sources */,
+				DBAB9FD22B59B8F2007B2B80 /* DynafaceMobileTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -395,8 +395,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				DBAB9FDE2B59B8F2007B2B80 /* RevaUITestsLaunchTests.swift in Sources */,
-				DBAB9FDC2B59B8F2007B2B80 /* RevaUITests.swift in Sources */,
+				DBAB9FDE2B59B8F2007B2B80 /* DynafaceMobileUITestsLaunchTests.swift in Sources */,
+				DBAB9FDC2B59B8F2007B2B80 /* DynafaceMobileUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -405,12 +405,12 @@
 /* Begin PBXTargetDependency section */
 		DBAB9FCF2B59B8F2007B2B80 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = DBAB9FBC2B59B8EF007B2B80 /* Reva */;
+			target = DBAB9FBC2B59B8EF007B2B80 /* Dynaface Mobile */;
 			targetProxy = DBAB9FCE2B59B8F2007B2B80 /* PBXContainerItemProxy */;
 		};
 		DBAB9FD92B59B8F2007B2B80 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = DBAB9FBC2B59B8EF007B2B80 /* Reva */;
+			target = DBAB9FBC2B59B8EF007B2B80 /* Dynaface Mobile */;
 			targetProxy = DBAB9FD82B59B8F2007B2B80 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -543,10 +543,12 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"Reva/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "\"Dynaface Mobile/Preview Content\"";
 				DEVELOPMENT_TEAM = LL25GT5UY4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Dynaface Mobile";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.medical";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to record facial exercise videos.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -559,7 +561,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = co.leads.reva;
+				PRODUCT_BUNDLE_IDENTIFIER = "dynaface-mobile";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -576,10 +578,12 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"Reva/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "\"Dynaface Mobile/Preview Content\"";
 				DEVELOPMENT_TEAM = LL25GT5UY4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Dynaface Mobile";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.medical";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to record facial exercise videos.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -592,7 +596,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = co.leads.reva;
+				PRODUCT_BUNDLE_IDENTIFIER = "dynaface-mobile";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -616,7 +620,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Reva.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Reva";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Dynaface Mobile.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Dynaface Mobile";
 			};
 			name = Debug;
 		};
@@ -635,7 +639,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Reva.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Reva";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Dynaface Mobile.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Dynaface Mobile";
 			};
 			name = Release;
 		};
@@ -676,7 +680,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		DBAB9FB82B59B8EF007B2B80 /* Build configuration list for PBXProject "Reva" */ = {
+		DBAB9FB82B59B8EF007B2B80 /* Build configuration list for PBXProject "Dynaface Mobile" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				DBAB9FDF2B59B8F2007B2B80 /* Debug */,
@@ -685,7 +689,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		DBAB9FE12B59B8F2007B2B80 /* Build configuration list for PBXNativeTarget "Reva" */ = {
+		DBAB9FE12B59B8F2007B2B80 /* Build configuration list for PBXNativeTarget "Dynaface Mobile" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				DBAB9FE22B59B8F2007B2B80 /* Debug */,
@@ -694,7 +698,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		DBAB9FE42B59B8F2007B2B80 /* Build configuration list for PBXNativeTarget "RevaTests" */ = {
+		DBAB9FE42B59B8F2007B2B80 /* Build configuration list for PBXNativeTarget "Dynaface MobileTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				DBAB9FE52B59B8F2007B2B80 /* Debug */,
@@ -703,7 +707,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		DBAB9FE72B59B8F2007B2B80 /* Build configuration list for PBXNativeTarget "RevaUITests" */ = {
+		DBAB9FE72B59B8F2007B2B80 /* Build configuration list for PBXNativeTarget "Dynaface MobileUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				DBAB9FE82B59B8F2007B2B80 /* Debug */,

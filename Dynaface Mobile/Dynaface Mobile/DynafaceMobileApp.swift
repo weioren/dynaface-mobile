@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct RevaApp: App {
+struct DynafaceMobileApp: App {
     @StateObject private var authService = AuthenticationService()
 
     var body: some Scene {

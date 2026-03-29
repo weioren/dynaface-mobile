@@ -7,7 +7,7 @@
 
 import XCTest
 
-final class RevaUITestsLaunchTests: XCTestCase {
+final class DynafaceMobileUITestsLaunchTests: XCTestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true

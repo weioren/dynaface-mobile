@@ -29,7 +29,7 @@ struct CreateAccountView: View {
                             .foregroundColor(.black)
                             .padding(.top, 60 * h)
 
-                        Text("Join Reva to start your rehabilitation journey")
+                        Text("Join Dynaface Mobile to start your rehabilitation journey")
                             .font(.system(size: 16 * w))
                             .foregroundColor(.gray)
                             .multilineTextAlignment(.center)
@@ -204,7 +204,7 @@ struct FirstPage: View {
             let heightScale = geometry.size.height / baseHeight
 
             ZStack {
-                Text("Welcome to Reva")
+                Text("Welcome to Dynaface Mobile")
                     .font(Font.custom("Inter", size: 26 * widthScale))
                     .bold()
                     .foregroundColor(.black)
@@ -415,7 +415,7 @@ struct FifthPage: View {
             let h = geometry.size.height / baseHeight
 
             ZStack {
-                Text("Congrats! Here's how Reva can help you:")
+                Text("Congrats! Here's how Dynaface Mobile can help you:")
                     .font(Font.custom("Inter", size: 24 * w))
                     .foregroundColor(.black)
                     .multilineTextAlignment(.center)
