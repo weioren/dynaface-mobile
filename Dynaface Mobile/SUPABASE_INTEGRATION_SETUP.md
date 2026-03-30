@@ -1,12 +1,12 @@
 # Supabase Integration Setup Guide
 
-This guide will help you complete the Supabase integration for your Reva app.
+This guide will help you complete the Supabase integration for your app.
 
 ## Prerequisites
 
 1. **Supabase Account**: Create an account at [supabase.com](https://supabase.com)
 2. **New Project**: Create a new project in Supabase
-3. **Xcode Project**: Make sure your Reva project is open in Xcode
+3. **Xcode Project**: Make sure your project is open in Xcode
 
 ## Step 1: Add Supabase Swift SDK
 
