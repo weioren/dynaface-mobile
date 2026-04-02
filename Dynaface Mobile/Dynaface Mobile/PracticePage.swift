@@ -7,7 +7,6 @@ struct PracticePage: View {
     @State private var index: Int = 0
     @State private var showRecorder = false
     @State private var showCompletionAlert = false
-    @State private var navigateToDashboard = false
     @Environment(\.presentationMode) var presentationMode
 
     var body: some View {
@@ -17,9 +16,15 @@ struct PracticePage: View {
         } else {
             let current = exercises[index]
             VStack(alignment: .center, spacing: 20) {
-                Text("Exercise \(index + 1) of \(exercises.count)")
-                    .font(.title3)
-                    .padding(.top, 12)
+                // [Phase 1] Progress bar
+                VStack(spacing: 8) {
+                    Text("Exercise \(index + 1) of \(exercises.count)")
+                        .font(.title3)
+                    ProgressView(value: Double(index + 1), total: Double(exercises.count))
+                        .progressViewStyle(LinearProgressViewStyle(tint: Color(red: 0.12, green: 0.29, blue: 0.64)))
+                        .padding(.horizontal)
+                }
+                .padding(.top, 12)
 
                 Text(current.title)
                     .font(.title)
@@ -112,15 +117,13 @@ struct PracticePage: View {
             .onAppear {
                 print("PracticePage: Appeared with \(exercises.count) exercises, current index: \(index)")
             }
-            // Completion confirmation
+            // [Phase 1] Completion — dismiss back to Dashboard
             .alert("All exercises completed", isPresented: $showCompletionAlert) {
-                Button("Done") { navigateToDashboard = true }
+                Button("Done") {
+                    presentationMode.wrappedValue.dismiss()
+                }
             } message: {
                 Text("Great job! You've finished all \(exercises.count) exercises.")
-            }
-            // Route to your destination (Dashboard or another page)
-            .fullScreenCover(isPresented: $navigateToDashboard) {
-                Dashboard()
             }
         }
     }
