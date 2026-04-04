@@ -1,7 +1,8 @@
+
+This is a mobile app extension of Dynaface. The computer version and accompanying library can be found here: https://github.com/jeffheaton/dynaface
+
 # Phase1: Start Assessment & Exercise Modules
-
 ## Branch: `feature/start-assessment`
-
 ## Changes
 
 ### 1. Start Assessment — Quick Start Modules
@@ -39,6 +40,5 @@
 | `DynafaceMobileApp.swift`  | Auth skip toggle for dev testing                            |
 
 ## Pending
-
 - **Emotions module** — requires 7 new demo videos (happy, sad, surprised, fear, disgust, angry, neutral) and exercise definitions
-- **Real device testing** — requires Apple Developer Team access
+
