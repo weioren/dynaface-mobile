@@ -51,6 +51,24 @@ let allExercises: [Exercise] = [
              videoFileName: "LipPurse")
 ]
 
+// MARK: - [Phase 1] Exercise Modules
+struct ExerciseModule: Identifiable {
+    let id = UUID()
+    let name: String
+    let icon: String
+    let exercises: [Exercise]
+}
+
+let exerciseModules: [ExerciseModule] = [
+    ExerciseModule(name: "Full Assessment", icon: "list.clipboard", exercises: allExercises),
+    ExerciseModule(name: "Eye Movements", icon: "eye", exercises: allExercises.filter {
+        ["Eyebrow Raise", "Brow Furrow", "Strong Eye Closure", "Weak Eye Closure"].contains($0.title)
+    }),
+    ExerciseModule(name: "Smile Movements", icon: "face.smiling", exercises: allExercises.filter {
+        ["Full Smile", "Half Smile", "Lip Pucker", "Lip Purse"].contains($0.title)
+    }),
+]
+
 // MARK: - ExercisesPage
 struct ExercisesPage: View {
     let baseWidth: CGFloat = 390
@@ -67,27 +85,59 @@ struct ExercisesPage: View {
             let heightScale = geometry.size.height / baseHeight
 
             ScrollView {
-                VStack(spacing: 30 * heightScale) {
-                    // Title
-                    Text("Select your exercises for today:")
-                        .font(.headline)
-                        .multilineTextAlignment(.center)
-                    
-                    // Grid
+                VStack(spacing: 16 * heightScale) {
+
+                    // [Phase 1] SECTION 1: Quick-start module buttons
+                    VStack(spacing: 8 * heightScale) {
+                        Text("Quick Start")
+                            .font(.headline)
+                            .padding(.top, 20 * heightScale)
+
+                        ForEach(exerciseModules) { module in
+                            Button(action: {
+                                selectedOrder = module.exercises
+                                selectedIDs = Set(module.exercises.map { $0.id })
+                                checkCameraPermissionAndNavigate()
+                            }) {
+                                HStack {
+                                    Image(systemName: module.icon)
+                                        .font(.system(size: 16 * widthScale))
+                                    Text("\(module.name) (\(module.exercises.count))")
+                                        .font(.system(size: 15 * widthScale, weight: .semibold))
+                                }
+                                .foregroundColor(.white)
+                                .frame(height: 42 * heightScale)
+                                .frame(maxWidth: .infinity)
+                                .background(Color(red: 0.12, green: 0.29, blue: 0.64))
+                                .cornerRadius(49 * widthScale)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 20 * widthScale)
+
+                    // [Phase 1] Divider
+                    HStack {
+                        Rectangle().fill(Color.gray.opacity(0.3)).frame(height: 1)
+                        Text("or select exercises")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                        Rectangle().fill(Color.gray.opacity(0.3)).frame(height: 1)
+                    }
+                    .padding(.horizontal, 20 * widthScale)
+
+                    // SECTION 2: Exercise grid for custom selection
                     let gridItems = [GridItem(.flexible()), GridItem(.flexible())]
-                    LazyVGrid(columns: gridItems, spacing: 20) {
+                    LazyVGrid(columns: gridItems, spacing: 16) {
                         ForEach(allExercises) { exercise in
                             let isSelected = selectedIDs.contains(exercise.id)
-                            
+
                             Button {
                                 if isSelected {
-                                    // remove from set + ordered list
                                     selectedIDs.remove(exercise.id)
                                     if let idx = selectedOrder.firstIndex(where: { $0.id == exercise.id }) {
                                         selectedOrder.remove(at: idx)
                                     }
                                 } else {
-                                    // add to set + append to ordered list
                                     selectedIDs.insert(exercise.id)
                                     selectedOrder.append(exercise)
                                 }
@@ -105,29 +155,24 @@ struct ExercisesPage: View {
                         }
                     }
                     .padding(.horizontal, 20 * widthScale)
-                    
-                    Spacer()
+
+                    // SECTION 3: Practice Selected button
+                    Button(action: {
+                        checkCameraPermissionAndNavigate()
+                    }) {
+                        Text(selectedOrder.isEmpty ? "Practice Selected" : "Practice Selected (\(selectedOrder.count))")
+                            .font(.system(size: 16 * widthScale, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(height: 42 * heightScale)
+                            .frame(maxWidth: .infinity)
+                            .background(selectedOrder.isEmpty ? Color.gray : Color(red: 0.12, green: 0.29, blue: 0.64))
+                            .cornerRadius(49 * widthScale)
+                    }
+                    .padding(.horizontal, 20 * widthScale)
+                    .disabled(selectedOrder.isEmpty)
+                    .padding(.bottom, 20 * heightScale)
                 }
-                .padding(.top, 40 * heightScale)
                 .frame(width: geometry.size.width, alignment: .center)
-                
-                // PRACTICE button → Check camera permission first, then navigate to PracticePage
-                Button(action: {
-                    checkCameraPermissionAndNavigate()
-                }) {
-                    Text(selectedOrder.isEmpty ? "Practice" : "Practice (\(selectedOrder.count))")
-                        .font(.system(size: 18 * widthScale))
-                        .foregroundColor(.white)
-                        .frame(height: 44 * heightScale)
-                        .frame(maxWidth: .infinity)
-                        .background(selectedOrder.isEmpty ? Color.gray : Color(red: 0.12, green: 0.29, blue: 0.64))
-                        .cornerRadius(49 * widthScale)
-                        .shadow(color: Color.black.opacity(0.25),
-                                radius: 4 * widthScale,
-                                x: 0, y: 4 * heightScale)
-                }
-                .padding(.horizontal, 20 * widthScale)
-                .disabled(selectedOrder.isEmpty)
 
                 // Hidden NavigationLink controlled by state
                 NavigationLink(

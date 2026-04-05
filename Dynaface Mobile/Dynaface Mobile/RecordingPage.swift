@@ -59,7 +59,7 @@ struct RecordingPage: View {
                             }
                             phase = .recording
                         } label: {
-                            Label("Delete", systemImage: "trash")
+                            Label("Retake", systemImage: "arrow.counterclockwise") // [Phase 1]
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
@@ -74,7 +74,7 @@ struct RecordingPage: View {
                                 presentationMode.wrappedValue.dismiss()
                             }
                         } label: {
-                            Label("Accept", systemImage: "checkmark.circle.fill")
+                            Label("Save & Continue", systemImage: "checkmark.circle.fill") // [Phase 1]
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)

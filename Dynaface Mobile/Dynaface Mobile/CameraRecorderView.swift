@@ -1,19 +1,22 @@
 import SwiftUI
 import AVFoundation
 
+// [Phase 1] DEV ONLY: set to true to use a fake video on simulator (no camera needed)
+private let simulatorMode = false
+
 struct CameraRecorderView: UIViewControllerRepresentable {
-    
+
     let exerciseName: String
     // Callback to notify parent when recording is finished
     var onFinishRecording: ((URL?) -> Void)?
-    
+
     func makeUIViewController(context: Context) -> CameraRecorderViewController {
         let vc = CameraRecorderViewController()
         vc.exerciseName = exerciseName
         vc.onFinishRecording = onFinishRecording
         return vc
     }
-    
+
     func updateUIViewController(_ uiViewController: CameraRecorderViewController, context: Context) {
         // Re-assign the callback to ensure it's always current, especially after permission changes
         uiViewController.onFinishRecording = onFinishRecording
@@ -40,9 +43,67 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
     override func viewDidLoad() {
         super.viewDidLoad()
 
+        if simulatorMode {
+            setupSimulatorMode()
+            return
+        }
+
         setupUI()
         // Permission is already requested on ExercisesPage, so directly setup camera
         setupCamera()
+    }
+
+    // [Phase 1] DEV ONLY: fake recording for simulator testing
+    private func setupSimulatorMode() {
+        view.backgroundColor = .darkGray
+
+        let label = UILabel()
+        label.text = "📷 Simulator Mode\nTap button to fake a recording"
+        label.textColor = .white
+        label.numberOfLines = 0
+        label.textAlignment = .center
+        label.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(label)
+
+        let button = UIButton(type: .system)
+        button.setTitle("Simulate Recording", for: .normal)
+        button.titleLabel?.font = .systemFont(ofSize: 20, weight: .bold)
+        button.setTitleColor(.white, for: .normal)
+        button.backgroundColor = .systemGreen
+        button.layer.cornerRadius = 12
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.addTarget(self, action: #selector(simulateRecording), for: .touchUpInside)
+        view.addSubview(button)
+
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -40),
+            button.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            button.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 30),
+            button.widthAnchor.constraint(equalToConstant: 250),
+            button.heightAnchor.constraint(equalToConstant: 56),
+        ])
+    }
+
+    @objc private func simulateRecording() {
+        // Copy a bundled video to Documents as a fake recording
+        let extensions = ["MOV", "mp4"]
+        var sourceURL: URL?
+        for ext in extensions {
+            if let url = Bundle.main.url(forResource: "FullSmile", withExtension: ext) {
+                sourceURL = url
+                break
+            }
+        }
+        guard let source = sourceURL else {
+            onFinishRecording?(nil)
+            return
+        }
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let dest = docs.appendingPathComponent("\(exerciseName)_sim.mov")
+        try? FileManager.default.removeItem(at: dest)
+        try? FileManager.default.copyItem(at: source, to: dest)
+        onFinishRecording?(dest)
     }
     
     func setupCamera() {
