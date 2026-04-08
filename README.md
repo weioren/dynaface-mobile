@@ -1,9 +1,9 @@
-
 This is a mobile app extension of Dynaface. The computer version and accompanying library can be found here: https://github.com/jeffheaton/dynaface
 
-# Phase1: Start Assessment & Exercise Modules
-## Branch: `feature/start-assessment`
-## Changes
+---
+
+# Phase 1: Start Assessment & Exercise Modules
+**Branch:** `feature/start-assessment`
 
 ### 1. Start Assessment — Quick Start Modules
 
@@ -20,7 +20,6 @@ This is a mobile app extension of Dynaface. The computer version and accompanyin
 
 ### 3. Assessment Flow — Minimal Clicks, Clear Instructions
 
-- Added visual **progress bar** showing current exercise out of total
 - Recording review buttons renamed: **Retake** / **Save & Continue**
 - Completion dismisses back to Dashboard (fixed nested Dashboard bug)
 
@@ -29,16 +28,62 @@ This is a mobile app extension of Dynaface. The computer version and accompanyin
 - Retained exercise grid for manual selection below Quick Start
 - "Practice Selected (N)" button for custom exercise sets
 
+---
+
+# Phase 2: UI Improvements
+**Branch:** `feature/ui-changes`
+
+### 1. Demo Video Looping
+
+- Tutorial demo videos now loop automatically until user starts recording
+
+### 2. Single-Screen Recording Experience
+
+- Combined tutorial and recording into one screen
+- Main view: front-facing camera (full screen)
+- Top-right PiP: demo video overlay (no black bars, auto-loop, muted, toggleable)
+- Back button added to recording screen (top-left)
+
+### 3. Step Progress Bar
+
+- Bottom progress bar with numbered circles (1 to N)
+- Completed steps turn green with checkmark
+- Current step highlighted in blue
+- Syncs with back navigation
+
+### 4. Back Navigation
+
+- Step-by-step back: step 2 → step 1 → exercise selection page
+- Progress bar updates when navigating back
+- Recording page back returns to current step tutorial
+
+### 5. Assessment Completion Reset
+
+- Exercise selections reset when user taps "Done" on completion alert
+- Manual back navigation preserves selections
+
+### 6. Consistent Button Colors
+
+- Start, Save & Continue buttons all use brand blue (`rgb(31, 74, 163)`)
+
 ## Files Modified
 
-| File                       | Change                                                      |
-| -------------------------- | ----------------------------------------------------------- |
-| `ExercisesPage.swift`      | Module definitions, Quick Start buttons, layout restructure |
-| `PracticePage.swift`       | Progress bar, fixed post-completion navigation              |
-| `RecordingPage.swift`      | Retake / Save & Continue button labels                      |
-| `CameraRecorderView.swift` | Simulator mode toggle for dev testing                       |
-| `DynafaceMobileApp.swift`  | Auth skip toggle for dev testing                            |
+| File                       | Phase 1 | Phase 2 |
+| -------------------------- | ------- | ------- |
+| `PracticePage.swift`       | Progress bar, post-completion nav | Video looping, StepProgressBar, PiPDemoPlayer, back logic |
+| `RecordingPage.swift`      | Retake / Save & Continue labels | Single-screen with PiP, back button, brand colors |
+| `ExercisesPage.swift`      | Modules, Quick Start buttons | Reset on assessment completion |
+| `CameraRecorderView.swift` | Simulator mode toggle | Brand blue button color |
+| `DynafaceMobileApp.swift`  | Auth skip toggle | — |
+
+## New Components
+
+| Component | File | Description |
+| --------- | ---- | ----------- |
+| `StepProgressBar` | `PracticePage.swift` | Reusable numbered step indicator |
+| `PiPDemoPlayer` | `PracticePage.swift` | Fill-frame, no-black-bar, muted looping video player |
 
 ## Pending
-- **Emotions module** — requires 7 new demo videos (happy, sad, surprised, fear, disgust, angry, neutral) and exercise definitions
+
+- **Emotions module** — requires 7 new demo videos and exercise definitions
 - **Real device testing** — requires Apple Developer Team access

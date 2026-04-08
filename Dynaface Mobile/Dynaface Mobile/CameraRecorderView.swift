@@ -216,7 +216,7 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
         recordButton = UIButton(type: .system)
         recordButton.setTitle("Start", for: .normal)
         recordButton.setTitleColor(.white, for: .normal)
-        recordButton.backgroundColor = UIColor.systemGreen // Green for start
+        recordButton.backgroundColor = UIColor(red: 0.12, green: 0.29, blue: 0.64, alpha: 1.0)
         recordButton.layer.cornerRadius = 10
         recordButton.isEnabled = false // Disable until camera is ready
         recordButton.addTarget(self, action: #selector(toggleRecording), for: .touchUpInside)
@@ -327,7 +327,7 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
             print("CameraRecorder: Stopping recording")
             videoOutput.stopRecording()
             recordButton.setTitle("Start", for: .normal)
-            recordButton.backgroundColor = UIColor.systemGreen // Green for start
+            recordButton.backgroundColor = UIColor(red: 0.12, green: 0.29, blue: 0.64, alpha: 1.0)
             // Don't call onFinishRecording here - wait for the delegate method
         } else {
             // Start recording
@@ -388,7 +388,7 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
         
         DispatchQueue.main.async { [weak self] in
             self?.recordButton.setTitle("Start", for: .normal)
-            self?.recordButton.backgroundColor = UIColor.systemGreen // Reset to green
+            self?.recordButton.backgroundColor = UIColor(red: 0.12, green: 0.29, blue: 0.64, alpha: 1.0)
         }
         
         if error == nil {

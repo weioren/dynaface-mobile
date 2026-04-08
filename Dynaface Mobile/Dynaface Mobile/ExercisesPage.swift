@@ -195,6 +195,10 @@ struct ExercisesPage: View {
                     Text("Please enable camera access in Settings to record exercises.")
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .assessmentCompleted)) { _ in
+                selectedOrder = []
+                selectedIDs = []
+            }
         }
     }
 

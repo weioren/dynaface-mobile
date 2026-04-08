@@ -5,6 +5,7 @@ import AVKit
 struct PracticePage: View {
     let exercises: [Exercise]
     @State private var index: Int = 0
+    @State private var completedIndices: Set<Int> = []
     @State private var showRecorder = false
     @State private var showCompletionAlert = false
     @Environment(\.presentationMode) var presentationMode
@@ -15,97 +16,72 @@ struct PracticePage: View {
                 .padding()
         } else {
             let current = exercises[index]
-            VStack(alignment: .center, spacing: 20) {
-                // [Phase 1] Progress bar
-                VStack(spacing: 8) {
-                    Text("Exercise \(index + 1) of \(exercises.count)")
-                        .font(.title3)
-                    ProgressView(value: Double(index + 1), total: Double(exercises.count))
-                        .progressViewStyle(LinearProgressViewStyle(tint: Color(red: 0.12, green: 0.29, blue: 0.64)))
+            VStack(spacing: 0) {
+                // Exercise title and instructions
+                VStack(spacing: 6) {
+                    Text(current.title)
+                        .font(.title2)
+                        .fontWeight(.semibold)
+
+                    Text(current.instructions)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
                         .padding(.horizontal)
                 }
-                .padding(.top, 12)
+                .padding(.top, 8)
+                .padding(.bottom, 8)
 
-                Text(current.title)
-                    .font(.title)
-                    .fontWeight(.semibold)
-
-                Text(current.instructions)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-                    .padding(.bottom, 10)
-
+                // Demo video
                 if let video = current.videoFileName {
                     ExercisePlayerView(videoName: video)
-                        .id(video)                // 🔑 force rebuild when video changes
+                        .id(video)
                         .frame(maxWidth: .infinity)
+                        .frame(maxHeight: .infinity)
                         .cornerRadius(10)
                         .padding(.horizontal)
                 } else {
                     Text("No video available for this exercise.")
                         .foregroundColor(.secondary)
-                        .padding(.horizontal)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
 
-                Spacer()
-
+                // Start Exercise button
                 Button {
-                    print("PracticePage: Start Exercise button tapped for exercise \(index + 1)")
                     showRecorder = true
                 } label: {
                     Text("Start Exercise")
                         .foregroundColor(.white)
+                        .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(Color(red: 0.12, green: 0.29, blue: 0.64))
                         .cornerRadius(10)
                 }
                 .padding(.horizontal)
-                .fullScreenCover(isPresented: $showRecorder) {
-                    // Recorder presents review (playback) and calls onFinish only on Accept
-                    RecordingPage(
-                        exerciseName: current.title,
-                        onFinish: { url in
-                            print("PracticePage: onFinish called with URL: \(String(describing: url))")
+                .padding(.top, 8)
 
-                            // Ensure UI updates happen on main thread
-                            DispatchQueue.main.async {
-                                showRecorder = false
-
-                                // Only proceed to next exercise if recording was successful
-                                if url != nil {
-                                    if index < exercises.count - 1 {
-                                        index += 1
-                                        print("PracticePage: Moving to next exercise: \(index + 1) of \(exercises.count)")
-                                    } else {
-                                        // last exercise accepted → show completion confirmation
-                                        print("PracticePage: All exercises completed!")
-                                        showCompletionAlert = true
-                                    }
-                                } else {
-                                    print("PracticePage: Recording failed or was cancelled, staying on exercise \(index + 1)")
-                                }
-                                // If url is nil, user stays on current exercise and can retry
-                            }
-                        }
-                    )
-                    .interactiveDismissDisabled(true) // can't swipe away
-                }
-                .onChange(of: showRecorder) { isShowing in
-                    // Handle when the recorder is dismissed
-                    if !isShowing {
-                        print("PracticePage: Recorder dismissed, checking if we should proceed to next exercise")
-                        // The onFinish callback should handle the flow, but if it doesn't,
-                        // we can add additional logic here if needed
-                    }
-                }
+                // Bottom step progress bar
+                StepProgressBar(
+                    totalSteps: exercises.count,
+                    currentStep: index,
+                    completedSteps: completedIndices
+                )
+                .padding(.horizontal)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
             }
-            .navigationBarBackButtonHidden(true) // prevent bypass
+            .navigationBarBackButtonHidden(true)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: {
-                        presentationMode.wrappedValue.dismiss()
+                        if index > 0 {
+                            completedIndices.remove(index - 1)
+                            index -= 1
+                        } else {
+                            presentationMode.wrappedValue.dismiss()
+                        }
                     }) {
                         HStack {
                             Image(systemName: "chevron.left")
@@ -114,12 +90,33 @@ struct PracticePage: View {
                     }
                 }
             }
-            .onAppear {
-                print("PracticePage: Appeared with \(exercises.count) exercises, current index: \(index)")
+            .fullScreenCover(isPresented: $showRecorder) {
+                RecordingPage(
+                    exerciseName: current.title,
+                    exerciseVideoName: current.videoFileName,
+                    currentStep: index + 1,
+                    totalSteps: exercises.count,
+                    completedSteps: completedIndices,
+                    onFinish: { url in
+                        DispatchQueue.main.async {
+                            showRecorder = false
+
+                            if url != nil {
+                                completedIndices.insert(index)
+                                if index < exercises.count - 1 {
+                                    index += 1
+                                } else {
+                                    showCompletionAlert = true
+                                }
+                            }
+                        }
+                    }
+                )
+                .interactiveDismissDisabled(true)
             }
-            // [Phase 1] Completion — dismiss back to Dashboard
             .alert("All exercises completed", isPresented: $showCompletionAlert) {
                 Button("Done") {
+                    NotificationCenter.default.post(name: .assessmentCompleted, object: nil)
                     presentationMode.wrappedValue.dismiss()
                 }
             } message: {
@@ -129,18 +126,136 @@ struct PracticePage: View {
     }
 }
 
-// Reusable player (unchanged)
+// MARK: - Step Progress Bar
+struct StepProgressBar: View {
+    let totalSteps: Int
+    let currentStep: Int
+    let completedSteps: Set<Int>
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(0..<totalSteps, id: \.self) { step in
+                Circle()
+                    .fill(circleColor(for: step))
+                    .frame(width: 26, height: 26)
+                    .overlay(
+                        Group {
+                            if completedSteps.contains(step) {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(.white)
+                            } else {
+                                Text("\(step + 1)")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(step == currentStep ? .white : .gray)
+                            }
+                        }
+                    )
+
+                if step < totalSteps - 1 {
+                    Rectangle()
+                        .fill(completedSteps.contains(step) ? Color.green : Color.gray.opacity(0.3))
+                        .frame(height: 2)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+        }
+    }
+
+    private func circleColor(for step: Int) -> Color {
+        if completedSteps.contains(step) {
+            return .green
+        } else if step == currentStep {
+            return Color(red: 0.12, green: 0.29, blue: 0.64)
+        } else {
+            return Color.gray.opacity(0.3)
+        }
+    }
+}
+
+// MARK: - PiP Demo Player (fill frame, no black bars, no controls)
+struct PiPDemoPlayer: UIViewRepresentable {
+    let videoName: String
+
+    func makeUIView(context: Context) -> PiPPlayerUIView {
+        let view = PiPPlayerUIView()
+        view.load(videoName: videoName)
+        return view
+    }
+
+    func updateUIView(_ uiView: PiPPlayerUIView, context: Context) {}
+}
+
+class PiPPlayerUIView: UIView {
+    private var player: AVPlayer?
+    private var playerLayer: AVPlayerLayer?
+    private var loopObserver: NSObjectProtocol?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        playerLayer?.frame = bounds
+    }
+
+    func load(videoName: String) {
+        var url: URL?
+        if let u = Bundle.main.url(forResource: videoName, withExtension: "MOV") {
+            url = u
+        } else if let u = Bundle.main.url(forResource: videoName, withExtension: "mp4") {
+            url = u
+        }
+        guard let videoURL = url else { return }
+
+        let player = AVPlayer(url: videoURL)
+        player.isMuted = true
+        let layer = AVPlayerLayer(player: player)
+        layer.videoGravity = .resizeAspectFill
+        layer.frame = bounds
+        self.layer.addSublayer(layer)
+
+        self.player = player
+        self.playerLayer = layer
+
+        loopObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: player.currentItem,
+            queue: .main
+        ) { [weak player] _ in
+            player?.seek(to: .zero)
+            player?.play()
+        }
+
+        player.seek(to: .zero)
+        player.play()
+    }
+
+    deinit {
+        if let obs = loopObserver {
+            NotificationCenter.default.removeObserver(obs)
+        }
+        player?.pause()
+    }
+}
+
+// MARK: - Reusable player with looping
 struct ExercisePlayerView: View {
     let videoName: String
     @State private var player: AVPlayer?
+    @State private var loopObserver: NSObjectProtocol?
 
     var body: some View {
         Group {
             if let player {
                 VideoPlayer(player: player)
                     .aspectRatio(contentMode: .fit)
-                    .onAppear { player.seek(to: .zero); player.play() }
-                    .onDisappear { player.pause() }
+                    .onAppear {
+                        player.seek(to: .zero)
+                        player.play()
+                        addLoopObserver()
+                    }
+                    .onDisappear {
+                        player.pause()
+                        removeLoopObserver()
+                    }
             } else {
                 Text("Video could not be loaded.")
                     .foregroundColor(.secondary)
@@ -149,6 +264,7 @@ struct ExercisePlayerView: View {
         }
         .onAppear(perform: load)
         .onChange(of: videoName) { _ in
+            removeLoopObserver()
             player?.pause()
             player = nil
             load()
@@ -156,11 +272,29 @@ struct ExercisePlayerView: View {
     }
 
     private func load() {
-        // Try MOV first, then fall back to mp4
         if let url = Bundle.main.url(forResource: videoName, withExtension: "MOV") {
             player = AVPlayer(url: url)
         } else if let url = Bundle.main.url(forResource: videoName, withExtension: "mp4") {
             player = AVPlayer(url: url)
+        }
+    }
+
+    private func addLoopObserver() {
+        guard let player = player, loopObserver == nil else { return }
+        loopObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: player.currentItem,
+            queue: .main
+        ) { _ in
+            player.seek(to: .zero)
+            player.play()
+        }
+    }
+
+    private func removeLoopObserver() {
+        if let obs = loopObserver {
+            NotificationCenter.default.removeObserver(obs)
+            loopObserver = nil
         }
     }
 }
