@@ -3,11 +3,19 @@ import AVKit
 
 
 struct PracticePage: View {
+    enum PracticePhase: Equatable {
+        case exercising
+        case review
+        case rerecording(Int)
+    }
+
     let exercises: [Exercise]
     @State private var index: Int = 0
-    @State private var completedIndices: Set<Int> = []
+    @State private var recordings: [Int: URL] = [:]
     @State private var showRecorder = false
-    @State private var showCompletionAlert = false
+    @State private var phase: PracticePhase = .exercising
+    @State private var expandedExerciseIndex: Int? = nil
+    @State private var showRerecorder = false
     @Environment(\.presentationMode) var presentationMode
 
     var body: some View {
@@ -15,112 +23,260 @@ struct PracticePage: View {
             Text("No exercises selected.")
                 .padding()
         } else {
-            let current = exercises[index]
-            VStack(spacing: 0) {
-                // Exercise title and instructions
-                VStack(spacing: 6) {
-                    Text(current.title)
-                        .font(.title2)
-                        .fontWeight(.semibold)
-
-                    Text(current.instructions)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
-                .padding(.top, 8)
-                .padding(.bottom, 8)
-
-                // Demo video
-                if let video = current.videoFileName {
-                    ExercisePlayerView(videoName: video)
-                        .id(video)
-                        .frame(maxWidth: .infinity)
-                        .frame(maxHeight: .infinity)
-                        .cornerRadius(10)
-                        .padding(.horizontal)
-                } else {
-                    Text("No video available for this exercise.")
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-
-                // Start Exercise button
-                Button {
-                    showRecorder = true
-                } label: {
-                    Text("Start Exercise")
-                        .foregroundColor(.white)
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color(red: 0.12, green: 0.29, blue: 0.64))
-                        .cornerRadius(10)
-                }
-                .padding(.horizontal)
-                .padding(.top, 8)
-
-                // Bottom step progress bar
-                StepProgressBar(
-                    totalSteps: exercises.count,
-                    currentStep: index,
-                    completedSteps: completedIndices
-                )
-                .padding(.horizontal)
-                .padding(.top, 12)
-                .padding(.bottom, 8)
+            switch phase {
+            case .exercising:
+                exercisingView
+            case .review, .rerecording:
+                reviewView
             }
-            .navigationBarBackButtonHidden(true)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: {
-                        if index > 0 {
-                            completedIndices.remove(index - 1)
-                            index -= 1
-                        } else {
-                            presentationMode.wrappedValue.dismiss()
+        }
+    }
+
+    // MARK: - Exercising Phase
+    private var exercisingView: some View {
+        let current = exercises[index]
+        return VStack(spacing: 0) {
+            // Exercise title and instructions
+            VStack(spacing: 6) {
+                Text(current.title)
+                    .font(.title2)
+                    .fontWeight(.semibold)
+
+                Text(current.instructions)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+            .padding(.top, 8)
+            .padding(.bottom, 8)
+
+            // Demo video
+            if let video = current.videoFileName {
+                ExercisePlayerView(videoName: video)
+                    .id(video)
+                    .frame(maxWidth: .infinity)
+                    .frame(maxHeight: .infinity)
+                    .cornerRadius(10)
+                    .padding(.horizontal)
+            } else {
+                Text("No video available for this exercise.")
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+            // Start Exercise button
+            Button {
+                showRecorder = true
+            } label: {
+                Text("Start Exercise")
+                    .foregroundColor(.white)
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color(red: 0.12, green: 0.29, blue: 0.64))
+                    .cornerRadius(10)
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+
+            // Bottom step progress bar
+            StepProgressBar(
+                totalSteps: exercises.count,
+                currentStep: index,
+                completedSteps: Set(recordings.keys)
+            )
+            .padding(.horizontal)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+        }
+        .navigationBarBackButtonHidden(true)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: {
+                    if index > 0 {
+                        if let url = recordings[index - 1] {
+                            try? FileManager.default.removeItem(at: url)
                         }
-                    }) {
-                        HStack {
-                            Image(systemName: "chevron.left")
-                            Text("Back")
+                        recordings.removeValue(forKey: index - 1)
+                        index -= 1
+                    } else {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                }) {
+                    HStack {
+                        Image(systemName: "chevron.left")
+                        Text("Back")
+                    }
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showRecorder) {
+            RecordingPage(
+                exerciseName: current.title,
+                exerciseVideoName: current.videoFileName,
+                currentStep: index + 1,
+                totalSteps: exercises.count,
+                completedSteps: Set(recordings.keys),
+                onFinish: { url in
+                    DispatchQueue.main.async {
+                        showRecorder = false
+
+                        if let url = url {
+                            recordings[index] = url
+                            if index < exercises.count - 1 {
+                                index += 1
+                            } else {
+                                phase = .review
+                            }
+                        }
+                    }
+                }
+            )
+            .interactiveDismissDisabled(true)
+        }
+    }
+
+    // MARK: - Review Phase
+    private var reviewView: some View {
+        VStack(spacing: 0) {
+            // Header
+            VStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 44))
+                    .foregroundColor(.green)
+                    .padding(.top, 20)
+
+                Text("All exercises done!")
+                    .font(.title2)
+                    .fontWeight(.bold)
+
+                Text("\(recordings.count) of \(exercises.count) recorded")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.bottom, 16)
+
+            // Exercise list
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(exercises.indices, id: \.self) { i in
+                        VStack(spacing: 0) {
+                            // Row: left side tappable for accordion, right side for re-record
+                            HStack(spacing: 0) {
+                                // Tappable area: expand/collapse accordion
+                                HStack(spacing: 12) {
+                                    // Green circle with checkmark
+                                    Circle()
+                                        .fill(Color.green)
+                                        .frame(width: 28, height: 28)
+                                        .overlay(
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 13, weight: .bold))
+                                                .foregroundColor(.white)
+                                        )
+
+                                    Text("\(i + 1). \(exercises[i].title)")
+                                        .font(.body)
+                                        .foregroundColor(.primary)
+
+                                    Spacer()
+
+                                    // Chevron indicator
+                                    Image(systemName: expandedExerciseIndex == i ? "chevron.down" : "chevron.right")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(.gray)
+                                }
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    withAnimation(.easeInOut(duration: 0.25)) {
+                                        expandedExerciseIndex = (expandedExerciseIndex == i) ? nil : i
+                                    }
+                                }
+
+                                // Re-record button (isolated from row tap)
+                                Button(action: {
+                                    expandedExerciseIndex = nil
+                                    phase = .rerecording(i)
+                                }) {
+                                    Image(systemName: "arrow.counterclockwise")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(Color(red: 0.12, green: 0.29, blue: 0.64))
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 10)
+                                }
+                            }
+                            .padding(.leading, 16)
+                            .padding(.trailing, 4)
+                            .padding(.vertical, 2)
+
+                            // Accordion: inline video preview
+                            if expandedExerciseIndex == i, let url = recordings[i] {
+                                MirroredAVPlayerControllerView(url: url, loop: true)
+                                    .frame(height: 220)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    .padding(.horizontal, 16)
+                                    .padding(.bottom, 10)
+                                    .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .top)))
+                            }
+
+                            Divider()
+                                .padding(.leading, 56)
                         }
                     }
                 }
             }
-            .fullScreenCover(isPresented: $showRecorder) {
+
+            // Finish Assessment button
+            Button {
+                NotificationCenter.default.post(name: .assessmentCompleted, object: nil)
+                presentationMode.wrappedValue.dismiss()
+            } label: {
+                Text("Finish Assessment")
+                    .foregroundColor(.white)
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color(red: 0.12, green: 0.29, blue: 0.64))
+                    .cornerRadius(10)
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 12)
+        }
+        .navigationBarBackButtonHidden(true)
+        .onChange(of: phase) { newPhase in
+            if case .rerecording = newPhase {
+                showRerecorder = true
+            }
+        }
+        .fullScreenCover(isPresented: $showRerecorder) {
+            if case .rerecording(let exerciseIndex) = phase {
+                let exercise = exercises[exerciseIndex]
                 RecordingPage(
-                    exerciseName: current.title,
-                    exerciseVideoName: current.videoFileName,
-                    currentStep: index + 1,
+                    exerciseName: exercise.title,
+                    exerciseVideoName: exercise.videoFileName,
+                    currentStep: exerciseIndex + 1,
                     totalSteps: exercises.count,
-                    completedSteps: completedIndices,
+                    completedSteps: Set(recordings.keys),
                     onFinish: { url in
                         DispatchQueue.main.async {
-                            showRecorder = false
-
-                            if url != nil {
-                                completedIndices.insert(index)
-                                if index < exercises.count - 1 {
-                                    index += 1
-                                } else {
-                                    showCompletionAlert = true
+                            showRerecorder = false
+                            if let newURL = url {
+                                // Delete old recording, store new
+                                if let oldURL = recordings[exerciseIndex] {
+                                    try? FileManager.default.removeItem(at: oldURL)
                                 }
+                                recordings[exerciseIndex] = newURL
+                                // Auto-expand to show re-recorded video
+                                expandedExerciseIndex = exerciseIndex
                             }
+                            // If nil (cancelled), keep old recording
+                            phase = .review
                         }
                     }
                 )
                 .interactiveDismissDisabled(true)
-            }
-            .alert("All exercises completed", isPresented: $showCompletionAlert) {
-                Button("Done") {
-                    NotificationCenter.default.post(name: .assessmentCompleted, object: nil)
-                    presentationMode.wrappedValue.dismiss()
-                }
-            } message: {
-                Text("Great job! You've finished all \(exercises.count) exercises.")
             }
         }
     }

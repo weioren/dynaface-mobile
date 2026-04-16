@@ -130,11 +130,13 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
     var exerciseName: String = ""
     var recordButton: UIButton!
     var buttonContainer: UIView!
+    private var flipCameraObserver: NSObjectProtocol?
 
     var onFinishRecording: ((URL?) -> Void)?
 
     private var isSetupComplete = false
     private var recordedFileURL: URL?
+    private var currentCameraPosition: AVCaptureDevice.Position = .front
 
     // Face guide
     private var faceGuideOverlay: FaceGuideOverlayView!
@@ -182,6 +184,13 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
         view.bringSubviewToFront(faceGuideOverlay)
         view.bringSubviewToFront(buttonContainer)
 
+        // Listen for flip camera notification from SwiftUI layer
+        flipCameraObserver = NotificationCenter.default.addObserver(
+            forName: .flipCamera, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.flipCamera()
+        }
+
         faceDetectionRequest = VNDetectFaceRectanglesRequest { [weak self] request, _ in
             guard let self = self else { return }
             let faces = request.results as? [VNFaceObservation]
@@ -224,7 +233,8 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
             return
         }
 
-        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .leftMirrored, options: [:])
+        let orientation: CGImagePropertyOrientation = (currentCameraPosition == .front) ? .leftMirrored : .right
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: orientation, options: [:])
         try? handler.perform([request])
         isProcessingFrame = false
     }
@@ -439,6 +449,10 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
         NotificationCenter.default.removeObserver(
             self, name: UIDevice.orientationDidChangeNotification, object: nil
         )
+        if let obs = flipCameraObserver {
+            NotificationCenter.default.removeObserver(obs)
+            flipCameraObserver = nil
+        }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             self?.captureSession?.stopRunning()
         }
@@ -458,6 +472,45 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
         return recordedFileURL != nil
     }
 
+    // MARK: - Camera Flip
+    @objc private func flipCamera() {
+        guard let session = captureSession, !videoOutput.isRecording else { return }
+
+        let newPosition: AVCaptureDevice.Position = (currentCameraPosition == .front) ? .back : .front
+
+        guard let newDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: newPosition),
+              let newInput = try? AVCaptureDeviceInput(device: newDevice) else { return }
+
+        session.beginConfiguration()
+
+        // Remove existing video input
+        if let currentInput = session.inputs.first(where: { ($0 as? AVCaptureDeviceInput)?.device.hasMediaType(.video) == true }) {
+            session.removeInput(currentInput)
+        }
+
+        if session.canAddInput(newInput) {
+            session.addInput(newInput)
+            currentCameraPosition = newPosition
+        }
+
+        session.commitConfiguration()
+
+        // Show/hide face guide based on camera
+        if newPosition == .front {
+            faceGuideOverlay?.isHidden = false
+            faceGuideOverlay?.updateFaceAlignment(faceInOval: false) // Reset visual state
+            faceGuideCompleted = false
+            recordButton.isEnabled = false
+            recordButton.backgroundColor = UIColor.gray
+        } else {
+            // Back camera: hide face guide, enable record button
+            faceGuideOverlay?.isHidden = true
+            faceGuideCompleted = true
+            recordButton.isEnabled = true
+            recordButton.backgroundColor = UIColor(red: 0.12, green: 0.29, blue: 0.64, alpha: 1.0)
+        }
+    }
+
     // MARK: - Recording
     @objc func toggleRecording() {
         guard let captureSession = captureSession, captureSession.isRunning else {
@@ -470,10 +523,12 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
             videoOutput.stopRecording()
             recordButton.setTitle("Start", for: .normal)
             recordButton.backgroundColor = UIColor(red: 0.12, green: 0.29, blue: 0.64, alpha: 1.0)
+            NotificationCenter.default.post(name: .recordingStateChanged, object: false) // Not recording
         } else {
             // Dismiss face guide when recording starts
             faceGuideOverlay?.dismiss()
             faceGuideCompleted = true
+            NotificationCenter.default.post(name: .recordingStateChanged, object: true) // Recording
 
             print("CameraRecorder: Starting recording")
             let nextNumber = getNextFileNumber(for: exerciseName)

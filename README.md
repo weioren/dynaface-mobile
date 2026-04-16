@@ -91,17 +91,50 @@ This is a mobile app extension of Dynaface. The computer version and accompanyin
 - Removed Home tab (calendar page) from Dashboard
 - Retained 3 tabs: **Exercise** (0), **History** (1), **Profile** (2)
 
+---
+
+# Phase 4: Review Summary Page & Camera Flipping
+**Branch:** `feature/ui-changes`
+
+### 1. Review Summary Page
+
+- After recording all exercises, entering a new Review page (replaces the completion alert)
+- Header: green checkmark icon, "All exercises done!" title, dynamic recorded count
+- Scrollable list of all exercises with chevron indicator
+- Tap a row to inline-expand video playback (accordion, one open at a time)
+- Review videos loop continuously
+- Re-record button on each row to redo any individual exercise
+- Re-record flow preserves the old recording until the new one is confirmed (cancel-safe)
+- Auto-expands the exercise row after a successful re-record
+- Bottom "Finish Assessment" button posts completion notification
+
+### 2. Phase State Machine in PracticePage
+
+- New `PracticePhase` enum (`exercising` / `review` / `rerecording`) replaces alert-based flow
+- Data structure upgraded from `Set<Int>` to `[Int: URL]` to persist video file URLs
+- Single-page state switching avoids nested navigation pushes
+
+### 3. Camera Flipping
+
+- Front ↔ back camera toggle in the recording screen top bar
+- Flip button hidden during active recording to prevent interruption
+- Switching to back camera hides the face guide oval and enables the record button directly
+- Switching back to front camera restores the oval and resets face alignment state
+- Vision face detection orientation adjusted per camera (`.leftMirrored` vs `.right`)
+- SwiftUI ↔ UIKit communication via NotificationCenter (`.flipCamera`, `.recordingStateChanged`)
+- Proper observer cleanup in `viewWillDisappear` to prevent memory leaks
+
 ## Files Modified
 
-| File                       | Phase 1 | Phase 2 | Phase 3 |
-| -------------------------- | ------- | ------- | ------- |
-| `PracticePage.swift`       | Progress bar, post-completion nav | Video looping, StepProgressBar, PiPDemoPlayer, back logic | — |
-| `RecordingPage.swift`      | Retake / Save & Continue labels | Single-screen with PiP, back button, brand colors | — |
-| `ExercisesPage.swift`      | Modules, Quick Start buttons | Reset on assessment completion | — |
-| `CameraRecorderView.swift` | Simulator mode toggle | Brand blue button color | Face guide oval, Vision face detection |
-| `ExerciseHistoryPage.swift`| — | — | Removed nested NavigationView |
-| `Dashboard.swift`          | — | — | Removed Home tab |
-| `DynafaceMobileApp.swift`  | Auth skip toggle | — | — |
+| File                       | Phase 1 | Phase 2 | Phase 3 | Phase 4 |
+| -------------------------- | ------- | ------- | ------- | ------- |
+| `PracticePage.swift`       | Progress bar, post-completion nav | Video looping, StepProgressBar, PiPDemoPlayer, back logic | — | Review page, phase state machine, recordings dict, accordion video |
+| `RecordingPage.swift`      | Retake / Save & Continue labels | Single-screen with PiP, back button, brand colors | — | Continue rename, flip camera button, recording state observer |
+| `ExercisesPage.swift`      | Modules, Quick Start buttons | Reset on assessment completion | — | — |
+| `CameraRecorderView.swift` | Simulator mode toggle | Brand blue button color | Face guide oval, Vision face detection | Camera flip, per-camera orientation, notification-driven flip |
+| `ExerciseHistoryPage.swift`| — | — | Removed nested NavigationView | — |
+| `Dashboard.swift`          | — | — | Removed Home tab | — |
+| `DynafaceMobileApp.swift`  | Auth skip toggle | — | — | — |
 
 ## New Components
 
@@ -110,8 +143,10 @@ This is a mobile app extension of Dynaface. The computer version and accompanyin
 | `StepProgressBar` | `PracticePage.swift` | Reusable numbered step indicator |
 | `PiPDemoPlayer` | `PracticePage.swift` | Fill-frame, no-black-bar, muted looping video player |
 | `FaceGuideOverlayView` | `CameraRecorderView.swift` | CAShapeLayer oval with dashed/solid states and alignment callback |
+| `PracticePhase` (enum) | `PracticePage.swift` | Three-state machine (exercising / review / rerecording) |
 
 ## Pending
 
 - **Emotions module** — requires 7 new demo videos and exercise definitions
+- **Video upload to Supabase** — integrate Alex's `VideoUploadService.swift` into app
 - **Real device testing** — requires Apple Developer Team access

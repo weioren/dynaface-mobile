@@ -18,6 +18,7 @@ struct RecordingPage: View {
     @Environment(\.presentationMode) private var presentationMode
     @State private var phase: Phase = .recording
     @State private var showDemoVideo = true
+    @State private var isRecording = false
 
     var body: some View {
         Group {
@@ -60,6 +61,18 @@ struct RecordingPage: View {
                                 .font(.headline)
                                 .foregroundColor(.white)
                             Spacer()
+                            // Camera flip button
+                            if !isRecording {
+                                Button(action: {
+                                    NotificationCenter.default.post(name: .flipCamera, object: nil)
+                                }) {
+                                    Image(systemName: "camera.rotate")
+                                        .font(.system(size: 18))
+                                        .foregroundColor(.white)
+                                        .padding(.vertical, 12)
+                                        .padding(.trailing, 8)
+                                }
+                            }
                             // Toggle demo video visibility
                             Button(action: { showDemoVideo.toggle() }) {
                                 Image(systemName: showDemoVideo ? "pip.fill" : "pip")
@@ -73,6 +86,11 @@ struct RecordingPage: View {
                         .background(
                             LinearGradient(colors: [.black.opacity(0.6), .clear], startPoint: .top, endPoint: .bottom)
                         )
+                        .onReceive(NotificationCenter.default.publisher(for: .recordingStateChanged)) { notification in
+                            if let recording = notification.object as? Bool {
+                                isRecording = recording
+                            }
+                        }
 
                         // PiP demo video (top-right)
                         HStack {
@@ -125,7 +143,7 @@ struct RecordingPage: View {
                                 presentationMode.wrappedValue.dismiss()
                             }
                         } label: {
-                            Label("Save & Continue", systemImage: "checkmark.circle.fill")
+                            Label("Continue", systemImage: "checkmark.circle.fill")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
@@ -192,8 +210,10 @@ struct RecordingPage: View {
     }
 }
 
-// MARK: - Notification Name used by PageOne to refresh streak/calendar
+// MARK: - Notification Names
 extension Notification.Name {
     static let recordingAccepted = Notification.Name("recordingAccepted")
     static let assessmentCompleted = Notification.Name("assessmentCompleted")
+    static let flipCamera = Notification.Name("flipCamera")
+    static let recordingStateChanged = Notification.Name("recordingStateChanged")
 }
