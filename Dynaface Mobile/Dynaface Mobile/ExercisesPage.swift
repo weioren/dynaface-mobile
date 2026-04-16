@@ -174,15 +174,6 @@ struct ExercisesPage: View {
                 }
                 .frame(width: geometry.size.width, alignment: .center)
 
-                // Hidden NavigationLink controlled by state
-                NavigationLink(
-                    destination: PracticePage(exercises: selectedOrder),
-                    isActive: $navigateToPractice
-                ) {
-                    EmptyView()
-                }
-                .hidden()
-
                 // Alert for when camera permission is denied
                 .alert("Camera Access Required", isPresented: $showPermissionAlert) {
                     Button("Settings") {
@@ -195,6 +186,15 @@ struct ExercisesPage: View {
                     Text("Please enable camera access in Settings to record exercises.")
                 }
             }
+            .background(
+                NavigationLink(
+                    destination: PracticePage(exercises: selectedOrder),
+                    isActive: $navigateToPractice
+                ) {
+                    EmptyView()
+                }
+                .hidden()
+            )
             .onReceive(NotificationCenter.default.publisher(for: .assessmentCompleted)) { _ in
                 selectedOrder = []
                 selectedIDs = []

@@ -66,15 +66,42 @@ This is a mobile app extension of Dynaface. The computer version and accompanyin
 
 - Start, Save & Continue buttons all use brand blue (`rgb(31, 74, 163)`)
 
+---
+
+# Phase 3: Face Guide, Navigation Fixes & Dashboard Cleanup
+**Branch:** `feature/ui-changes`
+
+### 1. Face Guide Oval with Vision Detection
+
+- Dashed white oval overlay on camera screen (60% width, 1.35 aspect ratio, centered)
+- Real-time face detection using Apple Vision framework (`VNDetectFaceRectanglesRequest`)
+- Face aligned inside oval → oval turns solid green, Start button enabled
+- Face leaves oval → oval returns to dashed white, Start button disabled (grey)
+- Oval dismissed permanently once recording starts
+- Frame throttling to prevent overload (`isProcessingFrame` flag)
+- Front camera mirrored orientation (`.leftMirrored`)
+
+### 2. Tab Bar Freeze Fix
+
+- Removed nested `NavigationView` in `ExerciseHistoryPage.swift`
+- Dashboard already provides the outer `NavigationView`; nesting caused tab switches to freeze
+
+### 3. Home Tab Removal
+
+- Removed Home tab (calendar page) from Dashboard
+- Retained 3 tabs: **Exercise** (0), **History** (1), **Profile** (2)
+
 ## Files Modified
 
-| File                       | Phase 1 | Phase 2 |
-| -------------------------- | ------- | ------- |
-| `PracticePage.swift`       | Progress bar, post-completion nav | Video looping, StepProgressBar, PiPDemoPlayer, back logic |
-| `RecordingPage.swift`      | Retake / Save & Continue labels | Single-screen with PiP, back button, brand colors |
-| `ExercisesPage.swift`      | Modules, Quick Start buttons | Reset on assessment completion |
-| `CameraRecorderView.swift` | Simulator mode toggle | Brand blue button color |
-| `DynafaceMobileApp.swift`  | Auth skip toggle | — |
+| File                       | Phase 1 | Phase 2 | Phase 3 |
+| -------------------------- | ------- | ------- | ------- |
+| `PracticePage.swift`       | Progress bar, post-completion nav | Video looping, StepProgressBar, PiPDemoPlayer, back logic | — |
+| `RecordingPage.swift`      | Retake / Save & Continue labels | Single-screen with PiP, back button, brand colors | — |
+| `ExercisesPage.swift`      | Modules, Quick Start buttons | Reset on assessment completion | — |
+| `CameraRecorderView.swift` | Simulator mode toggle | Brand blue button color | Face guide oval, Vision face detection |
+| `ExerciseHistoryPage.swift`| — | — | Removed nested NavigationView |
+| `Dashboard.swift`          | — | — | Removed Home tab |
+| `DynafaceMobileApp.swift`  | Auth skip toggle | — | — |
 
 ## New Components
 
@@ -82,6 +109,7 @@ This is a mobile app extension of Dynaface. The computer version and accompanyin
 | --------- | ---- | ----------- |
 | `StepProgressBar` | `PracticePage.swift` | Reusable numbered step indicator |
 | `PiPDemoPlayer` | `PracticePage.swift` | Fill-frame, no-black-bar, muted looping video player |
+| `FaceGuideOverlayView` | `CameraRecorderView.swift` | CAShapeLayer oval with dashed/solid states and alignment callback |
 
 ## Pending
 

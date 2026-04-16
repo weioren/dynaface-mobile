@@ -6,33 +6,26 @@ struct Dashboard: View {
     var body: some View {
         NavigationView {
             TabView(selection: $selectedTab) {
-                HomePage()
-                    .tabItem {
-                        Image(systemName: "house.fill")
-                        Text("Home")
-                    }
-                    .tag(0)
-                
                 ExercisesPage()
                     .tabItem {
                         Image(systemName: "dumbbell.fill")
                         Text("Exercise")
                     }
-                    .tag(1)
-                
+                    .tag(0)
+
                 ExerciseHistoryPage()
                     .tabItem {
                         Image(systemName: "video.fill")
                         Text("History")
                     }
-                    .tag(2)
-                
+                    .tag(1)
+
                 ProfilePage()
                     .tabItem {
                         Image(systemName: "person.fill")
                         Text("Profile")
                     }
-                    .tag(3)
+                    .tag(2)
             }
             .navigationBarHidden(true)
         }
