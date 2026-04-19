@@ -1,44 +1,40 @@
+This document covers the pipeline used to process a video remotely from an uploaded recorded video as well as next steps.
 
-This is a mobile app extension of Dynaface. The computer version and accompanying library can be found here: https://github.com/jeffheaton/dynaface
+# Pipeline
+1. User records video and presses "Accept"
+2. Call ```VideoUploadService.swfit```
+2. ```VideoUploadService.swfit``` references local video URL to upload the video to Supabase Storage at ```raw-videos/{user_id}/{job_id}/video.mov```
+3. ```VideoUploadService.swfit``` then inserts a row into ```processing_jobs``` table in Supabase with status "queued".
+4. ```dynaface_worker.py``` will continuously run on some machine and detect new inserted rows
+5. Whenever a new row is detected, the status is updated to "processing" and the video file is downloaded to the machine
+6. ```dynaface_extract.py``` is run on the video file and CSV results are stored on the machine
+7. CSV results are uploaded to ```results/{user_id}/{job_id}/results.csv```
+8. Status is updated to "completed". 
+9. ```dynaface_worker.py``` continues scanning for new job requests.
 
-# Phase1: Start Assessment & Exercise Modules
-## Branch: `feature/start-assessment`
-## Changes
+# Tests Completed So Far
+- ```dynaface_worker.py``` works and the upload and porcessing table scheme works perfectly. This was tested using ```smoke_test_pipeline.py``` which uploads a local MOV file and inserts a new row in ```processing_jobs```.
 
-### 1. Start Assessment — Quick Start Modules
 
-- Added **Quick Start** section with one-tap module buttons:
-  - **Full Assessment (10)** — all exercises
-  - **Eye Movements (4)** — Eyebrow Raise, Brow Furrow, Strong Eye Closure, Weak Eye Closure
-  - **Smile Movements (4)** — Full Smile, Half Smile, Lip Pucker, Lip Purse
-- Layout reserves space for future **Emotions** module (pending demo videos)
+# Next Steps
+1. Call ```VideoUploadService.swfit``` after the user presses Accept
+```
+Task {
+        do {
+            let uploadService = VideoUploadService()
 
-### 2. Tutorial Page with Text & Video Demo
+            // If user is already signed in and service can read current user
+            let job = try await uploadService.uploadVideoAndCreateJobForCurrentUser(
+                videoURL: acceptedVideoURL,
+                exerciseName: "FullSmile" // replace with selected exercise
+            )
 
-- Each exercise displays instruction text and a bundled demo video
-- All 10 exercises have corresponding demo videos
-
-### 3. Assessment Flow — Minimal Clicks, Clear Instructions
-
-- Added visual **progress bar** showing current exercise out of total
-- Recording review buttons renamed: **Retake** / **Save & Continue**
-- Completion dismisses back to Dashboard (fixed nested Dashboard bug)
-
-### 4. Custom Selection
-
-- Retained exercise grid for manual selection below Quick Start
-- "Practice Selected (N)" button for custom exercise sets
-
-## Files Modified
-
-| File                       | Change                                                      |
-| -------------------------- | ----------------------------------------------------------- |
-| `ExercisesPage.swift`      | Module definitions, Quick Start buttons, layout restructure |
-| `PracticePage.swift`       | Progress bar, fixed post-completion navigation              |
-| `RecordingPage.swift`      | Retake / Save & Continue button labels                      |
-| `CameraRecorderView.swift` | Simulator mode toggle for dev testing                       |
-| `DynafaceMobileApp.swift`  | Auth skip toggle for dev testing                            |
-
-## Pending
-- **Emotions module** — requires 7 new demo videos (happy, sad, surprised, fear, disgust, angry, neutral) and exercise definitions
-
+            print("Queued job: \(job.jobId)")
+            print("Input path: \(job.inputVideoPath)")
+        } catch {
+            print("Failed to upload/queue video: \(error)")
+        }
+    }
+```
+2. Ensure you add, SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY as environment variables on server machine running the worker file
+3. Run worker file
