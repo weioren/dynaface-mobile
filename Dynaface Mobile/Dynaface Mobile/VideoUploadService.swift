@@ -52,14 +52,22 @@ struct VideoUploadService {
         let inputVideoPath = "\(userId.uuidString)/\(jobId.uuidString)/video.\(fileExt)"
 
         let videoData = try Data(contentsOf: videoURL)
+        print("[VideoUploadService] Video loaded: \(videoData.count) bytes")
+        print("[VideoUploadService] Uploading to path: \(inputVideoPath)")
 
-        try await supabase.storage
-            .from(rawVideosBucket)
-            .upload(
-                path: inputVideoPath,
-                file: videoData,
-                options: FileOptions(contentType: contentType(for: fileExt))
-            )
+        do {
+            try await supabase.storage
+                .from(rawVideosBucket)
+                .upload(
+                    path: inputVideoPath,
+                    file: videoData,
+                    options: FileOptions(contentType: contentType(for: fileExt))
+                )
+            print("[VideoUploadService] Storage upload SUCCESS")
+        } catch {
+            print("[VideoUploadService] Storage upload FAILED: \(error)")
+            throw error
+        }
 
         struct ProcessingJobInsert: Encodable {
             let id: UUID
@@ -77,10 +85,18 @@ struct VideoUploadService {
             status: status
         )
 
-        try await supabase
-            .from(processingJobsTable)
-            .insert(row)
-            .execute()
+        print("[VideoUploadService] Inserting job: id=\(jobId.uuidString), user_id=\(userId.uuidString), status=\(status)")
+
+        do {
+            try await supabase
+                .from(processingJobsTable)
+                .insert(row)
+                .execute()
+            print("[VideoUploadService] Database insert SUCCESS")
+        } catch {
+            print("[VideoUploadService] Database insert FAILED: \(error)")
+            throw error
+        }
 
         return QueuedProcessingJob(
             jobId: jobId,
@@ -96,12 +112,23 @@ struct VideoUploadService {
         status: String = "queued"
     ) async throws -> QueuedProcessingJob {
         let session = try await supabase.auth.session
-        return try await uploadVideoAndCreateJob(
-            videoURL: videoURL,
-            userId: session.user.id,
-            exerciseName: exerciseName,
-            status: status
-        )
+        print("[VideoUploadService] Current user ID: \(session.user.id.uuidString)")
+        print("[VideoUploadService] Auth token exists: \(!session.accessToken.isEmpty)")
+        
+        do {
+            let result = try await uploadVideoAndCreateJob(
+                videoURL: videoURL,
+                userId: session.user.id,
+                exerciseName: exerciseName,
+                status: status
+            )
+            print("[VideoUploadService] SUCCESS: Job created with ID \(result.jobId.uuidString)")
+            return result
+        } catch {
+            print("[VideoUploadService] UPLOAD FAILED: \(error.localizedDescription)")
+            print("[VideoUploadService] Full error: \(error)")
+            throw error
+        }
     }
 
     private func contentType(for fileExt: String) -> String {
