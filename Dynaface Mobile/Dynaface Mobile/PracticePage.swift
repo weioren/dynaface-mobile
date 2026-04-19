@@ -7,10 +7,7 @@ struct PracticePage: View {
     @State private var index: Int = 0
     @State private var showRecorder = false
     @State private var showCompletionAlert = false
-    @State private var isUploading = false
-    @State private var uploadErrorMessage: String?
     @Environment(\.presentationMode) var presentationMode
-    @EnvironmentObject private var authService: AuthenticationService
 
     var body: some View {
         if exercises.isEmpty {
@@ -64,7 +61,6 @@ struct PracticePage: View {
                         .cornerRadius(10)
                 }
                 .padding(.horizontal)
-                .disabled(isUploading)
                 .fullScreenCover(isPresented: $showRecorder) {
                     // Recorder presents review (playback) and calls onFinish only on Accept
                     RecordingPage(
@@ -81,39 +77,12 @@ struct PracticePage: View {
                                     return
                                 }
 
-                                Task {
-                                    await MainActor.run {
-                                        isUploading = true
-                                        uploadErrorMessage = nil
-                                    }
-
-                                    do {
-                                        let uploader = VideoUploadService(supabase: authService.supabaseClient)
-                                        let job = try await uploader.uploadVideoAndCreateJobForCurrentUser(
-                                            videoURL: url,
-                                            exerciseName: current.title
-                                        )
-
-                                        print("PracticePage: Uploaded video and queued job \(job.jobId)")
-
-                                        await MainActor.run {
-                                            isUploading = false
-
-                                            if index < exercises.count - 1 {
-                                                index += 1
-                                                print("PracticePage: Moving to next exercise: \(index + 1) of \(exercises.count)")
-                                            } else {
-                                                print("PracticePage: All exercises completed!")
-                                                showCompletionAlert = true
-                                            }
-                                        }
-                                    } catch {
-                                        print("PracticePage: Upload or queue failed: \(error)")
-                                        await MainActor.run {
-                                            isUploading = false
-                                            uploadErrorMessage = error.localizedDescription
-                                        }
-                                    }
+                                if index < exercises.count - 1 {
+                                    index += 1
+                                    print("PracticePage: Moving to next exercise: \(index + 1) of \(exercises.count)")
+                                } else {
+                                    print("PracticePage: All exercises completed!")
+                                    showCompletionAlert = true
                                 }
                             }
                         }
@@ -145,33 +114,6 @@ struct PracticePage: View {
             }
             .onAppear {
                 print("PracticePage: Appeared with \(exercises.count) exercises, current index: \(index)")
-            }
-            .alert("Upload Failed", isPresented: Binding(
-                get: { uploadErrorMessage != nil },
-                set: { if !$0 { uploadErrorMessage = nil } }
-            )) {
-                Button("OK", role: .cancel) {
-                    uploadErrorMessage = nil
-                }
-            } message: {
-                Text(uploadErrorMessage ?? "Unknown error")
-            }
-            .overlay {
-                if isUploading {
-                    ZStack {
-                        Color.black.opacity(0.35).ignoresSafeArea()
-                        VStack(spacing: 16) {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle())
-                            Text("Uploading video and queuing job...")
-                                .font(.headline)
-                        }
-                        .padding(24)
-                        .background(Color.white)
-                        .cornerRadius(14)
-                        .shadow(radius: 10)
-                    }
-                }
             }
             // [Phase 1] Completion — dismiss back to Dashboard
             .alert("All exercises completed", isPresented: $showCompletionAlert) {

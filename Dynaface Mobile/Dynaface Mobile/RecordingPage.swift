@@ -12,7 +12,10 @@ struct RecordingPage: View {
     var onFinish: ((URL?) -> Void)? = nil
     
     @Environment(\.presentationMode) private var presentationMode
+    @EnvironmentObject private var authService: AuthenticationService
     @State private var phase: Phase = .recording
+    @State private var isUploading = false
+    @State private var uploadErrorMessage: String?
     
     var body: some View {
         Group {
@@ -66,12 +69,34 @@ struct RecordingPage: View {
                         .tint(.red)
                         
                         Button {
-                            print("RecordingPage: Accept button tapped, calling onFinish with URL: \(url)")
-                            // Ensure callbacks happen on main thread
-                            DispatchQueue.main.async {
-                                onFinish?(url) // inform PracticePage
-                                NotificationCenter.default.post(name: .recordingAccepted, object: nil)
-                                presentationMode.wrappedValue.dismiss()
+                            print("RecordingPage: Save & Continue tapped, uploading video before dismiss")
+                            Task {
+                                await MainActor.run {
+                                    isUploading = true
+                                    uploadErrorMessage = nil
+                                }
+
+                                do {
+                                    let uploader = VideoUploadService(supabase: authService.supabaseClient)
+                                    let job = try await uploader.uploadVideoAndCreateJobForCurrentUser(
+                                        videoURL: url,
+                                        exerciseName: exerciseName
+                                    )
+                                    print("RecordingPage: Uploaded video and queued job \(job.jobId)")
+
+                                    await MainActor.run {
+                                        isUploading = false
+                                        onFinish?(url) // inform PracticePage only after queue succeeds
+                                        NotificationCenter.default.post(name: .recordingAccepted, object: nil)
+                                        presentationMode.wrappedValue.dismiss()
+                                    }
+                                } catch {
+                                    print("RecordingPage: Upload failed: \(error)")
+                                    await MainActor.run {
+                                        isUploading = false
+                                        uploadErrorMessage = error.localizedDescription
+                                    }
+                                }
                             }
                         } label: {
                             Label("Save & Continue", systemImage: "checkmark.circle.fill") // [Phase 1]
@@ -79,9 +104,19 @@ struct RecordingPage: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.blue)
+                        .disabled(isUploading)
                     }
                     .padding()
                     .background(.ultraThinMaterial)
+
+                    if isUploading {
+                        VStack(spacing: 12) {
+                            ProgressView()
+                            Text("Uploading video and queuing job...")
+                                .foregroundColor(.white)
+                        }
+                        .padding(.bottom, 16)
+                    }
                 }
                 .background(Color.black.edgesIgnoringSafeArea(.all))
                 .navigationBarBackButtonHidden(true)
@@ -90,6 +125,17 @@ struct RecordingPage: View {
                 .onDisappear {
                     // Clean up video player when leaving review phase
                     print("RecordingPage: Leaving review phase, cleaning up video player")
+                }
+
+                .alert("Upload Failed", isPresented: Binding(
+                    get: { uploadErrorMessage != nil },
+                    set: { if !$0 { uploadErrorMessage = nil } }
+                )) {
+                    Button("OK", role: .cancel) {
+                        uploadErrorMessage = nil
+                    }
+                } message: {
+                    Text(uploadErrorMessage ?? "Unknown error")
                 }
                 
             case .error(let message):
