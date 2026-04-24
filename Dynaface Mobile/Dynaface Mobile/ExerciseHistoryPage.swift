@@ -40,7 +40,6 @@ struct ExerciseHistoryPage: View {
     @State private var fileToDelete: URL? = nil
     
     var body: some View {
-        NavigationView {
             GeometryReader { geometry in
                 let widthScale = geometry.size.width / baseWidth
                 
@@ -181,7 +180,6 @@ struct ExerciseHistoryPage: View {
                 .onAppear { reloadSections() }
             }
             .navigationBarHidden(true)
-        }
         .alert("Delete Recording", isPresented: $showingDeleteAlert) {
             Button("Cancel", role: .cancel) { fileToDelete = nil }
             Button("Delete", role: .destructive) {
