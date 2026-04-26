@@ -127,12 +127,37 @@ def analyze_measurements_no_render(face: AnalyzeFace) -> dict:
     face.analyze_y = int(m[0][1] * 1.5)
 
     result = {}
+
+    def _run_with_suppressed_text(calc_obj):
+        original_write_text = getattr(face, "write_text", None)
+        original_write_text_sq = getattr(face, "write_text_sq", None)
+
+        def _noop(*args, **kwargs):
+            return None
+
+        try:
+            if original_write_text is not None:
+                face.write_text = _noop
+            if original_write_text_sq is not None:
+                face.write_text_sq = _noop
+            return calc_obj.calc(face, render=True)
+        finally:
+            if original_write_text is not None:
+                face.write_text = original_write_text
+            if original_write_text_sq is not None:
+                face.write_text_sq = original_write_text_sq
+
     for calc in face.measures:
         if not getattr(calc, "enabled", False):
             continue
 
         try:
-            result.update(calc.calc(face, render=False))
+            # Keep visual area shading for eye + mouth(dental) while suppressing
+            # library text, so only our custom single-layer text is shown.
+            if calc.__class__.__name__ in {"AnalyzeDentalArea", "AnalyzeEyeArea"}:
+                result.update(_run_with_suppressed_text(calc))
+            else:
+                result.update(calc.calc(face, render=False))
         except TypeError:
             # Backward compatibility for measures that don't accept render kwarg.
             result.update(calc.calc(face))
