@@ -514,6 +514,8 @@ struct ProcessedVideosPage: View {
                 exerciseTitle: job.exerciseName,
                 recordingDate: job.displayDate
             )
+        } catch is CancellationError {
+            // Ignore task cancellation (e.g., user taps quickly while list refreshes).
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -542,12 +544,68 @@ struct ProcessedVideosPage: View {
             return target
         }
 
-        let data = try await authService.supabaseClient.storage
-            .from(resultsBucket)
-            .download(path: job.outputPath)
+        let candidates = resultPathCandidates(from: job.outputPath)
+        var lastError: Error?
 
-        try data.write(to: target, options: .atomic)
-        return target
+        for path in candidates {
+            do {
+                let data = try await authService.supabaseClient.storage
+                    .from(resultsBucket)
+                    .download(path: path)
+                try data.write(to: target, options: .atomic)
+                return target
+            } catch {
+                lastError = error
+                continue
+            }
+        }
+
+        throw lastError ?? NSError(
+            domain: "ProcessedVideos",
+            code: 404,
+            userInfo: [NSLocalizedDescriptionKey: "Processed video object not found in storage."]
+        )
+    }
+
+    private func normalizeResultObjectPath(_ path: String) -> String {
+        let prefix = "\(resultsBucket)/"
+        if path.hasPrefix(prefix) {
+            return String(path.dropFirst(prefix.count))
+        }
+        return path
+    }
+
+    private func resultPathCandidates(from rawPath: String) -> [String] {
+        let normalized = normalizeResultObjectPath(rawPath)
+        var candidates: [String] = [normalized]
+
+        if normalized.hasSuffix(".mov") {
+            candidates.append(String(normalized.dropLast(4)) + ".mp4")
+        } else if normalized.hasSuffix(".mp4") {
+            candidates.append(String(normalized.dropLast(4)) + ".mov")
+        } else if normalized.hasSuffix(".csv") {
+            let base = String(normalized.dropLast(4))
+            candidates.append(base + ".mp4")
+            candidates.append(base + ".mov")
+        }
+
+        // Common worker output convention fallback: <user>/<job>/annotated.mp4
+        let directory = (normalized as NSString).deletingLastPathComponent
+        if !directory.isEmpty {
+            candidates.append("\(directory)/annotated.mp4")
+            candidates.append("\(directory)/annotated.mov")
+        }
+
+        // De-duplicate while preserving order
+        var seen = Set<String>()
+        var deduped: [String] = []
+        for c in candidates where !c.isEmpty {
+            if !seen.contains(c) {
+                seen.insert(c)
+                deduped.append(c)
+            }
+        }
+        return deduped
     }
 
     private func parseISODate(_ raw: String?) -> Date? {
