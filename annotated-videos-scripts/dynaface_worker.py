@@ -96,7 +96,7 @@ def process_job(job):
             ok = process_video(
                 video_file,
                 output_video_file,
-                crop=True,
+                crop=False,
                 forced_rotation=None,
                 frame_step=FRAME_STEP,
             )

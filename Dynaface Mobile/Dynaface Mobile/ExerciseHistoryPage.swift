@@ -339,7 +339,7 @@ struct HistoryDetailView: View {
             }
             .padding(.horizontal)
 
-            AdaptiveMirroredPlayer(url: videoURL, heightFraction: 0.96)
+            PlainAVPlayerControllerView(url: videoURL)
                 .background(Color.white)
 
             Spacer(minLength: 8)
