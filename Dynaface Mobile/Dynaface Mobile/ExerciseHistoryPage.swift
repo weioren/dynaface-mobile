@@ -452,7 +452,7 @@ struct ProcessedVideosPage: View {
         }
         .sheet(item: $selectedVideo) { video in
             HistoryDetailView(
-                videoURL: video.localURL,
+                videoURL: video.playbackURL,
                 exerciseTitle: video.exerciseTitle,
                 recordingDate: video.recordingDate
             )
@@ -507,10 +507,10 @@ struct ProcessedVideosPage: View {
         defer { activeDownloadJobId = nil }
 
         do {
-            let localURL = try await localVideoURL(for: job)
+            let playbackURL = try await signedPlayableURL(for: job)
             selectedVideo = ProcessedVideoPlayback(
                 id: job.id,
-                localURL: localURL,
+                playbackURL: playbackURL,
                 exerciseTitle: job.exerciseName,
                 recordingDate: job.displayDate
             )
@@ -521,39 +521,16 @@ struct ProcessedVideosPage: View {
         }
     }
 
-    private func localCacheURL(for job: ProcessedJob) throws -> URL {
-        let caches = try FileManager.default.url(
-            for: .cachesDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
-        let folder = caches.appendingPathComponent("processed-videos", isDirectory: true)
-        if !FileManager.default.fileExists(atPath: folder.path) {
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        }
-
-        let ext = URL(fileURLWithPath: job.outputPath).pathExtension
-        let safeExt = ext.isEmpty ? "mp4" : ext
-        return folder.appendingPathComponent("\(job.id.uuidString).\(safeExt)")
-    }
-
-    private func localVideoURL(for job: ProcessedJob) async throws -> URL {
-        let target = try localCacheURL(for: job)
-        if FileManager.default.fileExists(atPath: target.path) {
-            return target
-        }
-
+    private func signedPlayableURL(for job: ProcessedJob) async throws -> URL {
         let candidates = resultPathCandidates(from: job.outputPath)
         var lastError: Error?
 
         for path in candidates {
             do {
-                let data = try await authService.supabaseClient.storage
+                let signedURL = try await authService.supabaseClient.storage
                     .from(resultsBucket)
-                    .download(path: path)
-                try data.write(to: target, options: .atomic)
-                return target
+                    .createSignedURL(path: path, expiresIn: 3600)
+                return signedURL
             } catch {
                 lastError = error
                 continue
@@ -627,7 +604,7 @@ private struct ProcessedExerciseSection {
 
 private struct ProcessedVideoPlayback: Identifiable {
     let id: UUID
-    let localURL: URL
+    let playbackURL: URL
     let exerciseTitle: String
     let recordingDate: String
 }
