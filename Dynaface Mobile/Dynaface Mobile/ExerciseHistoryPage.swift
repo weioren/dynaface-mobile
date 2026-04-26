@@ -414,7 +414,9 @@ struct ProcessedVideosPage: View {
                                         .foregroundColor(.secondary)
                                         .lineLimit(1)
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.vertical, 4)
+                                .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
                         }
@@ -492,11 +494,17 @@ struct ProcessedVideosPage: View {
                     id: row.id,
                     exerciseName: row.exercise_name?.isEmpty == false ? row.exercise_name! : "Unknown Exercise",
                     outputPath: outputPath,
+                    userId: row.user_id,
                     createdAt: created
                 )
             }
             .sorted { $0.createdAt > $1.createdAt }
+        } catch is CancellationError {
+            // SwiftUI task cancellation is expected during refresh/view transitions.
         } catch {
+            if isCancellationLike(error) {
+                return
+            }
             errorMessage = error.localizedDescription
         }
     }
@@ -517,12 +525,15 @@ struct ProcessedVideosPage: View {
         } catch is CancellationError {
             // Ignore task cancellation (e.g., user taps quickly while list refreshes).
         } catch {
+            if isCancellationLike(error) {
+                return
+            }
             errorMessage = error.localizedDescription
         }
     }
 
     private func signedPlayableURL(for job: ProcessedJob) async throws -> URL {
-        let candidates = resultPathCandidates(from: job.outputPath)
+        let candidates = resultPathCandidates(from: job.outputPath, userId: job.userId, jobId: job.id)
         var lastError: Error?
 
         for path in candidates {
@@ -552,7 +563,7 @@ struct ProcessedVideosPage: View {
         return path
     }
 
-    private func resultPathCandidates(from rawPath: String) -> [String] {
+    private func resultPathCandidates(from rawPath: String, userId: UUID?, jobId: UUID) -> [String] {
         let normalized = normalizeResultObjectPath(rawPath)
         var candidates: [String] = [normalized]
 
@@ -573,6 +584,12 @@ struct ProcessedVideosPage: View {
             candidates.append("\(directory)/annotated.mov")
         }
 
+        // Canonical worker fallback path
+        if let userId {
+            candidates.append("\(userId.uuidString)/\(jobId.uuidString)/annotated.mp4")
+            candidates.append("\(userId.uuidString)/\(jobId.uuidString)/annotated.mov")
+        }
+
         // De-duplicate while preserving order
         var seen = Set<String>()
         var deduped: [String] = []
@@ -583,6 +600,16 @@ struct ProcessedVideosPage: View {
             }
         }
         return deduped
+    }
+
+    private func isCancellationLike(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled {
+            return true
+        }
+
+        let text = error.localizedDescription.lowercased()
+        return text.contains("cancelled") || text.contains("canceled")
     }
 
     private func parseISODate(_ raw: String?) -> Date? {
@@ -611,6 +638,7 @@ private struct ProcessedVideoPlayback: Identifiable {
 
 private struct ProcessingJobRow: Decodable {
     let id: UUID
+    let user_id: UUID?
     let exercise_name: String?
     let output_video_path: String?
     let output_csv_path: String?
@@ -622,6 +650,7 @@ private struct ProcessedJob: Identifiable {
     let id: UUID
     let exerciseName: String
     let outputPath: String
+    let userId: UUID?
     let createdAt: Date
 
     var fileName: String {
