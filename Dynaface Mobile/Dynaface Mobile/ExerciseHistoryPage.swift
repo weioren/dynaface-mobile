@@ -477,13 +477,14 @@ struct ProcessedVideosPage: View {
         do {
             let rows: [ProcessingJobRow] = try await authService.supabaseClient
                 .from("processing_jobs")
-                .select("id,exercise_name,output_video_path,created_at,status")
+                .select("*")
                 .eq("status", value: "completed")
                 .execute()
                 .value
 
             jobs = rows.compactMap { row in
-                guard let outputPath = row.output_video_path, !outputPath.isEmpty else {
+                let outputPath = row.output_video_path ?? row.output_csv_path
+                guard let outputPath, !outputPath.isEmpty else {
                     return nil
                 }
                 let created = parseISODate(row.created_at) ?? .distantPast
@@ -577,6 +578,7 @@ private struct ProcessingJobRow: Decodable {
     let id: UUID
     let exercise_name: String?
     let output_video_path: String?
+    let output_csv_path: String?
     let created_at: String?
     let status: String?
 }

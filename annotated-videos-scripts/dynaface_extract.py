@@ -105,14 +105,73 @@ def selected_measurement_lines(measurements: dict, frame_num: int, frame_rate: f
     return [
         f"Frame {frame_num}, {time_sec} sec",
         f"FAI: {format_metric(measurements.get('fai'))}",
-        f"Dental area: {format_metric(measurements.get('dental_area'))}",
-        f"Dental L/R: {format_metric(measurements.get('dental_left'))} / {format_metric(measurements.get('dental_right'))}",
-        f"Dental ratio: {format_metric(measurements.get('dental_ratio'))}",
-        f"Dental diff: {format_metric(measurements.get('dental_diff'))}",
-        f"Eye L/R: {format_metric(measurements.get('eye.left'))} / {format_metric(measurements.get('eye.right'))}",
-        f"Eye ratio: {format_metric(measurements.get('eye.ratio'))}",
-        f"Eye diff: {format_metric(measurements.get('eye.diff'))}",
+        f"Mouth area: {format_metric(measurements.get('dental_area'))}",
+        f"Mouth area L/R: {format_metric(measurements.get('dental_left'))} / {format_metric(measurements.get('dental_right'))}",
+        f"Eye area L/R: {format_metric(measurements.get('eye.left'))} / {format_metric(measurements.get('eye.right'))}",
+        f"Eye area ratio: {format_metric(measurements.get('eye.ratio'))}",
     ]
+
+
+def analyze_measurements_no_render(face: AnalyzeFace) -> dict:
+    """
+    Compute enabled measurement values without drawing the library's default
+    per-measure text overlays, so we can render a single clean metrics layer.
+    """
+    if not face.landmarks:
+        return {}
+
+    face.width = face.render_img.shape[1]
+    face.height = face.render_img.shape[0]
+    m = face.calc_text_size("W")
+    face.analyze_x = int(m[0][0] * 0.25)
+    face.analyze_y = int(m[0][1] * 1.5)
+
+    result = {}
+    for calc in face.measures:
+        if not getattr(calc, "enabled", False):
+            continue
+
+        try:
+            result.update(calc.calc(face, render=False))
+        except TypeError:
+            # Backward compatibility for measures that don't accept render kwarg.
+            result.update(calc.calc(face))
+
+    return result
+
+
+def smooth_points(prev_points, curr_points, alpha: float = 0.35):
+    if not prev_points or not curr_points or len(prev_points) != len(curr_points):
+        return curr_points
+
+    out = []
+    for (px, py), (cx, cy) in zip(prev_points, curr_points):
+        sx = int(round((1.0 - alpha) * px + alpha * cx))
+        sy = int(round((1.0 - alpha) * py + alpha * cy))
+        out.append((sx, sy))
+    return out
+
+
+def smooth_pupils(prev_pupils, curr_pupils, alpha: float = 0.2):
+    if curr_pupils is None:
+        return prev_pupils
+    if prev_pupils is None:
+        return curr_pupils
+
+    try:
+        l_prev, r_prev = prev_pupils
+        l_curr, r_curr = curr_pupils
+        l_sm = (
+            (1.0 - alpha) * l_prev[0] + alpha * l_curr[0],
+            (1.0 - alpha) * l_prev[1] + alpha * l_curr[1],
+        )
+        r_sm = (
+            (1.0 - alpha) * r_prev[0] + alpha * r_curr[0],
+            (1.0 - alpha) * r_prev[1] + alpha * r_curr[1],
+        )
+        return (l_sm, r_sm)
+    except Exception:
+        return curr_pupils
 
 
 # ---------------------------------------------------------------------------
@@ -246,6 +305,7 @@ def process_video(
     frame_num = 0
     successful_frames = 0
     pupils = None
+    prev_landmarks = None
     writer = None
     frame_step = max(1, frame_step)
     output_fps = (
@@ -277,8 +337,12 @@ def process_video(
                 if analyzer.is_no_face():
                     continue
 
-                measurements = analyzer.analyze()
-                if measurements is None:
+                if analyzer.landmarks:
+                    analyzer.landmarks = smooth_points(prev_landmarks, analyzer.landmarks, alpha=0.35)
+                    prev_landmarks = list(analyzer.landmarks)
+
+                measurements = analyze_measurements_no_render(analyzer)
+                if not measurements:
                     continue
 
                 measurements["frame"] = frame_num
@@ -305,6 +369,8 @@ def process_video(
 
                 if pupils is None:
                     pupils = analyzer.get_pupils()
+                else:
+                    pupils = smooth_pupils(pupils, analyzer.get_pupils(), alpha=0.2)
 
                 successful_frames += 1
 
