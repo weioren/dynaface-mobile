@@ -531,7 +531,8 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
             NotificationCenter.default.post(name: .recordingStateChanged, object: true) // Recording
 
             print("CameraRecorder: Starting recording")
-            let nextNumber = getNextFileNumber(for: exerciseName)
+            let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+            let nextNumber = nextFileNumber(for: exerciseName, in: documentsURL)
             let fileName = "\(exerciseName)_\(nextNumber).mov"
 
             let outputPath = NSTemporaryDirectory() + fileName
@@ -539,28 +540,6 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
             videoOutput.startRecording(to: outputFileURL, recordingDelegate: self)
             recordButton.setTitle("Finish", for: .normal)
             recordButton.backgroundColor = UIColor.systemRed
-        }
-    }
-
-    func getNextFileNumber(for exerciseName: String) -> Int {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-
-        do {
-            let files = try FileManager.default.contentsOfDirectory(at: documentsURL, includingPropertiesForKeys: nil)
-            let exerciseFiles = files.filter {
-                $0.pathExtension.lowercased() == "mov" &&
-                $0.lastPathComponent.hasPrefix("\(exerciseName)_")
-            }
-            var numbers: [Int] = []
-            for file in exerciseFiles {
-                let parts = file.lastPathComponent.split(separator: "_")
-                if let last = parts.last?.split(separator: ".").first, let n = Int(last) {
-                    numbers.append(n)
-                }
-            }
-            return numbers.isEmpty ? 1 : (numbers.max() ?? 0) + 1
-        } catch {
-            return 1
         }
     }
 

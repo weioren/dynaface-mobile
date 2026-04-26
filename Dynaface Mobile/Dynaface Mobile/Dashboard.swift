@@ -20,12 +20,22 @@ struct Dashboard: View {
                     }
                     .tag(1)
 
+                UploadVideoPage()
+                    .tabItem {
+                        Image(systemName: "square.and.arrow.up")
+                        Text("Upload")
+                    }
+                    .tag(2)
+
                 ProfilePage()
                     .tabItem {
                         Image(systemName: "person.fill")
                         Text("Profile")
                     }
-                    .tag(2)
+                    .tag(3)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .assessmentCompleted)) { _ in
+                withAnimation { selectedTab = 1 }
             }
             .navigationBarHidden(true)
         }

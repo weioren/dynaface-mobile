@@ -200,7 +200,14 @@ extension ExerciseHistoryPage {
     private func reloadSections() {
         let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         var fileDatePairs: [(url: URL, created: Date)] = []
-        
+
+        // Snapshot expansion-relevant state before we overwrite sections, so we can
+        // detect newly appeared sections (e.g. a fresh "Today" after recording) and
+        // auto-expand them without clobbering the user's collapse/expand choices.
+        let previousDayIds = Set(dateSections.map { $0.id })
+        let previousExerciseIds = Set(exerciseSections.map { $0.id })
+        let isFirstLoad = previousDayIds.isEmpty && previousExerciseIds.isEmpty
+
         do {
             let files = try FileManager.default.contentsOfDirectory(
                 at: documentsURL,
@@ -254,14 +261,26 @@ extension ExerciseHistoryPage {
             }
             exerciseSections = newExerciseSections
             
-            // Maintain expansions; default-expand the first section of current mode if none
+            // Drop expansions for sections that no longer exist (e.g. after deletion).
             expandedDays = expandedDays.intersection(Set(newDateSections.map { $0.id }))
             expandedExercises = expandedExercises.intersection(Set(newExerciseSections.map { $0.id }))
-            if sortMode == .byDate, expandedDays.isEmpty, let first = newDateSections.first?.id {
-                expandedDays = [first]
-            }
-            if sortMode == .byExercise, expandedExercises.isEmpty, let first = newExerciseSections.first?.id {
-                expandedExercises = [first]
+
+            if isFirstLoad {
+                // First-load: expand only the top section of the current sort mode.
+                if sortMode == .byDate, let first = newDateSections.first?.id {
+                    expandedDays = [first]
+                }
+                if sortMode == .byExercise, let first = newExerciseSections.first?.id {
+                    expandedExercises = [first]
+                }
+            } else {
+                // Subsequent reloads: auto-expand sections that didn't exist before
+                // (new "Today" after recording, or an exercise just added). If a
+                // section already existed and the user collapsed it, it stays collapsed.
+                let newlyAddedDays = Set(newDateSections.map { $0.id }).subtracting(previousDayIds)
+                let newlyAddedExercises = Set(newExerciseSections.map { $0.id }).subtracting(previousExerciseIds)
+                expandedDays.formUnion(newlyAddedDays)
+                expandedExercises.formUnion(newlyAddedExercises)
             }
         } catch {
             print("Error loading video files: \(error)")
