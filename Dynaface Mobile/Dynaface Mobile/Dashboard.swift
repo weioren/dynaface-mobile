@@ -20,15 +20,23 @@ struct Dashboard: View {
                     }
                     .tag(1)
 
+                ProcessedVideosPage()
+                    .tabItem {
+                        Image(systemName: "sparkles.tv")
+                        Text("Processed")
+                    }
+                    .tag(2)
+
                 ProfilePage()
                     .tabItem {
                         Image(systemName: "person.fill")
                         Text("Profile")
                     }
-                    .tag(2)
+                    .tag(3)
             }
             .navigationBarHidden(true)
         }
+        .navigationViewStyle(.stack)
         .onAppear {
             // Check if we should navigate to a specific tab
             if let tabToSelect = UserDefaults.standard.object(forKey: "selectedTab") as? Int {
