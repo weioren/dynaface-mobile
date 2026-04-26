@@ -35,7 +35,24 @@ struct MirroredAVPlayerControllerView: UIViewControllerRepresentable {
         if let current = (vc.player?.currentItem?.asset as? AVURLAsset)?.url, current == url { return }
         configurePlayer(on: vc, coordinator: context.coordinator)
     }
-    
+
+    // SwiftUI calls this synchronously when the representable is removed from the
+    // hierarchy (e.g. popping HistoryDetailView, collapsing the review accordion).
+    // We must stop playback here — relying on Coordinator.deinit alone is not
+    // enough because AVPlayerViewController retains the player, and the loop
+    // observer's closure captures the player too, keeping it alive (and audible)
+    // long after the SwiftUI view is gone.
+    static func dismantleUIViewController(_ vc: AVPlayerViewController, coordinator: Coordinator) {
+        if let obs = coordinator.endObserver {
+            NotificationCenter.default.removeObserver(obs)
+            coordinator.endObserver = nil
+        }
+        vc.player?.pause()
+        vc.player = nil
+        coordinator.player = nil
+    }
+
+
     private func configurePlayer(on vc: AVPlayerViewController, coordinator: Coordinator) {
         let asset = AVURLAsset(url: url)
 
