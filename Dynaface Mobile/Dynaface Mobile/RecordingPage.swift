@@ -7,10 +7,14 @@ struct RecordingPage: View {
         case review(url: URL)
         case error(message: String)
     }
-    
+
     var exerciseName: String
+    var exerciseVideoName: String? = nil
+    var currentStep: Int = 1
+    var totalSteps: Int = 1
+    var completedSteps: Set<Int> = []
     var onFinish: ((URL?) -> Void)? = nil
-    
+
     @Environment(\.presentationMode) private var presentationMode
     @EnvironmentObject private var authService: AuthenticationService
     @State private var phase: Phase = .recording
@@ -18,34 +22,104 @@ struct RecordingPage: View {
     @State private var uploadErrorMessage: String?
     @State private var uploadStarted = false
     
+    @State private var showDemoVideo = true
+    @State private var isRecording = false
+
     var body: some View {
         Group {
             switch phase {
             case .recording:
-                VStack(spacing: 0) {
-                    header(text: "Your turn to practice!")
-
-                    // Camera view - it will call onFinishRecording when recording is completed
-                    CameraRecorderView(exerciseName: exerciseName) { url in
-                        print("RecordingPage: Camera callback received with URL: \(String(describing: url))")
-                        // Use explicit main thread dispatch to ensure state updates happen correctly
-                        DispatchQueue.main.async {
-                            if let url = url {
-                                print("RecordingPage: Transitioning to review phase")
-                                phase = .review(url: url)
-                            } else {
-                                // Camera failed or was cancelled
-                                print("RecordingPage: Camera failed, showing error")
-                                phase = .error(message: "Camera recording failed. Please try again or check camera permissions.")
+                ZStack {
+                    // Main: Camera view
+                    VStack(spacing: 0) {
+                        CameraRecorderView(exerciseName: exerciseName) { url in
+                            DispatchQueue.main.async {
+                                if let url = url {
+                                    phase = .review(url: url)
+                                } else {
+                                    phase = .error(message: "Camera recording failed. Please try again or check camera permissions.")
+                                }
                             }
                         }
+                    }
+
+                    // Overlay UI
+                    VStack(spacing: 0) {
+                        // Top bar: back button + title
+                        HStack {
+                            Button(action: {
+                                onFinish?(nil)
+                                presentationMode.wrappedValue.dismiss()
+                            }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "chevron.left")
+                                        .font(.system(size: 18, weight: .semibold))
+                                    Text("Back")
+                                        .font(.body)
+                                }
+                                .foregroundColor(.white)
+                                .padding(.leading, 20)
+                                .padding(.vertical, 12)
+                            }
+                            Spacer()
+                            Text(exerciseName)
+                                .font(.headline)
+                                .foregroundColor(.white)
+                            Spacer()
+                            // Camera flip button
+                            if !isRecording {
+                                Button(action: {
+                                    NotificationCenter.default.post(name: .flipCamera, object: nil)
+                                }) {
+                                    Image(systemName: "camera.rotate")
+                                        .font(.system(size: 18))
+                                        .foregroundColor(.white)
+                                        .padding(.vertical, 12)
+                                        .padding(.trailing, 8)
+                                }
+                            }
+                            // Toggle demo video visibility
+                            Button(action: { showDemoVideo.toggle() }) {
+                                Image(systemName: showDemoVideo ? "pip.fill" : "pip")
+                                    .font(.system(size: 18))
+                                    .foregroundColor(.white)
+                                    .padding(.trailing, 20)
+                                    .padding(.vertical, 12)
+                            }
+                        }
+                        .padding(.top, 4)
+                        .background(
+                            LinearGradient(colors: [.black.opacity(0.6), .clear], startPoint: .top, endPoint: .bottom)
+                        )
+                        .onReceive(NotificationCenter.default.publisher(for: .recordingStateChanged)) { notification in
+                            if let recording = notification.object as? Bool {
+                                isRecording = recording
+                            }
+                        }
+
+                        // PiP demo video (top-right)
+                        HStack {
+                            Spacer()
+                            if showDemoVideo, let videoName = exerciseVideoName {
+                                PiPDemoPlayer(videoName: videoName)
+                                    .frame(width: 100, height: 140)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    .shadow(radius: 4)
+                                    .padding(.trailing, 16)
+                                    .padding(.top, 4)
+                                    .transition(.opacity)
+                            }
+                        }
+                        .animation(.easeInOut(duration: 0.2), value: showDemoVideo)
+
+                        Spacer()
                     }
                 }
                 .background(Color.black)
                 .navigationBarBackButtonHidden(true)
                 .navigationBarHidden(true)
                 .interactiveDismissDisabled(true)
-                
+
             case .review(let url):
                 VStack(spacing: 0) {
                     header(text: "Review your recording")
@@ -60,10 +134,9 @@ struct RecordingPage: View {
                     AdaptiveMirroredPlayer(url: url, heightFraction: 0.96)
                         .background(Color.black)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    
+
                     HStack(spacing: 12) {
                         Button(role: .destructive) {
-                            // Delete the file and retake
                             if FileManager.default.fileExists(atPath: url.path) {
                                 try? FileManager.default.removeItem(at: url)
                             }
@@ -71,15 +144,16 @@ struct RecordingPage: View {
                             uploadErrorMessage = nil
                             phase = .recording
                         } label: {
-                            Label("Retake", systemImage: "arrow.counterclockwise") // [Phase 1]
+                            Label("Retake", systemImage: "arrow.counterclockwise")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.red)
-                        
+
                         Button {
                             // If upload already completed, continue; otherwise upload is still running automatically.
                             if !isUploading, uploadStarted {
+                            DispatchQueue.main.async {
                                 onFinish?(url)
                                 NotificationCenter.default.post(name: .recordingAccepted, object: nil)
                                 presentationMode.wrappedValue.dismiss()
@@ -91,6 +165,11 @@ struct RecordingPage: View {
                         .buttonStyle(.borderedProminent)
                         .tint(.blue)
                         .disabled(isUploading || !uploadStarted)
+                            Label("Continue", systemImage: "checkmark.circle.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color(red: 0.12, green: 0.29, blue: 0.64))
                     }
                     .padding()
                     .background(.ultraThinMaterial)
@@ -117,6 +196,7 @@ struct RecordingPage: View {
                 .background(Color.black.edgesIgnoringSafeArea(.all))
                 .navigationBarBackButtonHidden(true)
                 .navigationBarHidden(true)
+<<<<<<< HEAD
                 .interactiveDismissDisabled(true) // cannot swipe away; must choose Delete or Accept
                 .onDisappear {
                     // Clean up video player when leaving review phase
@@ -134,40 +214,43 @@ struct RecordingPage: View {
                     Text(uploadErrorMessage ?? "Unknown error")
                 }
                 
+=======
+                .interactiveDismissDisabled(true)
+
+>>>>>>> origin/main
             case .error(let message):
                 VStack(spacing: 20) {
                     Spacer()
-                    
+
                     Image(systemName: "camera.fill")
                         .font(.system(size: 60))
                         .foregroundColor(.red)
-                    
+
                     Text("Camera Error")
                         .font(.title2)
                         .fontWeight(.semibold)
                         .foregroundColor(.white)
-                    
+
                     Text(message)
                         .multilineTextAlignment(.center)
                         .foregroundColor(.white.opacity(0.8))
                         .padding(.horizontal)
-                    
+
                     HStack(spacing: 12) {
                         Button("Retry") {
                             phase = .recording
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.blue)
-                        
+
                         Button("Exit") {
-                            print("RecordingPage: Exit button tapped due to camera error")
                             onFinish?(nil)
                             presentationMode.wrappedValue.dismiss()
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.gray)
                     }
-                    
+
                     Spacer()
                 }
                 .background(Color.black.edgesIgnoringSafeArea(.all))
@@ -175,14 +258,8 @@ struct RecordingPage: View {
                 .navigationBarHidden(true)
             }
         }
-        .onAppear {
-            print("RecordingPage: Appeared for exercise: \(exerciseName)")
-        }
-        .onDisappear {
-            print("RecordingPage: Disappeared for exercise: \(exerciseName)")
-        }
     }
-    
+
     // MARK: - Header
     private func header(text: String) -> some View {
         Text(text)
@@ -223,8 +300,10 @@ struct RecordingPage: View {
     }
 }
 
-// MARK: - Notification Name used by PageOne to refresh streak/calendar
+// MARK: - Notification Names
 extension Notification.Name {
     static let recordingAccepted = Notification.Name("recordingAccepted")
+    static let assessmentCompleted = Notification.Name("assessmentCompleted")
+    static let flipCamera = Notification.Name("flipCamera")
+    static let recordingStateChanged = Notification.Name("recordingStateChanged")
 }
-
