@@ -168,18 +168,78 @@ This is a mobile app extension of Dynaface. The computer version and accompanyin
 
 ---
 
+# Phase 6: Clinician / Patient Account Split + Patient List + Per-Type Profiles
+**Branch:** `feature/ui-changes-4`
+
+Per the 2026-04-26 meeting and Oren's UX/UI overhaul diagram, the app now branches at login into a clinician root (with a patient roster) and a patient root (own data). Weichao owns the **full stack** (Supabase schema + auth + UI) of the red-boxed sections in Oren's diagram; Alex owns the section below it (Patient detail view container, Timeline, Analysis).
+
+### 1. Supabase schema migration
+
+- New SQL migration at `supabase/migrations/20260427_add_account_type_and_patients.sql`:
+  - Adds `account_type text NOT NULL DEFAULT 'patient'` column to `profiles` (CHECK ∈ {clinician, patient})
+  - Creates `patients` table (`id`, `clinician_id` FK → `profiles(id)`, `name`, `created_at`) with index on `clinician_id`
+  - Enables RLS with four policies: clinicians can SELECT / INSERT / UPDATE / DELETE only their own patients (`auth.uid() = clinician_id`)
+- Idempotent (`ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`, `DROP POLICY IF EXISTS` before each `CREATE POLICY`) so re-runs are safe
+
+### 2. AccountType in the auth layer
+
+- New `AccountType` enum (`clinician`, `patient`) with `displayName` + `subtitle` for UI
+- `Profile` struct gets a non-optional `accountType` field; custom `init(from:)` decoder defaults to `.patient` if the column is missing (defensive against any pre-migration rows)
+- `AuthState.accountCreated` carries `(email: String, accountType: AccountType)` so downstream views know which signup flow to show
+- `AuthenticationService.createAccount(...)` accepts `accountType: AccountType` and stashes it in `pendingAccountType` until profile completion
+- `createUserProfile(...)` writes `account_type` on insert; symptom columns default to empty strings when no survey responses are provided (clinician case)
+
+### 3. SignUp picker + branched survey
+
+- `CreateAccountView` adds a segmented picker between Username and Password fields. Default `.clinician`. Subtitle text hints at the choice's meaning.
+- `SurveyFlow` branches on `accountType`:
+  - `.patient` → existing 4-page symptom survey (FirstPage → SecondPage → ThirdPage → FourthPage → FifthPage)
+  - `.clinician` → jumps directly to FifthPage with empty symptom strings
+- `FifthPage.completeProfile()` detects the empty-string case and passes `nil` for `SurveyResponses` so the auth service writes blank symptom columns rather than fake answers
+
+### 4. Clinician root
+
+- New `ClinicianRootView` — `TabView` with two tabs: Patients (`PatientListPage`) and Profile (`ClinicianMyProfile`)
+- Owns a single `PatientService` via `@StateObject`, shared with children via `@EnvironmentObject`
+- Loads patient list automatically on first appearance via `.task`
+- `PatientListPage` — `.searchable` modifier, list rows with avatar initials + name + created date, "Add patient" `+` button in nav bar, empty-state view, no-matches view, pull-to-refresh, error alert
+- `AddPatientSheet` — single name field (DOB/MRN deferred until HIPAA path is confirmed), saves via `PatientService.addPatient(...)`, closes on success
+- `ClinicianMyProfile` — read-only username/email/role, sign-out button (editing pending `AuthenticationService.updateProfile(...)`)
+- `PatientDetailPlaceholder` — throwaway "Coming soon — Alex" page at the destination of patient row taps. Alex's PR replaces with the real `PatientDetailView`.
+
+### 5. Patient root
+
+- New `PatientRootView` — `TabView` with My care (lands directly on `PatientDetailPlaceholder` for the patient's own data) and Profile (`PatientMyProfile`)
+- Synthesizes a `Patient` value from the signed-in profile so `PatientDetailPlaceholder` can be reused (V1 stop-gap; Alex's `PatientDetailView` will likely take a generic identifier and fetch its own scope)
+- `PatientMyProfile` — surfaces username/email/role plus the symptom answers captured during signup (affected side, area, diagnosis), sign-out button
+
+### 6. PatientService — Supabase CRUD
+
+- `loadPatients(for clinicianId: UUID)` — `SELECT … FROM patients WHERE clinician_id = ? ORDER BY created_at DESC`
+- `addPatient(name:clinicianId:)` — `INSERT … RETURNING *`, prepends new row to local `@Published patients` array
+- `searchedPatients(matching:)` — client-side case-insensitive substring filter on `name` (single clinician's roster is small enough that round-tripping per keystroke is unnecessary)
+
+### 7. Root routing + dev toggle
+
+- `DynafaceMobileApp.RootContainer` switches on `Profile.accountType` after `.signedIn` and renders `ClinicianRootView` or `PatientRootView`
+- New dev-only `mockAccountType: AccountType?` flag (default `nil`) — when set, bypasses real auth and renders the matching root directly. Useful for previewing UI without going through full Supabase round-trips. Lives next to the existing `skipAuth` flag.
+
+---
+
 ## Files Modified
 
-| File                       | Phase 1 | Phase 2 | Phase 3 | Phase 4 | Phase 5 |
-| -------------------------- | ------- | ------- | ------- | ------- | ------- |
-| `PracticePage.swift`       | Progress bar, post-completion nav | Video looping, StepProgressBar, PiPDemoPlayer, back logic | — | Review page, phase state machine, recordings dict, accordion video | — |
-| `RecordingPage.swift`      | Retake / Save & Continue labels | Single-screen with PiP, back button, brand colors | — | Continue rename, flip camera button, recording state observer | — |
-| `ExercisesPage.swift`      | Modules, Quick Start buttons | Reset on assessment completion | — | — | — |
-| `CameraRecorderView.swift` | Simulator mode toggle | Brand blue button color | Face guide oval, Vision face detection | Camera flip, per-camera orientation, notification-driven flip | Use shared `RecordingFiles` helper for filename numbering |
-| `ExerciseHistoryPage.swift`| — | — | Removed nested NavigationView | — | Auto-expand newly added sections (snapshot/diff in `reloadSections`) |
-| `Dashboard.swift`          | — | — | Removed Home tab | — | Auto-nav to History on `.assessmentCompleted`; new Upload tab at tag 2 |
-| `Players.swift`            | — | — | — | — | `dismantleUIViewController` to stop playback on view removal |
-| `DynafaceMobileApp.swift`  | Auth skip toggle | — | — | — | — |
+| File                       | Phase 1 | Phase 2 | Phase 3 | Phase 4 | Phase 5 | Phase 6 |
+| -------------------------- | ------- | ------- | ------- | ------- | ------- | ------- |
+| `PracticePage.swift`       | Progress bar, post-completion nav | Video looping, StepProgressBar, PiPDemoPlayer, back logic | — | Review page, phase state machine, recordings dict, accordion video | — | — |
+| `RecordingPage.swift`      | Retake / Save & Continue labels | Single-screen with PiP, back button, brand colors | — | Continue rename, flip camera button, recording state observer | — | — |
+| `ExercisesPage.swift`      | Modules, Quick Start buttons | Reset on assessment completion | — | — | — | — |
+| `CameraRecorderView.swift` | Simulator mode toggle | Brand blue button color | Face guide oval, Vision face detection | Camera flip, per-camera orientation, notification-driven flip | Use shared `RecordingFiles` helper for filename numbering | — |
+| `ExerciseHistoryPage.swift`| — | — | Removed nested NavigationView | — | Auto-expand newly added sections (snapshot/diff in `reloadSections`) | — |
+| `Dashboard.swift`          | — | — | Removed Home tab | — | Auto-nav to History on `.assessmentCompleted`; new Upload tab at tag 2 | — |
+| `Players.swift`            | — | — | — | — | `dismantleUIViewController` to stop playback on view removal | — |
+| `Authentication.swift`     | — | — | — | — | — | `Profile.accountType` field, custom decoder, account-type plumbing through `createAccount` / `completeProfile` / `createUserProfile`, `AuthState.accountCreated(email, accountType)` |
+| `SignUp.swift`             | — | — | — | — | — | Account-type segmented picker on `CreateAccountView`, `SurveyFlow` branches on type, `FifthPage` passes `nil` `SurveyResponses` for clinicians |
+| `DynafaceMobileApp.swift`  | Auth skip toggle | — | — | — | — | `RootContainer` routes by `Profile.accountType`; new `mockAccountType` dev flag |
 
 ## New Components
 
@@ -193,6 +253,16 @@ This is a mobile app extension of Dynaface. The computer version and accompanyin
 | `UploadPhase` (enum) | `UploadVideoPage.swift` | State machine for upload (`empty → previewing → readyToSave → saving → savedFlash`) |
 | `Movie` (Transferable) | `UploadVideoPage.swift` | `FileRepresentation` bridge from `PhotosPickerItem` to a temp video URL |
 | `RecordingFiles` (helpers) | `RecordingFiles.swift` | Module-level `nextFileNumber(for:in:)` + `saveImportedVideo(from:exerciseTitle:)` shared by recording and upload paths |
+| `AccountType` (enum) | `Models.swift` | Clinician / patient discriminator with `displayName` + `subtitle` |
+| `Patient` (struct) | `Models.swift` | Codable patient record (`id`, `name`, `clinicianId`, `createdAt`) with snake-case `CodingKeys` |
+| `PatientService` | `PatientService.swift` | `@MainActor ObservableObject` Supabase CRUD for the `patients` table |
+| `ClinicianRootView` | `ClinicianRootView.swift` | TabView (Patients, Profile) for clinician accounts |
+| `PatientListPage` | `PatientListPage.swift` | Searchable patient list with empty-state, add button, pull-to-refresh, error alert |
+| `AddPatientSheet` | `AddPatientSheet.swift` | Single-field sheet to insert a patient row |
+| `ClinicianMyProfile` | `ClinicianMyProfile.swift` | Clinician-flavored profile + sign-out |
+| `PatientDetailPlaceholder` | `PatientDetailPlaceholder.swift` | Throwaway "Coming soon" view at patient row taps; Alex's PR replaces |
+| `PatientRootView` | `PatientRootView.swift` | TabView (My care, Profile) for patient accounts |
+| `PatientMyProfile` | `PatientMyProfile.swift` | Patient-flavored profile (with symptom answers) + sign-out |
 
 ## Pending
 

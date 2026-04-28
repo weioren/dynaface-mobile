@@ -11,6 +11,7 @@ struct Profile: Codable, Identifiable {
     let symptomsLocation: String?
     let symptomsArea: String?
     let diagnosis: String?
+    let accountType: AccountType
 
     enum CodingKeys: String, CodingKey {
         case id, email, username
@@ -18,6 +19,22 @@ struct Profile: Codable, Identifiable {
         case symptomsLocation = "symptoms_location"
         case symptomsArea = "symptoms_area"
         case diagnosis
+        case accountType = "account_type"
+    }
+
+    /// Decode `account_type`. Falls back to `.patient` if the column is
+    /// missing from the response — defensive for any legacy rows that
+    /// somehow predate the migration.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id              = try c.decode(String.self, forKey: .id)
+        self.email           = try c.decode(String.self, forKey: .email)
+        self.username        = try c.decode(String.self, forKey: .username)
+        self.createdAt       = try c.decodeIfPresent(Date.self,   forKey: .createdAt)
+        self.symptomsLocation = try c.decodeIfPresent(String.self, forKey: .symptomsLocation)
+        self.symptomsArea    = try c.decodeIfPresent(String.self, forKey: .symptomsArea)
+        self.diagnosis       = try c.decodeIfPresent(String.self, forKey: .diagnosis)
+        self.accountType     = (try? c.decode(AccountType.self, forKey: .accountType)) ?? .patient
     }
 }
 
@@ -26,7 +43,10 @@ enum AuthState {
     case loading
     case signedIn(Profile)
     case signedOut
-    case accountCreated(String) // New state for after account creation
+    /// Phase 1 of signup completed (Supabase auth user created). The view
+    /// layer reads `accountType` to decide whether to show the patient
+    /// symptom survey or jump straight to the clinician welcome page.
+    case accountCreated(email: String, accountType: AccountType)
     case error(String)
 }
 
@@ -60,6 +80,7 @@ final class AuthViewModel: ObservableObject {
     @Published var username = ""
     @Published var password = ""
     @Published var confirmPassword = ""
+    @Published var accountType: AccountType = .clinician
     @Published var surveyResponses: SurveyResponses?
 
     var isSignUpValid: Bool {
@@ -81,9 +102,10 @@ final class AuthenticationService: ObservableObject {
     @Published var authState: AuthState = .loading
     @Published var isLoading = false
     
-    // Store account creation data temporarily
+    // Store account creation data temporarily across the two-step signup flow
     private var pendingUsername: String = ""
     private var pendingPassword: String = ""
+    private var pendingAccountType: AccountType = .patient
 
     // Supabase configuration
     private let supabase = SupabaseClient(
@@ -123,13 +145,13 @@ final class AuthenticationService: ObservableObject {
     }
 
     // MARK: - Create Account (Step 1)
-    func createAccount(email: String, username: String, password: String) async {
+    func createAccount(email: String, username: String, password: String, accountType: AccountType) async {
         isLoading = true
         defer { isLoading = false }
 
         do {
-            print("Starting account creation for email: \(email)")
-            
+            print("Starting account creation for email: \(email), accountType: \(accountType.rawValue)")
+
             // First, check if user already exists by trying to sign in
             do {
                 let existingUser = try await supabase.auth.signIn(email: email, password: password)
@@ -140,10 +162,11 @@ final class AuthenticationService: ObservableObject {
                 // User doesn't exist or wrong password, proceed with signup
                 print("User doesn't exist, proceeding with signup")
             }
-            
+
             // Store credentials for later use in profile completion
             pendingUsername = username
             pendingPassword = password
+            pendingAccountType = accountType
             
             // Try creating the auth user with minimal data
             do {
@@ -154,14 +177,14 @@ final class AuthenticationService: ObservableObject {
                 print("Auth user created with ID: \(authResponse.user.id)")
                 
                 // Set state to account created, which will trigger survey flow
-                authState = .accountCreated(email)
+                authState = .accountCreated(email: email, accountType: accountType)
                 
             } catch {
                 print("Supabase signup failed, trying alternative approach: \(error)")
                 
                 // If Supabase signup fails, we'll handle it during the profile completion step
                 // For now, just proceed to survey
-                authState = .accountCreated(email)
+                authState = .accountCreated(email: email, accountType: accountType)
             }
 
         } catch {
@@ -171,36 +194,39 @@ final class AuthenticationService: ObservableObject {
     }
     
     // MARK: - Complete Profile (Step 2 - after survey)
-    func completeProfile(email: String, surveyResponses: SurveyResponses) async {
+    //
+    // For patients, `surveyResponses` carries their symptom answers from the
+    // survey flow. For clinicians, `surveyResponses` is `nil` (they skipped
+    // the survey) and the symptom columns get blank strings on insert.
+    func completeProfile(email: String, surveyResponses: SurveyResponses?) async {
         isLoading = true
         defer { isLoading = false }
 
         do {
-            print("Completing profile for email: \(email)")
-            
+            print("Completing profile for email: \(email), accountType: \(pendingAccountType.rawValue)")
+
             // Try to sign in first
             do {
                 let authRes = try await supabase.auth.signIn(email: email, password: pendingPassword)
                 print("Sign in successful, creating profile...")
-                
+
                 try await createUserProfile(
                     userId: authRes.user.id,
                     email: email,
                     username: pendingUsername,
+                    accountType: pendingAccountType,
                     surveyResponses: surveyResponses
                 )
                 print("Profile creation completed, loading profile...")
-                
-                // Clear stored credentials
-                pendingUsername = ""
-                pendingPassword = ""
-                
+
+                clearPendingSignupState()
+
                 try await loadProfile(for: authRes.user.id)
                 print("Profile completion successful")
-                
+
             } catch {
                 print("Sign in failed, attempting signup during profile completion: \(error)")
-                
+
                 // If sign in fails, try signup now (in case it failed earlier)
                 do {
                     let authResponse = try await supabase.auth.signUp(
@@ -208,23 +234,22 @@ final class AuthenticationService: ObservableObject {
                         password: pendingPassword
                     )
                     print("Delayed signup successful, ID: \(authResponse.user.id)")
-                    
+
                     // Now sign in and create profile
                     let authRes = try await supabase.auth.signIn(email: email, password: pendingPassword)
                     try await createUserProfile(
                         userId: authRes.user.id,
                         email: email,
                         username: pendingUsername,
+                        accountType: pendingAccountType,
                         surveyResponses: surveyResponses
                     )
-                    
-                    // Clear stored credentials
-                    pendingUsername = ""
-                    pendingPassword = ""
-                    
+
+                    clearPendingSignupState()
+
                     try await loadProfile(for: authRes.user.id)
                     print("Delayed profile completion successful")
-                    
+
                 } catch {
                     print("Both signup and signin failed: \(error)")
                     authState = .error("Failed to create account. Please try again or contact support.")
@@ -237,12 +262,25 @@ final class AuthenticationService: ObservableObject {
         }
     }
 
+    private func clearPendingSignupState() {
+        pendingUsername = ""
+        pendingPassword = ""
+        pendingAccountType = .patient
+    }
+
     // MARK: - Create User Profile
-    private func createUserProfile(userId: UUID, email: String, username: String, surveyResponses: SurveyResponses) async throws {
+    private func createUserProfile(
+        userId: UUID,
+        email: String,
+        username: String,
+        accountType: AccountType,
+        surveyResponses: SurveyResponses?
+    ) async throws {
         struct ProfileInsert: Encodable {
             let id: String
             let email: String
             let username: String
+            let account_type: String
             let symptoms_location: String
             let symptoms_area: String
             let diagnosis: String
@@ -252,13 +290,14 @@ final class AuthenticationService: ObservableObject {
             id: userId.uuidString,
             email: email,
             username: username,
-            symptoms_location: surveyResponses.symptomsLocation,
-            symptoms_area: surveyResponses.symptomsArea,
-            diagnosis: surveyResponses.diagnosis
+            account_type: accountType.rawValue,
+            symptoms_location: surveyResponses?.symptomsLocation ?? "",
+            symptoms_area:    surveyResponses?.symptomsArea    ?? "",
+            diagnosis:        surveyResponses?.diagnosis       ?? ""
         )
 
         print("Creating profile with data: \(profileData)")
-        
+
         do {
             try await supabase
                 .from("profiles")

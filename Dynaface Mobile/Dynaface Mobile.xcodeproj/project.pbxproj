@@ -19,6 +19,15 @@
 		DB533B012D560622003BFD1C /* ExerciseHistoryPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB533B002D560618003BFD1C /* ExerciseHistoryPage.swift */; };
 		DB533B032D560641003BFD1C /* ProfilePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB533B022D56063E003BFD1C /* ProfilePage.swift */; };
 		E42C44BC26274304A39B27DF /* UploadVideoPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FAB1D2736A94FEE8B6472A1 /* UploadVideoPage.swift */; };
+		F21DC9D0676A4178B2D37729 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84B16974887142CDA0ED7C6A /* Models.swift */; };
+		9F1D5A3753EA42A98A9EFF75 /* PatientService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 519C034EF13B457BBB45404D /* PatientService.swift */; };
+		A33E4B05655E4F789C8D01EB /* ClinicianRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D7765D6B7F4588B7AB75A2 /* ClinicianRootView.swift */; };
+		1A239257F8314CC78054118B /* PatientListPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7D8498644F14ECAAE13CE51 /* PatientListPage.swift */; };
+		5543D346D2DD45A2865A1E53 /* AddPatientSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D77BF67F1F6346659455E4C3 /* AddPatientSheet.swift */; };
+		AC537E93A6EF4AC19653FF29 /* ClinicianMyProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7B0DED41C444CB8813A51EB /* ClinicianMyProfile.swift */; };
+		1D121F8E404941A29EC889FA /* PatientDetailPlaceholder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 995F57EA829A45B682B1796A /* PatientDetailPlaceholder.swift */; };
+		C4C3F2D55B414425830BDF22 /* PatientRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28BE20E97D6849D6807317E1 /* PatientRootView.swift */; };
+		4CB7306F72AC4C23BD665019 /* PatientMyProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 237DC162BE354063B3A20171 /* PatientMyProfile.swift */; };
 		8655019BF6B04E99A99ADD9F /* RecordingFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7724C311C54B4404BC726EDC /* RecordingFiles.swift */; };
 		DB533B052D560665003BFD1C /* HomePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB533B042D560661003BFD1C /* HomePage.swift */; };
 		DB5F94972EB31ABF00AA3301 /* HalfSmile.MOV in Resources */ = {isa = PBXBuildFile; fileRef = DB5F94962EB31ABF00AA3301 /* HalfSmile.MOV */; };
@@ -79,6 +88,15 @@
 		DB533B002D560618003BFD1C /* ExerciseHistoryPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseHistoryPage.swift; sourceTree = "<group>"; };
 		DB533B022D56063E003BFD1C /* ProfilePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilePage.swift; sourceTree = "<group>"; };
 		0FAB1D2736A94FEE8B6472A1 /* UploadVideoPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadVideoPage.swift; sourceTree = "<group>"; };
+		84B16974887142CDA0ED7C6A /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		519C034EF13B457BBB45404D /* PatientService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientService.swift; sourceTree = "<group>"; };
+		C6D7765D6B7F4588B7AB75A2 /* ClinicianRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicianRootView.swift; sourceTree = "<group>"; };
+		C7D8498644F14ECAAE13CE51 /* PatientListPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientListPage.swift; sourceTree = "<group>"; };
+		D77BF67F1F6346659455E4C3 /* AddPatientSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddPatientSheet.swift; sourceTree = "<group>"; };
+		D7B0DED41C444CB8813A51EB /* ClinicianMyProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClinicianMyProfile.swift; sourceTree = "<group>"; };
+		995F57EA829A45B682B1796A /* PatientDetailPlaceholder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientDetailPlaceholder.swift; sourceTree = "<group>"; };
+		28BE20E97D6849D6807317E1 /* PatientRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientRootView.swift; sourceTree = "<group>"; };
+		237DC162BE354063B3A20171 /* PatientMyProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientMyProfile.swift; sourceTree = "<group>"; };
 		7724C311C54B4404BC726EDC /* RecordingFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingFiles.swift; sourceTree = "<group>"; };
 		DB533B042D560661003BFD1C /* HomePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomePage.swift; sourceTree = "<group>"; };
 		DB5F94952EB31ABF00AA3301 /* FullSmile.MOV */ = {isa = PBXFileReference; lastKnownFileType = video.quicktime; path = FullSmile.MOV; sourceTree = "<group>"; };
@@ -184,6 +202,15 @@
 				DB533B022D56063E003BFD1C /* ProfilePage.swift */,
 				0FAB1D2736A94FEE8B6472A1 /* UploadVideoPage.swift */,
 				7724C311C54B4404BC726EDC /* RecordingFiles.swift */,
+				84B16974887142CDA0ED7C6A /* Models.swift */,
+				519C034EF13B457BBB45404D /* PatientService.swift */,
+				C6D7765D6B7F4588B7AB75A2 /* ClinicianRootView.swift */,
+				C7D8498644F14ECAAE13CE51 /* PatientListPage.swift */,
+				D77BF67F1F6346659455E4C3 /* AddPatientSheet.swift */,
+				D7B0DED41C444CB8813A51EB /* ClinicianMyProfile.swift */,
+				995F57EA829A45B682B1796A /* PatientDetailPlaceholder.swift */,
+				28BE20E97D6849D6807317E1 /* PatientRootView.swift */,
+				237DC162BE354063B3A20171 /* PatientMyProfile.swift */,
 				DB533B002D560618003BFD1C /* ExerciseHistoryPage.swift */,
 				DB533AFE2D560601003BFD1C /* ExercisesPage.swift */,
 				DB533AFC2D560267003BFD1C /* RecordingPage.swift */,
@@ -377,6 +404,15 @@
 				DB533B032D560641003BFD1C /* ProfilePage.swift in Sources */,
 				E42C44BC26274304A39B27DF /* UploadVideoPage.swift in Sources */,
 				8655019BF6B04E99A99ADD9F /* RecordingFiles.swift in Sources */,
+				F21DC9D0676A4178B2D37729 /* Models.swift in Sources */,
+				9F1D5A3753EA42A98A9EFF75 /* PatientService.swift in Sources */,
+				A33E4B05655E4F789C8D01EB /* ClinicianRootView.swift in Sources */,
+				1A239257F8314CC78054118B /* PatientListPage.swift in Sources */,
+				5543D346D2DD45A2865A1E53 /* AddPatientSheet.swift in Sources */,
+				AC537E93A6EF4AC19653FF29 /* ClinicianMyProfile.swift in Sources */,
+				1D121F8E404941A29EC889FA /* PatientDetailPlaceholder.swift in Sources */,
+				C4C3F2D55B414425830BDF22 /* PatientRootView.swift in Sources */,
+				4CB7306F72AC4C23BD665019 /* PatientMyProfile.swift in Sources */,
 				DB533B012D560622003BFD1C /* ExerciseHistoryPage.swift in Sources */,
 				DB0564A82E39F04E00BEB570 /* AuthSelector.swift in Sources */,
 				DB533AFF2D56060C003BFD1C /* ExercisesPage.swift in Sources */,
