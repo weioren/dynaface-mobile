@@ -216,4 +216,9 @@ extension Notification.Name {
     static let assessmentCompleted = Notification.Name("assessmentCompleted")
     static let flipCamera = Notification.Name("flipCamera")
     static let recordingStateChanged = Notification.Name("recordingStateChanged")
+    /// Posted by ProfilePage's "My patients" row (clinician menu) so the
+    /// hosting Dashboard can switch to the Patients tab. UserDefaults
+    /// channel won't work here — Dashboard's onAppear doesn't re-fire when
+    /// ProfilePage is already a sibling tab in the same Dashboard instance.
+    static let navigateToPatientsTab = Notification.Name("navigateToPatientsTab")
 }

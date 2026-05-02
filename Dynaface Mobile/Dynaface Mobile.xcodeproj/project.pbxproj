@@ -19,6 +19,11 @@
 		DB533B012D560622003BFD1C /* ExerciseHistoryPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB533B002D560618003BFD1C /* ExerciseHistoryPage.swift */; };
 		DB533B032D560641003BFD1C /* ProfilePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB533B022D56063E003BFD1C /* ProfilePage.swift */; };
 		E42C44BC26274304A39B27DF /* UploadVideoPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FAB1D2736A94FEE8B6472A1 /* UploadVideoPage.swift */; };
+		D3BDB109E2EE46BE8D76D955 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AB0331B0EBB4451A6E59399 /* Models.swift */; };
+		D601DACF9B464EC88C305ECD /* PatientService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8DD3DF87F5C4BCCBC4F8848 /* PatientService.swift */; };
+		299DC057DA4C400285DE2619 /* PatientListPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F59DFA32B2C49969A524943 /* PatientListPage.swift */; };
+		7FB9E64E53D94A958063B2F2 /* AddPatientSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC78D6AF103040E88488CA78 /* AddPatientSheet.swift */; };
+		2206C651352944068103DEEF /* PatientDetailPlaceholder.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF906CDDC4694FEC974913AC /* PatientDetailPlaceholder.swift */; };
 		8655019BF6B04E99A99ADD9F /* RecordingFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7724C311C54B4404BC726EDC /* RecordingFiles.swift */; };
 		DB533B052D560665003BFD1C /* HomePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB533B042D560661003BFD1C /* HomePage.swift */; };
 		DB5F94972EB31ABF00AA3301 /* HalfSmile.MOV in Resources */ = {isa = PBXBuildFile; fileRef = DB5F94962EB31ABF00AA3301 /* HalfSmile.MOV */; };
@@ -79,6 +84,11 @@
 		DB533B002D560618003BFD1C /* ExerciseHistoryPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseHistoryPage.swift; sourceTree = "<group>"; };
 		DB533B022D56063E003BFD1C /* ProfilePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilePage.swift; sourceTree = "<group>"; };
 		0FAB1D2736A94FEE8B6472A1 /* UploadVideoPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadVideoPage.swift; sourceTree = "<group>"; };
+		3AB0331B0EBB4451A6E59399 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		A8DD3DF87F5C4BCCBC4F8848 /* PatientService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientService.swift; sourceTree = "<group>"; };
+		5F59DFA32B2C49969A524943 /* PatientListPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientListPage.swift; sourceTree = "<group>"; };
+		EC78D6AF103040E88488CA78 /* AddPatientSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddPatientSheet.swift; sourceTree = "<group>"; };
+		EF906CDDC4694FEC974913AC /* PatientDetailPlaceholder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientDetailPlaceholder.swift; sourceTree = "<group>"; };
 		7724C311C54B4404BC726EDC /* RecordingFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingFiles.swift; sourceTree = "<group>"; };
 		DB533B042D560661003BFD1C /* HomePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomePage.swift; sourceTree = "<group>"; };
 		DB5F94952EB31ABF00AA3301 /* FullSmile.MOV */ = {isa = PBXFileReference; lastKnownFileType = video.quicktime; path = FullSmile.MOV; sourceTree = "<group>"; };
@@ -184,6 +194,11 @@
 				DB533B022D56063E003BFD1C /* ProfilePage.swift */,
 				0FAB1D2736A94FEE8B6472A1 /* UploadVideoPage.swift */,
 				7724C311C54B4404BC726EDC /* RecordingFiles.swift */,
+				3AB0331B0EBB4451A6E59399 /* Models.swift */,
+				A8DD3DF87F5C4BCCBC4F8848 /* PatientService.swift */,
+				5F59DFA32B2C49969A524943 /* PatientListPage.swift */,
+				EC78D6AF103040E88488CA78 /* AddPatientSheet.swift */,
+				EF906CDDC4694FEC974913AC /* PatientDetailPlaceholder.swift */,
 				DB533B002D560618003BFD1C /* ExerciseHistoryPage.swift */,
 				DB533AFE2D560601003BFD1C /* ExercisesPage.swift */,
 				DB533AFC2D560267003BFD1C /* RecordingPage.swift */,
@@ -377,6 +392,11 @@
 				DB533B032D560641003BFD1C /* ProfilePage.swift in Sources */,
 				E42C44BC26274304A39B27DF /* UploadVideoPage.swift in Sources */,
 				8655019BF6B04E99A99ADD9F /* RecordingFiles.swift in Sources */,
+				D3BDB109E2EE46BE8D76D955 /* Models.swift in Sources */,
+				D601DACF9B464EC88C305ECD /* PatientService.swift in Sources */,
+				299DC057DA4C400285DE2619 /* PatientListPage.swift in Sources */,
+				7FB9E64E53D94A958063B2F2 /* AddPatientSheet.swift in Sources */,
+				2206C651352944068103DEEF /* PatientDetailPlaceholder.swift in Sources */,
 				DB533B012D560622003BFD1C /* ExerciseHistoryPage.swift in Sources */,
 				DB0564A82E39F04E00BEB570 /* AuthSelector.swift in Sources */,
 				DB533AFF2D56060C003BFD1C /* ExercisesPage.swift in Sources */,
@@ -569,7 +589,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "dynaface-mobile";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.weichao.dynaface-mobile";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -604,7 +624,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "dynaface-mobile";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.weichao.dynaface-mobile";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;

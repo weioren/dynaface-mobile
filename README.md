@@ -168,18 +168,108 @@ This is a mobile app extension of Dynaface. The computer version and accompanyin
 
 ---
 
+# Phase 6: Account Types, Patient List & Profile Editing
+**Branch:** `feature/account-type-picker`
+
+### 1. Account Type System (Clinician / Patient)
+
+- New `AccountType` enum (`.clinician` / `.patient`) with display names and signup-picker subtitles
+- SignUp flow captures account type via segmented picker → stored on `profiles.account_type` (`text NOT NULL DEFAULT 'patient'`, CHECK constraint)
+- `Profile` struct decodes `account_type` with defensive fallback to `.patient` if the column is missing from a response
+- `Dashboard` reads `profile.accountType` to drive an `isClinician` flag — only clinicians get the conditional **Patients** tab (4th of 5 tabs); patients keep the original 4-tab layout
+
+### 2. Patient List View (Clinician Tab)
+
+- New `PatientListPage` lists every `account_type='patient'` profile, newest first
+- Server-side query via `PatientService.loadAllPatientProfiles()` → `profiles WHERE account_type='patient'`, ordered by `created_at` DESC
+- Each row: initials avatar (brand blue) + username + email
+- Rows are tappable — push to `PatientDetailPlaceholder` via `NavigationLink` (uses Dashboard's outer `NavigationView`, no nested stack to avoid the Phase-3 freeze)
+- Pull-to-refresh wired on the inner `List`
+- Empty-state copy: *"Patients appear here after they sign up. Pull to refresh."*
+- Search bar / Add button intentionally absent for V1 (plumbing retained — `searchedPatientProfiles(matching:)`, `searchText` state — for quick re-enable)
+
+### 3. Patient Detail Placeholder
+
+- Stub destination at `PatientDetailPlaceholder` showing the patient's username as title + "Patient detail view coming soon"
+- Forces `.toolbar(.visible, for: .navigationBar)` to override Dashboard's `.navigationBarHidden(true)` so the back chevron stays visible
+- One-line swap when Alex's `PatientDetailView(profileId:)` lands
+
+### 4. Role-Aware Profile Menu
+
+- Single `ProfilePage` shell with `menuItems(for accountType:)` returning `[MenuRow]` (private struct, `id: String { text }` for stable diffing)
+- Patient menu: Edit profile / My progress / My past evaluations / Upcoming appointments / FAQ / Sign out
+- Clinician menu: Edit profile / **My patients** (functional) / Upcoming appointments (stub) / FAQ / Sign out
+- "My patients" deep-links to the Patients tab via `NotificationCenter` (`.navigateToPatientsTab`) — not `UserDefaults`, since Dashboard's `onAppear` doesn't re-fire while ProfilePage is a sibling tab in the same instance. Dashboard subscribes with an `isClinician` guard so a stray post in patient mode is a no-op.
+
+### 5. Functional Edit Profile
+
+- New `AuthenticationService.updateProfile(patch:)` issues partial UPDATE on `profiles` (PATCH semantics — `JSONEncoder` skips nil keys) and re-fetches via `loadProfile` so `authState` reflects the new values everywhere
+- `ProfilePatch: Encodable` struct with `var` fields (`username`, `symptoms_location`, `symptoms_area`, `diagnosis`)
+- `EditProfilePage` is now role-aware:
+  - **Patient** edits username + symptoms_location + symptoms_area + diagnosis
+  - **Clinician** edits username only — symptom/diagnosis fields hidden, not just disabled
+- Email permanently disabled with caption *"Contact support to change email."*
+- Username validation: non-empty, ≤ 32 chars (trimmed); Save button greys out and is disabled when invalid
+- Save button shows `ProgressView().tint(.white)` during `isLoading`
+- Errors surface via `.alert("Couldn't save", ...)` bound to a new `errorMessage: String?` state — no silent failure
+- Guards malformed `Profile.id` strings with `guard let UUID(uuidString:)` (no force-unwrap)
+
+### 6. Username & Email Duplicate Detection
+
+- New SECURITY DEFINER RPC `is_username_available(name text)` — anon-callable, bypasses `profiles` RLS for global existence check (lowercased + trimmed)
+- Pre-check in `createAccount` (signup) and `updateProfile` (edit) — only re-checks when username actually changes (avoids unnecessary RPC on no-op edits)
+- Friendly error messages routed through Swift: `"Username has been registered"` (new `AuthError.usernameAlreadyTaken`) / `"Email has been registered"` (set on `authState.error` directly in createAccount)
+- Email duplicate also detected from Supabase `auth.signUp` "already registered" error string
+- No UNIQUE constraint added on `profiles.username` — race conditions accepted for MVP, RPC fails open (returns true) on transient errors so legitimate signups aren't blocked
+
+### 7. Database Migrations
+
+5 new SQL migrations in `supabase/migrations/`, all idempotent:
+
+- `20260428_account_type_and_patients.sql` — adds `profiles.account_type` + `profiles.updated_at` + shared `set_updated_at()` trigger; creates the `patients` table (clinician-owned clinical records) with RLS enabled (4 policies: clinicians read/insert/update own, patients read own claimed); soft-delete only via `archived_at`
+- `20260428_open_patients_read_to_all_clinicians.sql` — replaces patients SELECT policy so any clinician sees the full non-archived roster (V1 testing aid; still scoped to `account_type='clinician'` via subquery)
+- `20260428_tighten_patients_insert_to_clinicians.sql` — hardens INSERT/UPDATE with explicit `account_type='clinician'` check (defense-in-depth against direct API calls bypassing the UI)
+- `20260429_clinician_search_patient_profiles.sql` — adds `is_clinician(uid uuid)` SECURITY DEFINER helper + RLS policy letting clinicians read all patient-role profiles + UNIQUE partial index on `patients.claimed_user_id`
+- `20260430_username_availability_check.sql` — adds `is_username_available(name text)` RPC granted to `anon, authenticated`
+
+### 8. Recording Quality — Lighting Check
+
+- Adds a lighting gate alongside the existing face-in-oval gate. Record button is enabled only when **face aligned AND lighting OK**; either failing keeps the button grey
+- Per-frame average luminance computed in the existing `captureOutput` path — no new capture session, no new queue. Reuses the same pixel buffer Vision already runs on
+- Pixel-format aware sampler:
+  - **YUV (bi-planar 420)** — most common for AVCapture video data output: read Y plane (plane 0) directly
+  - **BGRA fallback** — Rec. 601 luminance from RGB
+  - 32×32 sample grid → ~1024 samples per frame, microsecond cost
+- Three-state machine `LightingState` (`.ok` / `.tooDark` / `.tooBright`) with **hysteresis** so a borderline frame doesn't flicker the button:
+  - `.ok → .tooDark` when avg Y < 45; `.tooDark → .ok` when avg Y > 55
+  - `.ok → .tooBright` when avg Y > 225; `.tooBright → .ok` when avg Y < 215
+- `FaceGuideOverlayView` refactored: `updateOvalAppearance` now only touches the oval visuals; new `refreshFeedbackText()` centralizes the prioritized label text (face > lighting > none); new `updateLighting(message:)` public method
+- New `updateRecordingReadiness()` controller helper merges face + lighting state and is the single place that toggles the record button
+- Camera flip: switching to back camera bypasses the gate (existing behavior); switching back to front resets `isFaceAligned`, `lightingState`, and clears any stale lighting message before the first frame arrives
+- Recording start path unchanged — once `faceGuideCompleted` flips, sample-buffer processing skips and lighting evaluation stops too, so live luminance changes during recording don't disturb the button state
+
+---
+
 ## Files Modified
 
-| File                       | Phase 1 | Phase 2 | Phase 3 | Phase 4 | Phase 5 |
-| -------------------------- | ------- | ------- | ------- | ------- | ------- |
-| `PracticePage.swift`       | Progress bar, post-completion nav | Video looping, StepProgressBar, PiPDemoPlayer, back logic | — | Review page, phase state machine, recordings dict, accordion video | — |
-| `RecordingPage.swift`      | Retake / Save & Continue labels | Single-screen with PiP, back button, brand colors | — | Continue rename, flip camera button, recording state observer | — |
-| `ExercisesPage.swift`      | Modules, Quick Start buttons | Reset on assessment completion | — | — | — |
-| `CameraRecorderView.swift` | Simulator mode toggle | Brand blue button color | Face guide oval, Vision face detection | Camera flip, per-camera orientation, notification-driven flip | Use shared `RecordingFiles` helper for filename numbering |
-| `ExerciseHistoryPage.swift`| — | — | Removed nested NavigationView | — | Auto-expand newly added sections (snapshot/diff in `reloadSections`) |
-| `Dashboard.swift`          | — | — | Removed Home tab | — | Auto-nav to History on `.assessmentCompleted`; new Upload tab at tag 2 |
-| `Players.swift`            | — | — | — | — | `dismantleUIViewController` to stop playback on view removal |
-| `DynafaceMobileApp.swift`  | Auth skip toggle | — | — | — | — |
+| File                       | Phase 1 | Phase 2 | Phase 3 | Phase 4 | Phase 5 | Phase 6 |
+| -------------------------- | ------- | ------- | ------- | ------- | ------- | ------- |
+| `PracticePage.swift`       | Progress bar, post-completion nav | Video looping, StepProgressBar, PiPDemoPlayer, back logic | — | Review page, phase state machine, recordings dict, accordion video | — | — |
+| `RecordingPage.swift`      | Retake / Save & Continue labels | Single-screen with PiP, back button, brand colors | — | Continue rename, flip camera button, recording state observer | — | + `Notification.Name.navigateToPatientsTab` |
+| `ExercisesPage.swift`      | Modules, Quick Start buttons | Reset on assessment completion | — | — | — | — |
+| `CameraRecorderView.swift` | Simulator mode toggle | Brand blue button color | Face guide oval, Vision face detection | Camera flip, per-camera orientation, notification-driven flip | Use shared `RecordingFiles` helper for filename numbering | Lighting check (avg-luma sampler, hysteretic 3-state machine, combined gate with face oval); `FaceGuideOverlayView` feedback refactor |
+| `ExerciseHistoryPage.swift`| — | — | Removed nested NavigationView | — | Auto-expand newly added sections (snapshot/diff in `reloadSections`) | — |
+| `Dashboard.swift`          | — | — | Removed Home tab | — | Auto-nav to History on `.assessmentCompleted`; new Upload tab at tag 2 | + `isClinician`, conditional Patients tab (tag 3), `.navigateToPatientsTab` subscriber with role guard |
+| `Players.swift`            | — | — | — | — | `dismantleUIViewController` to stop playback on view removal | — |
+| `DynafaceMobileApp.swift`  | Auth skip toggle | — | — | — | — | — |
+| `Authentication.swift`     | — | — | — | — | — | `Profile` w/ `accountType`; `ProfilePatch` + `updateProfile(patch:)`; `isUsernameAvailable(_:)` RPC; `AuthError.usernameAlreadyTaken`; createAccount username pre-check + email duplicate detection |
+| `SignUp.swift`             | — | — | — | — | — | Account-type segmented picker → `authViewModel.accountType` → `profiles.account_type` |
+| `ProfilePage.swift`        | — | — | — | — | — | `MenuRow` + `menuItems(for:)`, role-conditional render, `EditProfilePage` rewrite (role-aware fields, validation, real save, `ProgressView`, `.alert`) |
+| `Models.swift`             | — | — | — | — | — | New file — `AccountType`, `Patient`, `PatientCandidate` |
+| `PatientService.swift`     | — | — | — | — | — | New file — `patientProfiles` + `loadAllPatientProfiles()` + `searchedPatientProfiles(matching:)` |
+| `PatientListPage.swift`    | — | — | — | — | — | New file — clinician's patient roster |
+| `PatientDetailPlaceholder.swift` | — | — | — | — | — | New file — placeholder destination |
+| `AddPatientSheet.swift`    | — | — | — | — | — | New file (orphaned — kept for future patients-table flow) |
 
 ## New Components
 
@@ -193,9 +283,27 @@ This is a mobile app extension of Dynaface. The computer version and accompanyin
 | `UploadPhase` (enum) | `UploadVideoPage.swift` | State machine for upload (`empty → previewing → readyToSave → saving → savedFlash`) |
 | `Movie` (Transferable) | `UploadVideoPage.swift` | `FileRepresentation` bridge from `PhotosPickerItem` to a temp video URL |
 | `RecordingFiles` (helpers) | `RecordingFiles.swift` | Module-level `nextFileNumber(for:in:)` + `saveImportedVideo(from:exerciseTitle:)` shared by recording and upload paths |
+| `AccountType` (enum) | `Models.swift` | `.clinician` / `.patient` with picker labels and subtitles |
+| `Patient` (struct) | `Models.swift` | Row model for `patients` table (clinician-owned clinical record) |
+| `PatientCandidate` (struct) | `Models.swift` | Row model for patient-role profile in clinician's list |
+| `PatientService` | `PatientService.swift` | `@MainActor ObservableObject` owning `@Published patientProfiles` |
+| `PatientListPage` | `PatientListPage.swift` | Clinician-only Patients tab content (header + list) |
+| `PatientDetailPlaceholder` | `PatientDetailPlaceholder.swift` | Coming-soon detail stub forcing nav-bar visibility |
+| `ProfilePatch` (Encodable) | `Authentication.swift` | Partial-update payload for `profiles` PATCH |
+| `MenuRow` (private struct) | `ProfilePage.swift` | Role-conditional menu row data model with text-based ID |
+| `Notification.Name.navigateToPatientsTab` | `RecordingPage.swift` | Profile → Dashboard tab-switch channel |
+| `is_clinician(uid uuid)` | DB function (SQL) | SECURITY DEFINER helper for RLS without recursion |
+| `is_username_available(name text)` | DB function (SQL) | Anon-callable username pre-check RPC |
+| `patients` table | DB | Clinician-owned clinical records with soft-delete + RLS |
+| `LightingState` (private enum) | `CameraRecorderView.swift` | Three-state machine (`.ok / .tooDark / .tooBright`) with hysteretic transitions; `feedbackMessage` produces the user-facing hint |
 
 ## Pending
 
 - **Emotions module** — requires 7 new demo videos and exercise definitions
 - **Video upload to Supabase** — integrate Alex's `VideoUploadService.swift` into app
 - **Real device testing** — requires Apple Developer Team access
+- **Patient detail view** — Alex's PR; placeholder is in place, swap one line in `PatientListPage.list`
+- **HIPAA compliance path** — gated on Hopkins IT / SAFE Desktop sign-off; MRN, DOB, legal name remain blocked from UI
+- **Patient list search bar** — deferred for V1; `searchedPatientProfiles(matching:)` + `searchText` state retained for quick re-enable
+- **Email change flow** — deferred (requires verification email round-trip)
+- **`profiles.username` UNIQUE constraint** — deferred; race conditions accepted for MVP. Pre-check via RPC handles 99% of cases. Add if duplicate signups become a real problem.
