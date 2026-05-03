@@ -66,6 +66,27 @@ struct CreateAccountView: View {
                         }
                         .padding(.horizontal, 20 * w)
 
+                        // Account Type — clinician vs patient. Drives which
+                        // survey flow runs after account creation. Persisted
+                        // to profiles.account_type by AuthenticationService.
+                        VStack(alignment: .leading, spacing: 8 * h) {
+                            Text("I am a…")
+                                .font(.system(size: 14 * w, weight: .medium))
+                                .foregroundColor(.black)
+
+                            Picker("Account type", selection: $authViewModel.accountType) {
+                                ForEach(AccountType.allCases) { type in
+                                    Text(type.displayName).tag(type)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+
+                            Text(authViewModel.accountType.subtitle)
+                                .font(.system(size: 12 * w))
+                                .foregroundColor(.gray)
+                        }
+                        .padding(.horizontal, 20 * w)
+
                         // Password
                         VStack(alignment: .leading, spacing: 8 * h) {
                             Text("Password")
@@ -162,7 +183,8 @@ struct CreateAccountView: View {
             await authService.createAccount(
                 email: authViewModel.email,
                 username: authViewModel.username,
-                password: authViewModel.password
+                password: authViewModel.password,
+                accountType: authViewModel.accountType
             )
         }
     }
@@ -173,12 +195,29 @@ struct CreateAccountView: View {
 }
 
 // MARK: - SurveyFlow
+//
+// Branches on account type. Patients go through the full symptom survey
+// (FirstPage → … → FifthPage). Clinicians skip the symptom questions and
+// land directly on FifthPage with empty symptom values. FifthPage's
+// `completeProfile` then passes `nil` for SurveyResponses, and the auth
+// service writes blank symptom columns to the profiles row.
 struct SurveyFlow: View {
     let email: String
-    
+    let accountType: AccountType
+
     var body: some View {
         NavigationStack {
-            FirstPage(email: email)
+            switch accountType {
+            case .patient:
+                FirstPage(email: email)
+            case .clinician:
+                FifthPage(
+                    email: email,
+                    symptomsLocation: "",
+                    symptomsArea: "",
+                    diagnosis: ""
+                )
+            }
         }
     }
 }
@@ -477,14 +516,22 @@ struct FifthPage: View {
     }
     
     private func completeProfile() {
+        // Clinicians arrive here with empty symptom strings (they skipped
+        // the symptom survey). For them, pass `nil` so the auth service
+        // writes blank symptom columns rather than fake "" answers.
+        let isPatientSurvey = !(symptomsLocation.isEmpty && symptomsArea.isEmpty && diagnosis.isEmpty)
+        let responses: SurveyResponses? = isPatientSurvey
+            ? SurveyResponses(
+                symptomsLocation: symptomsLocation,
+                symptomsArea: symptomsArea,
+                diagnosis: diagnosis
+              )
+            : nil
+
         Task {
             await authService.completeProfile(
                 email: email,
-                surveyResponses: SurveyResponses(
-                    symptomsLocation: symptomsLocation,
-                    symptomsArea: symptomsArea,
-                    diagnosis: diagnosis
-                )
+                surveyResponses: responses
             )
         }
     }
