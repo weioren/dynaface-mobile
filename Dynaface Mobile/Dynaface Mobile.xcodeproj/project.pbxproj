@@ -7,8 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		8655019BF6B04E99A99ADD9F /* RecordingFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7724C311C54B4404BC726EDC /* RecordingFiles.swift */; };
 		A1D7E2762E4849EA0030ABFA /* PracticePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D7E2752E4849EA0030ABFA /* PracticePage.swift */; };
 		A1D7E2782E4857100030ABFA /* Players.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D7E2772E4857100030ABFA /* Players.swift */; };
+		B7F1A0022F00000100000001 /* VideoUploadService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7F1A0012F00000100000001 /* VideoUploadService.swift */; };
 		DB0564A52E39C8C400BEB570 /* PastExerciseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0564A42E39C8A900BEB570 /* PastExerciseView.swift */; };
 		DB0564A82E39F04E00BEB570 /* AuthSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0564A72E39F04E00BEB570 /* AuthSelector.swift */; };
 		DB2159BE2C90E7D100DD84DD /* Authentication.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB2159BD2C90E7D100DD84DD /* Authentication.swift */; };
@@ -44,6 +46,7 @@
 		DBAD9B312EA76049005F0C67 /* EyebrowRaise.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = DBAD9B212EA76049005F0C67 /* EyebrowRaise.mp4 */; };
 		DBAD9B322EA76049005F0C67 /* NoseWrinkle.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = DBAD9B272EA76049005F0C67 /* NoseWrinkle.mp4 */; };
 		DBAD9B332EA76049005F0C67 /* StrongEyeClosure.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = DBAD9B282EA76049005F0C67 /* StrongEyeClosure.mp4 */; };
+		E42C44BC26274304A39B27DF /* UploadVideoPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FAB1D2736A94FEE8B6472A1 /* UploadVideoPage.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -64,8 +67,11 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0FAB1D2736A94FEE8B6472A1 /* UploadVideoPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadVideoPage.swift; sourceTree = "<group>"; };
+		7724C311C54B4404BC726EDC /* RecordingFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingFiles.swift; sourceTree = "<group>"; };
 		A1D7E2752E4849EA0030ABFA /* PracticePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticePage.swift; sourceTree = "<group>"; };
 		A1D7E2772E4857100030ABFA /* Players.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Players.swift; sourceTree = "<group>"; };
+		B7F1A0012F00000100000001 /* VideoUploadService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoUploadService.swift; sourceTree = "<group>"; };
 		DB0564A42E39C8A900BEB570 /* PastExerciseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PastExerciseView.swift; sourceTree = "<group>"; };
 		DB0564A72E39F04E00BEB570 /* AuthSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSelector.swift; sourceTree = "<group>"; };
 		DB2159BD2C90E7D100DD84DD /* Authentication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Authentication.swift; sourceTree = "<group>"; };
@@ -178,10 +184,13 @@
 				A1D7E2752E4849EA0030ABFA /* PracticePage.swift */,
 				DB533B042D560661003BFD1C /* HomePage.swift */,
 				DB533B022D56063E003BFD1C /* ProfilePage.swift */,
+				0FAB1D2736A94FEE8B6472A1 /* UploadVideoPage.swift */,
+				7724C311C54B4404BC726EDC /* RecordingFiles.swift */,
 				DB533B002D560618003BFD1C /* ExerciseHistoryPage.swift */,
 				DB533AFE2D560601003BFD1C /* ExercisesPage.swift */,
 				DB533AFC2D560267003BFD1C /* RecordingPage.swift */,
 				DB533AFA2D560249003BFD1C /* CameraRecorderView.swift */,
+				B7F1A0012F00000100000001 /* VideoUploadService.swift */,
 				DBAB9FC02B59B8EF007B2B80 /* DynafaceMobileApp.swift */,
 				DBAB9FC22B59B8EF007B2B80 /* SignUp.swift */,
 				DB2159BF2C90E7EF00DD84DD /* SignIn.swift */,
@@ -369,6 +378,8 @@
 				DB533B052D560665003BFD1C /* HomePage.swift in Sources */,
 				DBAB9FC32B59B8EF007B2B80 /* SignUp.swift in Sources */,
 				DB533B032D560641003BFD1C /* ProfilePage.swift in Sources */,
+				E42C44BC26274304A39B27DF /* UploadVideoPage.swift in Sources */,
+				8655019BF6B04E99A99ADD9F /* RecordingFiles.swift in Sources */,
 				DB533B012D560622003BFD1C /* ExerciseHistoryPage.swift in Sources */,
 				DB0564A82E39F04E00BEB570 /* AuthSelector.swift in Sources */,
 				DB533AFF2D56060C003BFD1C /* ExercisesPage.swift in Sources */,
@@ -376,6 +387,7 @@
 				DB533AFD2D56026E003BFD1C /* RecordingPage.swift in Sources */,
 				A1D7E2762E4849EA0030ABFA /* PracticePage.swift in Sources */,
 				DB6334672B7C914200601964 /* Dashboard.swift in Sources */,
+				B7F1A0022F00000100000001 /* VideoUploadService.swift in Sources */,
 				DBAB9FC12B59B8EF007B2B80 /* DynafaceMobileApp.swift in Sources */,
 				DB2159BE2C90E7D100DD84DD /* Authentication.swift in Sources */,
 				DB533AFB2D560256003BFD1C /* CameraRecorderView.swift in Sources */,
@@ -547,7 +559,7 @@
 				DEVELOPMENT_TEAM = LL25GT5UY4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Dynaface Mobile";
+				INFOPLIST_KEY_CFBundleDisplayName = Dynaface;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.medical";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to record facial exercise videos.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -582,7 +594,7 @@
 				DEVELOPMENT_TEAM = LL25GT5UY4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Dynaface Mobile";
+				INFOPLIST_KEY_CFBundleDisplayName = Dynaface;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.medical";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to record facial exercise videos.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
