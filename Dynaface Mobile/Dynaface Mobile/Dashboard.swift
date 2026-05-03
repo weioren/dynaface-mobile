@@ -37,10 +37,10 @@ struct Dashboard: View {
                     }
                     .tag(1)
 
-                UploadVideoPage()
+                ProcessedVideosPage()
                     .tabItem {
-                        Image(systemName: "square.and.arrow.up")
-                        Text("Upload")
+                        Image(systemName: "sparkles.tv")
+                        Text("Processed")
                     }
                     .tag(2)
 
@@ -63,18 +63,9 @@ struct Dashboard: View {
                     }
                     .tag(isClinician ? 4 : 3)
             }
-            .environmentObject(patientService)
-            .onReceive(NotificationCenter.default.publisher(for: .assessmentCompleted)) { _ in
-                withAnimation { selectedTab = 1 }
-            }
-            // [Gap 4] ProfilePage 的 "My patients" 行 deep-link 进来。
-            // isClinician guard 防止 patient 模式下意外触发(他们不该有这个 tab)。
-            .onReceive(NotificationCenter.default.publisher(for: .navigateToPatientsTab)) { _ in
-                guard isClinician else { return }
-                withAnimation { selectedTab = 3 }
-            }
             .navigationBarHidden(true)
         }
+        .navigationViewStyle(.stack)
         .onAppear {
             // Check if we should navigate to a specific tab
             if let tabToSelect = UserDefaults.standard.object(forKey: "selectedTab") as? Int {

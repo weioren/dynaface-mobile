@@ -116,6 +116,10 @@ final class AuthenticationService: ObservableObject {
         supabaseKey: SupabaseConfig.anonKey
     )
 
+    var supabaseClient: SupabaseClient {
+        supabase
+    }
+
     init() {
         Task { [weak self] in
             guard let self else { return }

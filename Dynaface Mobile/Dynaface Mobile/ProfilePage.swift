@@ -7,6 +7,7 @@ struct ProfilePage: View {
     let baseHeight: CGFloat = 844
 
     @EnvironmentObject var authService: AuthenticationService
+    @AppStorage("videoUploadsEnabled") private var videoUploadsEnabled = true
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var profileImage: UIImage?
     @State private var showingEditProfile = false
@@ -111,15 +112,42 @@ struct ProfilePage: View {
 
                 // Menu items — 按角色渲染,Sign out 单独
                 VStack(spacing: 20 * heightScale) {
-                    if case .signedIn(let profile) = authService.authState {
-                        ForEach(menuItems(for: profile.accountType)) { item in
-                            ProfileMenuItem(
-                                text: item.text,
-                                widthScale: widthScale,
-                                heightScale: heightScale,
-                                action: item.action
-                            )
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Cloud video upload")
+                                .font(.system(size: 18 * widthScale))
+                                .foregroundColor(.black)
+                            Text(videoUploadsEnabled ? "Processed videos will be uploaded to Supabase." : "Uploads are disabled. Videos stay local only.")
+                                .font(.system(size: 12 * widthScale))
+                                .foregroundColor(.gray)
                         }
+                        Spacer()
+                        Toggle("", isOn: $videoUploadsEnabled)
+                            .labelsHidden()
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.gray.opacity(0.2))
+                    .cornerRadius(10 * widthScale)
+
+                    ProfileMenuItem(text: "Edit profile", widthScale: widthScale, heightScale: heightScale) {
+                        showingEditProfile = true
+                    }
+
+                    ProfileMenuItem(text: "My progress", widthScale: widthScale, heightScale: heightScale) {
+                        // My progress action
+                    }
+
+                    ProfileMenuItem(text: "My past evaluations", widthScale: widthScale, heightScale: heightScale) {
+                        // My past evaluations action
+                    }
+
+                    ProfileMenuItem(text: "Upcoming appointments", widthScale: widthScale, heightScale: heightScale) {
+                        // Upcoming appointments action
+                    }
+
+                    ProfileMenuItem(text: "FAQ", widthScale: widthScale, heightScale: heightScale) {
+                        // FAQ action
                     }
 
                     // Sign out button
