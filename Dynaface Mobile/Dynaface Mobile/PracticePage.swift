@@ -16,7 +16,12 @@ struct PracticePage: View {
     @State private var phase: PracticePhase = .exercising
     @State private var expandedExerciseIndex: Int? = nil
     @State private var showRerecorder = false
+    @State private var isUploadingAll = false
+    @State private var uploadErrorMessage: String?
+    @State private var uploadedCount: Int = 0
+    @AppStorage("videoUploadsEnabled") private var videoUploadsEnabled = true
     @Environment(\.presentationMode) var presentationMode
+    @EnvironmentObject private var authService: AuthenticationService
 
     var body: some View {
         if exercises.isEmpty {
@@ -122,14 +127,15 @@ struct PracticePage: View {
                 onFinish: { url in
                     DispatchQueue.main.async {
                         showRecorder = false
+                        guard let url = url else {
+                            return
+                        }
 
-                        if let url = url {
-                            recordings[index] = url
-                            if index < exercises.count - 1 {
-                                index += 1
-                            } else {
-                                phase = .review
-                            }
+                        recordings[index] = url
+                        if index < exercises.count - 1 {
+                            index += 1
+                        } else {
+                            phase = .review
                         }
                     }
                 }
@@ -228,12 +234,23 @@ struct PracticePage: View {
                 }
             }
 
-            // Finish Assessment button
+            if isUploadingAll {
+                VStack(spacing: 8) {
+                    ProgressView()
+                    Text("Uploading videos and queuing jobs... \(uploadedCount)/\(exercises.count)")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.bottom, 8)
+            }
+
+            // Upload + Finish button
             Button {
-                NotificationCenter.default.post(name: .assessmentCompleted, object: nil)
-                presentationMode.wrappedValue.dismiss()
+                Task {
+                    await uploadAllRecordingsAndFinish()
+                }
             } label: {
-                Text("Finish Assessment")
+                Text(isUploadingAll ? "Uploading..." : (videoUploadsEnabled ? "Upload All & Finish" : "Finish Assessment"))
                     .foregroundColor(.white)
                     .font(.headline)
                     .frame(maxWidth: .infinity)
@@ -241,6 +258,7 @@ struct PracticePage: View {
                     .background(Color(red: 0.12, green: 0.29, blue: 0.64))
                     .cornerRadius(10)
             }
+            .disabled(isUploadingAll || recordings.count != exercises.count)
             .padding(.horizontal)
             .padding(.vertical, 12)
         }
@@ -279,6 +297,65 @@ struct PracticePage: View {
                 .interactiveDismissDisabled(true)
             }
         }
+        .alert("Upload Failed", isPresented: Binding(
+            get: { uploadErrorMessage != nil },
+            set: { if !$0 { uploadErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {
+                uploadErrorMessage = nil
+            }
+        } message: {
+            Text(uploadErrorMessage ?? "Unknown error")
+        }
+    }
+
+    @MainActor
+    private func uploadAllRecordingsAndFinish() async {
+        guard !isUploadingAll else { return }
+        guard recordings.count == exercises.count else {
+            uploadErrorMessage = "Please complete all selected exercises before uploading."
+            return
+        }
+
+        if !videoUploadsEnabled {
+            NotificationCenter.default.post(name: .assessmentCompleted, object: nil)
+            NotificationCenter.default.post(name: .recordingAccepted, object: nil)
+            presentationMode.wrappedValue.dismiss()
+            return
+        }
+
+        isUploadingAll = true
+        uploadErrorMessage = nil
+        uploadedCount = 0
+
+        do {
+            let uploader = VideoUploadService(supabase: authService.supabaseClient)
+
+            for i in exercises.indices {
+                guard let videoURL = recordings[i] else {
+                    throw NSError(
+                        domain: "PracticePage",
+                        code: 1001,
+                        userInfo: [NSLocalizedDescriptionKey: "Missing recording for exercise \(i + 1)."]
+                    )
+                }
+
+                _ = try await uploader.uploadVideoAndCreateJobForCurrentUser(
+                    videoURL: videoURL,
+                    exerciseName: exercises[i].title
+                )
+                uploadedCount += 1
+            }
+
+            NotificationCenter.default.post(name: .processedVideosUpdated, object: nil)
+            NotificationCenter.default.post(name: .assessmentCompleted, object: nil)
+            NotificationCenter.default.post(name: .recordingAccepted, object: nil)
+            presentationMode.wrappedValue.dismiss()
+        } catch {
+            uploadErrorMessage = error.localizedDescription
+        }
+
+        isUploadingAll = false
     }
 }
 

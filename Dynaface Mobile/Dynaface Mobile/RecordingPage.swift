@@ -25,7 +25,6 @@ struct RecordingPage: View {
             switch phase {
             case .recording:
                 ZStack {
-                    // Main: Camera view
                     VStack(spacing: 0) {
                         CameraRecorderView(exerciseName: exerciseName) { url in
                             DispatchQueue.main.async {
@@ -38,9 +37,7 @@ struct RecordingPage: View {
                         }
                     }
 
-                    // Overlay UI
                     VStack(spacing: 0) {
-                        // Top bar: back button + title
                         HStack {
                             Button(action: {
                                 onFinish?(nil)
@@ -56,12 +53,15 @@ struct RecordingPage: View {
                                 .padding(.leading, 20)
                                 .padding(.vertical, 12)
                             }
+
                             Spacer()
+
                             Text(exerciseName)
                                 .font(.headline)
                                 .foregroundColor(.white)
+
                             Spacer()
-                            // Camera flip button
+
                             if !isRecording {
                                 Button(action: {
                                     NotificationCenter.default.post(name: .flipCamera, object: nil)
@@ -73,7 +73,7 @@ struct RecordingPage: View {
                                         .padding(.trailing, 8)
                                 }
                             }
-                            // Toggle demo video visibility
+
                             Button(action: { showDemoVideo.toggle() }) {
                                 Image(systemName: showDemoVideo ? "pip.fill" : "pip")
                                     .font(.system(size: 18))
@@ -92,7 +92,6 @@ struct RecordingPage: View {
                             }
                         }
 
-                        // PiP demo video (top-right)
                         HStack {
                             Spacer()
                             if showDemoVideo, let videoName = exerciseVideoName {
@@ -137,13 +136,11 @@ struct RecordingPage: View {
                         .tint(.red)
 
                         Button {
-                            DispatchQueue.main.async {
-                                onFinish?(url)
-                                NotificationCenter.default.post(name: .recordingAccepted, object: nil)
-                                presentationMode.wrappedValue.dismiss()
-                            }
+                            onFinish?(url)
+                            NotificationCenter.default.post(name: .recordingAccepted, object: nil)
+                            presentationMode.wrappedValue.dismiss()
                         } label: {
-                            Label("Continue", systemImage: "checkmark.circle.fill")
+                            Label("Save & Continue", systemImage: "checkmark.circle.fill")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
@@ -199,7 +196,6 @@ struct RecordingPage: View {
         }
     }
 
-    // MARK: - Header
     private func header(text: String) -> some View {
         Text(text)
             .font(.title3).fontWeight(.semibold)
@@ -210,10 +206,10 @@ struct RecordingPage: View {
     }
 }
 
-// MARK: - Notification Names
 extension Notification.Name {
     static let recordingAccepted = Notification.Name("recordingAccepted")
     static let assessmentCompleted = Notification.Name("assessmentCompleted")
+    static let processedVideosUpdated = Notification.Name("processedVideosUpdated")
     static let flipCamera = Notification.Name("flipCamera")
     static let recordingStateChanged = Notification.Name("recordingStateChanged")
 }

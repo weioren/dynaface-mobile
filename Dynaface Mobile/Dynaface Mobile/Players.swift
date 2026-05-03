@@ -148,3 +148,62 @@ struct AdaptiveMirroredPlayer: View {
         }
     }
 }
+
+// MARK: - Standard player for processed videos (no mirroring)
+struct PlainAVPlayerControllerView: UIViewControllerRepresentable {
+    let url: URL
+    var loop: Bool = true
+
+    final class Coordinator {
+        var endObserver: Any?
+        var player: AVPlayer?
+
+        deinit {
+            if let endObserver {
+                NotificationCenter.default.removeObserver(endObserver)
+            }
+            player?.pause()
+            player = nil
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIViewController(context: Context) -> AVPlayerViewController {
+        let vc = AVPlayerViewController()
+        vc.showsPlaybackControls = true
+        vc.videoGravity = .resizeAspect
+        configurePlayer(on: vc, coordinator: context.coordinator)
+        return vc
+    }
+
+    func updateUIViewController(_ vc: AVPlayerViewController, context: Context) {
+        if let current = (vc.player?.currentItem?.asset as? AVURLAsset)?.url, current == url { return }
+        configurePlayer(on: vc, coordinator: context.coordinator)
+    }
+
+    private func configurePlayer(on vc: AVPlayerViewController, coordinator: Coordinator) {
+        let item = AVPlayerItem(url: url)
+        let player = AVPlayer(playerItem: item)
+        player.actionAtItemEnd = .none
+        vc.player = player
+        coordinator.player = player
+
+        if loop {
+            if let obs = coordinator.endObserver { NotificationCenter.default.removeObserver(obs) }
+            coordinator.endObserver = NotificationCenter.default.addObserver(
+                forName: .AVPlayerItemDidPlayToEndTime,
+                object: item,
+                queue: .main
+            ) { _ in
+                player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
+                player.play()
+            }
+        }
+
+        DispatchQueue.main.async {
+            player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
+            player.play()
+        }
+    }
+}
