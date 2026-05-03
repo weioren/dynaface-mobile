@@ -12,45 +12,6 @@ struct ProfilePage: View {
     @State private var profileImage: UIImage?
     @State private var showingEditProfile = false
 
-    // MARK: - Menu data model
-    //
-    // 角色相关菜单项。id 用 text 而不是 UUID(),保证每次 render 同一项 ID 稳定,
-    // ForEach 不会把所有行当新元素重建。
-    private struct MenuRow: Identifiable {
-        var id: String { text }
-        let text: String
-        let action: () -> Void
-    }
-
-    /// 按角色返回菜单项。Sign out 单独渲染(红色样式),不在这里。
-    private func menuItems(for accountType: AccountType) -> [MenuRow] {
-        let edit     = MenuRow(text: "Edit profile") { showingEditProfile = true }
-        let faq      = MenuRow(text: "FAQ") { /* TODO: FAQ */ }
-        let upcoming = MenuRow(text: "Upcoming appointments") { /* stub — button only */ }
-
-        switch accountType {
-        case .patient:
-            return [
-                edit,
-                MenuRow(text: "My progress")         { /* TODO */ },
-                MenuRow(text: "My past evaluations") { /* TODO */ },
-                upcoming,
-                faq,
-            ]
-        case .clinician:
-            return [
-                edit,
-                MenuRow(text: "My patients") {
-                    // Dashboard 是同一个实例 — UserDefaults 路径只走 onAppear,
-                    // 这里走 NotificationCenter 走通。
-                    NotificationCenter.default.post(name: .navigateToPatientsTab, object: nil)
-                },
-                upcoming,
-                faq,
-            ]
-        }
-    }
-
     var body: some View {
         GeometryReader { geometry in
             let widthScale = geometry.size.width / baseWidth
@@ -93,15 +54,11 @@ struct ProfilePage: View {
                         }
                     }
 
-                    // Username + role display
+                    // Username display
                     if case .signedIn(let profile) = authService.authState {
                         Text(profile.username)
                             .font(.system(size: 20 * widthScale, weight: .bold))
                             .foregroundColor(.black)
-
-                        Text(profile.accountType.displayName)
-                            .font(.system(size: 14 * widthScale, weight: .medium))
-                            .foregroundColor(.gray)
                     }
                 }
                 .padding(.vertical, 20 * heightScale)
@@ -110,7 +67,7 @@ struct ProfilePage: View {
                 .background(Color(red: 30/255, green: 75/255, blue: 162/255).opacity(0.18))
                 .cornerRadius(17 * widthScale)
 
-                // Menu items — 按角色渲染,Sign out 单独
+                // Menu items
                 VStack(spacing: 20 * heightScale) {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
@@ -223,22 +180,6 @@ struct EditProfilePage: View {
     @State private var symptomsArea: String = ""
     @State private var diagnosis: String = ""
     @State private var isLoading: Bool = false
-    @State private var errorMessage: String?
-
-    /// Username 客户端校验 — 非空 + 长度 ≤ 32(无全局唯一约束)。
-    private var trimmedUsername: String {
-        username.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-    private var isUsernameValid: Bool {
-        !trimmedUsername.isEmpty && trimmedUsername.count <= 32
-    }
-    /// Clinician 看不到 symptom / diagnosis 字段。
-    private var isClinician: Bool {
-        if case .signedIn(let profile) = authService.authState {
-            return profile.accountType == .clinician
-        }
-        return false
-    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -248,51 +189,36 @@ struct EditProfilePage: View {
             NavigationView {
                 ScrollView {
                     VStack(spacing: 20 * heightScale) {
-                        // Form fields — Email 永远 disabled,Username 双角色都可改,
-                        // Symptom/Diagnosis 仅 patient 可见且可改。
+                        // Form fields
                         VStack(spacing: 15 * heightScale) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                FormField(title: "Email", text: $email, widthScale: widthScale, isDisabled: true)
-                                Text("Contact support to change email.")
-                                    .font(.system(size: 12 * widthScale))
-                                    .foregroundColor(.gray)
-                            }
-                            FormField(title: "Username", text: $username, widthScale: widthScale, isDisabled: false)
-                            if !isClinician {
-                                FormField(title: "Symptoms Location", text: $symptomsLocation, widthScale: widthScale, isDisabled: false)
-                                FormField(title: "Symptoms Area", text: $symptomsArea, widthScale: widthScale, isDisabled: false)
-                                FormField(title: "Diagnosis", text: $diagnosis, widthScale: widthScale, isDisabled: false)
-                            }
+                            FormField(title: "Email", text: $email, widthScale: widthScale, isDisabled: true)
+                            FormField(title: "Username", text: $username, widthScale: widthScale, isDisabled: true)
+                            FormField(title: "Symptoms Location", text: $symptomsLocation, widthScale: widthScale, isDisabled: true)
+                            FormField(title: "Symptoms Area", text: $symptomsArea, widthScale: widthScale, isDisabled: true)
+                            FormField(title: "Diagnosis", text: $diagnosis, widthScale: widthScale, isDisabled: true)
                         }
 
-                        // Save button — isLoading 时显示 spinner; 校验失败时变灰禁用
+                        // Save button
                         Button(action: {
-                            Task { await saveProfile() }
-                        }) {
-                            Group {
-                                if isLoading {
-                                    ProgressView().tint(.white)
-                                } else {
-                                    Text("Save Changes")
-                                        .font(.system(size: 18 * widthScale))
-                                        .foregroundColor(.white)
-                                }
+                            // Save profile changes
+                            Task {
+                                await saveProfile()
                             }
-                            .frame(height: 44 * heightScale)
-                            .frame(maxWidth: .infinity)
-                            .background(
-                                isUsernameValid
-                                    ? Color(red: 0.12, green: 0.29, blue: 0.64)
-                                    : Color.gray
-                            )
-                            .cornerRadius(49 * widthScale)
-                            .shadow(
-                                color: Color.black.opacity(0.25),
-                                radius: 4 * widthScale,
-                                x: 0, y: 4 * heightScale
-                            )
+                        }) {
+                            Text("Save Changes")
+                                .font(.system(size: 18 * widthScale))
+                                .foregroundColor(.white)
+                                .frame(height: 44 * heightScale)
+                                .frame(maxWidth: .infinity)
+                                .background(Color(red: 0.12, green: 0.29, blue: 0.64))
+                                .cornerRadius(49 * widthScale)
+                                .shadow(
+                                    color: Color.black.opacity(0.25),
+                                    radius: 4 * widthScale,
+                                    x: 0, y: 4 * heightScale
+                                )
                         }
-                        .disabled(isLoading || !isUsernameValid)
+                        .disabled(isLoading)
                         .padding(.top, 20 * heightScale)
 
                         Spacer()
@@ -309,18 +235,6 @@ struct EditProfilePage: View {
                             dismiss()
                         }
                     }
-                }
-                .alert(
-                    "Couldn't save",
-                    isPresented: Binding(
-                        get: { errorMessage != nil },
-                        set: { if !$0 { errorMessage = nil } }
-                    ),
-                    presenting: errorMessage
-                ) { _ in
-                    Button("OK", role: .cancel) {}
-                } message: { msg in
-                    Text(msg)
                 }
             }
         }
@@ -340,25 +254,15 @@ struct EditProfilePage: View {
     }
 
     private func saveProfile() async {
-        guard isUsernameValid else { return }
+        // Note: For now this is a placeholder. In a real app, you'd want to
+        // update the profile data in Supabase and refresh the auth state
         isLoading = true
-        defer { isLoading = false }
 
-        // Build a role-scoped patch — clinician 只更新 username,patient 把
-        // symptom + diagnosis 一起带上(空串也会写过去,清空字段是可行的)。
-        var patch = AuthenticationService.ProfilePatch(username: trimmedUsername)
-        if !isClinician {
-            patch.symptoms_location = symptomsLocation
-            patch.symptoms_area     = symptomsArea
-            patch.diagnosis         = diagnosis
-        }
+        // Simulate API call
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
 
-        do {
-            try await authService.updateProfile(patch: patch)
-            dismiss()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        isLoading = false
+        dismiss()
     }
 }
 

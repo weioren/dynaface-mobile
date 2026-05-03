@@ -27,7 +27,6 @@ class FaceGuideOverlayView: UIView {
 
     private(set) var isFaceAligned: Bool = false
     private var isDismissed: Bool = false
-    private var lightingMessage: String? = nil
     var onFaceAlignmentChanged: ((Bool) -> Void)?
 
     private let feedbackLabel: UILabel = {
@@ -91,26 +90,13 @@ class FaceGuideOverlayView: UIView {
             ovalLayer.strokeColor = UIColor.systemGreen.cgColor
             ovalLayer.lineDashPattern = nil // solid line
             ovalLayer.lineWidth = 3.0
+            feedbackLabel.text = nil
         } else {
             ovalLayer.strokeColor = UIColor.white.withAlphaComponent(0.6).cgColor
             ovalLayer.lineDashPattern = [8, 6]
             ovalLayer.lineWidth = 2.5
-        }
-        refreshFeedbackText()
-    }
-
-    /// Prioritized feedback:
-    /// 1. Face not aligned → "Center your face"
-    /// 2. Face aligned but lighting flagged → lighting message ("Too dark"/"Too bright")
-    /// 3. Both OK → label cleared
-    private func refreshFeedbackText() {
-        feedbackLabel.textColor = .white.withAlphaComponent(0.8)
-        if !isFaceAligned {
             feedbackLabel.text = "Center your face"
-        } else if let message = lightingMessage {
-            feedbackLabel.text = message
-        } else {
-            feedbackLabel.text = nil
+            feedbackLabel.textColor = .white.withAlphaComponent(0.8)
         }
     }
 
@@ -122,17 +108,6 @@ class FaceGuideOverlayView: UIView {
             isFaceAligned = faceInOval
             updateOvalAppearance(aligned: faceInOval)
             onFaceAlignmentChanged?(faceInOval)
-        }
-    }
-
-    /// Called by the controller after each lighting evaluation. Pass `nil`
-    /// when lighting is OK, or a short message ("Too dark" / "Too bright")
-    /// when the gate should block recording.
-    func updateLighting(message: String?) {
-        guard !isDismissed else { return }
-        if message != lightingMessage {
-            lightingMessage = message
-            refreshFeedbackText()
         }
     }
 
@@ -169,29 +144,6 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
     private var isProcessingFrame = false
     private var faceGuideCompleted = false
 
-    // Recording readiness gate — record button enabled only when face
-    // is aligned AND lighting is OK. State updated from captureOutput.
-    private var isFaceAligned = false
-    private var lightingState: LightingState = .ok
-
-    private enum LightingState {
-        case ok, tooDark, tooBright
-
-        var feedbackMessage: String? {
-            switch self {
-            case .ok:        return nil
-            case .tooDark:   return "Too dark"
-            case .tooBright: return "Too bright"
-            }
-        }
-    }
-
-    // Hysteresis on average Y in 0..255 so the gate doesn't flicker.
-    private let lightingDarkLow:    Double = 45.0   // .ok      → .tooDark   when avg < 45
-    private let lightingDarkHigh:   Double = 55.0   // .tooDark → .ok        when avg > 55
-    private let lightingBrightHigh: Double = 225.0  // .ok      → .tooBright when avg > 225
-    private let lightingBrightLow:  Double = 215.0  // .tooBright → .ok      when avg < 215
-
     override func viewDidLoad() {
         super.viewDidLoad()
 
@@ -220,8 +172,13 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
 
         faceGuideOverlay.onFaceAlignmentChanged = { [weak self] aligned in
             guard let self = self else { return }
-            self.isFaceAligned = aligned
-            self.updateRecordingReadiness()
+            if aligned {
+                self.recordButton.isEnabled = true
+                self.recordButton.backgroundColor = UIColor(red: 0.12, green: 0.29, blue: 0.64, alpha: 1.0)
+            } else {
+                self.recordButton.isEnabled = false
+                self.recordButton.backgroundColor = UIColor.gray
+            }
         }
 
         view.bringSubviewToFront(faceGuideOverlay)
@@ -279,113 +236,7 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
         let orientation: CGImagePropertyOrientation = (currentCameraPosition == .front) ? .leftMirrored : .right
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: orientation, options: [:])
         try? handler.perform([request])
-
-        // Lighting gate — cheap pass over the same pixel buffer (32x32 sample
-        // grid). Computed on the data queue, applied on main so the state
-        // (and downstream UI) stays single-threaded.
-        let avgLuma = computeAverageLuminance(pixelBuffer: pixelBuffer)
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self, !self.faceGuideCompleted else { return }
-            let newState = self.evaluateLighting(avgLuma: avgLuma)
-            if newState != self.lightingState {
-                self.lightingState = newState
-                self.faceGuideOverlay?.updateLighting(message: newState.feedbackMessage)
-                self.updateRecordingReadiness()
-            }
-        }
-
         isProcessingFrame = false
-    }
-
-    // MARK: - Recording readiness helpers
-
-    /// Combined gate. Skipped while the gate phase is over (recording started
-    /// or back camera in use — `faceGuideCompleted` covers both).
-    private func updateRecordingReadiness() {
-        guard !faceGuideCompleted else { return }
-        let ready = isFaceAligned && (lightingState == .ok)
-        recordButton.isEnabled = ready
-        recordButton.backgroundColor = ready
-            ? UIColor(red: 0.12, green: 0.29, blue: 0.64, alpha: 1.0)
-            : UIColor.gray
-    }
-
-    /// Apply hysteresis around the dark/bright thresholds so a borderline
-    /// frame doesn't flicker the state every other capture.
-    private func evaluateLighting(avgLuma: Double) -> LightingState {
-        switch lightingState {
-        case .ok:
-            if avgLuma < lightingDarkLow    { return .tooDark }
-            if avgLuma > lightingBrightHigh { return .tooBright }
-            return .ok
-        case .tooDark:
-            if avgLuma > lightingDarkHigh { return .ok }
-            return .tooDark
-        case .tooBright:
-            if avgLuma < lightingBrightLow { return .ok }
-            return .tooBright
-        }
-    }
-
-    /// 32x32 grid average over the pixel buffer's luminance. Handles the two
-    /// most common iOS capture formats: bi-planar YUV (uses Y plane directly)
-    /// and BGRA (Rec. 601 luminance from RGB).
-    private func computeAverageLuminance(pixelBuffer: CVPixelBuffer) -> Double {
-        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
-
-        let width  = CVPixelBufferGetWidth(pixelBuffer)
-        let height = CVPixelBufferGetHeight(pixelBuffer)
-        let format = CVPixelBufferGetPixelFormatType(pixelBuffer)
-
-        let samples = 32
-        let xStride = max(1, width  / samples)
-        let yStride = max(1, height / samples)
-
-        if format == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange ||
-           format == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange {
-            // YUV: Y plane is plane 0; values map directly to luminance.
-            guard let yPlane = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0) else { return 128 }
-            let yBytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
-            let yPtr = yPlane.assumingMemoryBound(to: UInt8.self)
-
-            var total = 0
-            var count = 0
-            var y = 0
-            while y < height {
-                var x = 0
-                while x < width {
-                    total += Int(yPtr[y * yBytesPerRow + x])
-                    count += 1
-                    x += xStride
-                }
-                y += yStride
-            }
-            return count > 0 ? Double(total) / Double(count) : 128
-        } else {
-            // BGRA fallback. iOS may deliver BGRA when video settings request it.
-            guard let base = CVPixelBufferGetBaseAddress(pixelBuffer) else { return 128 }
-            let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
-            let ptr = base.assumingMemoryBound(to: UInt8.self)
-
-            var total = 0.0
-            var count = 0
-            var y = 0
-            while y < height {
-                var x = 0
-                while x < width {
-                    let pixel = ptr.advanced(by: y * bytesPerRow + x * 4)
-                    let b = Double(pixel[0])
-                    let g = Double(pixel[1])
-                    let r = Double(pixel[2])
-                    total += 0.299 * r + 0.587 * g + 0.114 * b
-                    count += 1
-                    x += xStride
-                }
-                y += yStride
-            }
-            return count > 0 ? total / Double(count) : 128
-        }
     }
 
     // MARK: - Simulator Mode
@@ -648,9 +499,6 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
         if newPosition == .front {
             faceGuideOverlay?.isHidden = false
             faceGuideOverlay?.updateFaceAlignment(faceInOval: false) // Reset visual state
-            faceGuideOverlay?.updateLighting(message: nil)            // Clear stale lighting hint
-            isFaceAligned = false
-            lightingState = .ok                                       // First front-camera frame will overwrite
             faceGuideCompleted = false
             recordButton.isEnabled = false
             recordButton.backgroundColor = UIColor.gray
