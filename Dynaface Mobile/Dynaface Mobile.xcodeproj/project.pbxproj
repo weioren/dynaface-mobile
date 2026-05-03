@@ -547,7 +547,7 @@
 				DEVELOPMENT_TEAM = LL25GT5UY4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Dynaface Mobile";
+				INFOPLIST_KEY_CFBundleDisplayName = Dynaface;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.medical";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to record facial exercise videos.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -582,7 +582,7 @@
 				DEVELOPMENT_TEAM = LL25GT5UY4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Dynaface Mobile";
+				INFOPLIST_KEY_CFBundleDisplayName = Dynaface;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.medical";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to record facial exercise videos.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
