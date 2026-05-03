@@ -20,10 +20,10 @@ struct Dashboard: View {
                     }
                     .tag(1)
 
-                UploadVideoPage()
+                ProcessedVideosPage()
                     .tabItem {
-                        Image(systemName: "square.and.arrow.up")
-                        Text("Upload")
+                        Image(systemName: "sparkles.tv")
+                        Text("Processed")
                     }
                     .tag(2)
 
@@ -34,11 +34,9 @@ struct Dashboard: View {
                     }
                     .tag(3)
             }
-            .onReceive(NotificationCenter.default.publisher(for: .assessmentCompleted)) { _ in
-                withAnimation { selectedTab = 1 }
-            }
             .navigationBarHidden(true)
         }
+        .navigationViewStyle(.stack)
         .onAppear {
             // Check if we should navigate to a specific tab
             if let tabToSelect = UserDefaults.standard.object(forKey: "selectedTab") as? Int {

@@ -1,5 +1,6 @@
 import SwiftUI
 import AVKit
+import Supabase
 
 // MARK: - ExerciseHistoryPage (sortable/grouped; collapsible sections)
 struct ExerciseHistoryPage: View {
@@ -357,13 +358,328 @@ struct HistoryDetailView: View {
             }
             .padding(.horizontal)
 
-            AdaptiveMirroredPlayer(url: videoURL, heightFraction: 0.96)
+            PlainAVPlayerControllerView(url: videoURL)
                 .background(Color.white)
 
             Spacer(minLength: 8)
         }
         .navigationBarTitleDisplayMode(.inline)
         .background(Color.white.edgesIgnoringSafeArea(.all))
+    }
+}
+
+// MARK: - Processed Videos (Supabase results)
+struct ProcessedVideosPage: View {
+    private let resultsBucket = "results"
+
+    @EnvironmentObject private var authService: AuthenticationService
+    @State private var jobs: [ProcessedJob] = []
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @State private var activeDownloadJobId: UUID?
+    @State private var selectedVideo: ProcessedVideoPlayback?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Processed Videos")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                Spacer()
+                Button {
+                    Task { await loadProcessedJobs() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .disabled(isLoading)
+            }
+
+            if isLoading {
+                VStack(spacing: 8) {
+                    ProgressView()
+                    Text("Loading processed videos...")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+            }
+
+            if !isLoading && jobs.isEmpty {
+                Text("No processed videos yet. Complete and upload an assessment to see videos here.")
+                    .foregroundColor(.secondary)
+                    .padding(.top, 8)
+            }
+
+            List {
+                ForEach(groupedByExercise, id: \.exerciseName) { section in
+                    Section {
+                        ForEach(section.jobs) { job in
+                            Button {
+                                Task { await openProcessedVideo(job) }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack {
+                                        Text(job.displayDate)
+                                            .font(.headline)
+                                            .foregroundColor(.primary)
+                                        Spacer()
+                                        if activeDownloadJobId == job.id {
+                                            ProgressView()
+                                        }
+                                    }
+                                    Text(job.fileName)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 4)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    } header: {
+                        HStack {
+                            Text(section.exerciseName)
+                            Spacer()
+                            Text("\(section.jobs.count)")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .refreshable {
+                await loadProcessedJobs()
+            }
+        }
+        .padding()
+        .task {
+            await loadProcessedJobs()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .processedVideosUpdated)) { _ in
+            Task { await loadProcessedJobs() }
+        }
+        .alert("Error", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {
+                errorMessage = nil
+            }
+        } message: {
+            Text(errorMessage ?? "Unknown error")
+        }
+        .sheet(item: $selectedVideo) { video in
+            HistoryDetailView(
+                videoURL: video.playbackURL,
+                exerciseTitle: video.exerciseTitle,
+                recordingDate: video.recordingDate
+            )
+        }
+    }
+
+    private var groupedByExercise: [ProcessedExerciseSection] {
+        let grouped = Dictionary(grouping: jobs, by: \.exerciseName)
+        return grouped.keys
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            .map { name in
+                let sectionJobs = (grouped[name] ?? []).sorted { $0.createdAt > $1.createdAt }
+                return ProcessedExerciseSection(exerciseName: name, jobs: sectionJobs)
+            }
+    }
+
+    @MainActor
+    private func loadProcessedJobs() async {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            let rows: [ProcessingJobRow] = try await authService.supabaseClient
+                .from("processing_jobs")
+                .select("*")
+                .eq("status", value: "completed")
+                .execute()
+                .value
+
+            jobs = rows.compactMap { row in
+                let outputPath = row.output_video_path ?? row.output_csv_path
+                guard let outputPath, !outputPath.isEmpty else {
+                    return nil
+                }
+                let created = parseISODate(row.created_at) ?? .distantPast
+                return ProcessedJob(
+                    id: row.id,
+                    exerciseName: row.exercise_name?.isEmpty == false ? row.exercise_name! : "Unknown Exercise",
+                    outputPath: outputPath,
+                    userId: row.user_id,
+                    createdAt: created
+                )
+            }
+            .sorted { $0.createdAt > $1.createdAt }
+        } catch is CancellationError {
+            // SwiftUI task cancellation is expected during refresh/view transitions.
+        } catch {
+            if isCancellationLike(error) {
+                return
+            }
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func openProcessedVideo(_ job: ProcessedJob) async {
+        activeDownloadJobId = job.id
+        defer { activeDownloadJobId = nil }
+
+        do {
+            let playbackURL = try await signedPlayableURL(for: job)
+            selectedVideo = ProcessedVideoPlayback(
+                id: job.id,
+                playbackURL: playbackURL,
+                exerciseTitle: job.exerciseName,
+                recordingDate: job.displayDate
+            )
+        } catch is CancellationError {
+            // Ignore task cancellation (e.g., user taps quickly while list refreshes).
+        } catch {
+            if isCancellationLike(error) {
+                return
+            }
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func signedPlayableURL(for job: ProcessedJob) async throws -> URL {
+        let candidates = resultPathCandidates(from: job.outputPath, userId: job.userId, jobId: job.id)
+        var lastError: Error?
+
+        for path in candidates {
+            do {
+                let signedURL = try await authService.supabaseClient.storage
+                    .from(resultsBucket)
+                    .createSignedURL(path: path, expiresIn: 3600)
+                return signedURL
+            } catch {
+                lastError = error
+                continue
+            }
+        }
+
+        throw lastError ?? NSError(
+            domain: "ProcessedVideos",
+            code: 404,
+            userInfo: [NSLocalizedDescriptionKey: "Processed video object not found in storage."]
+        )
+    }
+
+    private func normalizeResultObjectPath(_ path: String) -> String {
+        let prefix = "\(resultsBucket)/"
+        if path.hasPrefix(prefix) {
+            return String(path.dropFirst(prefix.count))
+        }
+        return path
+    }
+
+    private func resultPathCandidates(from rawPath: String, userId: UUID?, jobId: UUID) -> [String] {
+        let normalized = normalizeResultObjectPath(rawPath)
+        var candidates: [String] = [normalized]
+
+        if normalized.hasSuffix(".mov") {
+            candidates.append(String(normalized.dropLast(4)) + ".mp4")
+        } else if normalized.hasSuffix(".mp4") {
+            candidates.append(String(normalized.dropLast(4)) + ".mov")
+        } else if normalized.hasSuffix(".csv") {
+            let base = String(normalized.dropLast(4))
+            candidates.append(base + ".mp4")
+            candidates.append(base + ".mov")
+        }
+
+        // Common worker output convention fallback: <user>/<job>/annotated.mp4
+        let directory = (normalized as NSString).deletingLastPathComponent
+        if !directory.isEmpty {
+            candidates.append("\(directory)/annotated.mp4")
+            candidates.append("\(directory)/annotated.mov")
+        }
+
+        // Canonical worker fallback path
+        if let userId {
+            candidates.append("\(userId.uuidString)/\(jobId.uuidString)/annotated.mp4")
+            candidates.append("\(userId.uuidString)/\(jobId.uuidString)/annotated.mov")
+        }
+
+        // De-duplicate while preserving order
+        var seen = Set<String>()
+        var deduped: [String] = []
+        for c in candidates where !c.isEmpty {
+            if !seen.contains(c) {
+                seen.insert(c)
+                deduped.append(c)
+            }
+        }
+        return deduped
+    }
+
+    private func isCancellationLike(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled {
+            return true
+        }
+
+        let text = error.localizedDescription.lowercased()
+        return text.contains("cancelled") || text.contains("canceled")
+    }
+
+    private func parseISODate(_ raw: String?) -> Date? {
+        guard let raw else { return nil }
+        let withFractional = ISO8601DateFormatter()
+        withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        if let d = withFractional.date(from: raw) {
+            return d
+        }
+        return ISO8601DateFormatter().date(from: raw)
+    }
+}
+
+private struct ProcessedExerciseSection {
+    let exerciseName: String
+    let jobs: [ProcessedJob]
+}
+
+private struct ProcessedVideoPlayback: Identifiable {
+    let id: UUID
+    let playbackURL: URL
+    let exerciseTitle: String
+    let recordingDate: String
+}
+
+private struct ProcessingJobRow: Decodable {
+    let id: UUID
+    let user_id: UUID?
+    let exercise_name: String?
+    let output_video_path: String?
+    let output_csv_path: String?
+    let created_at: String?
+    let status: String?
+}
+
+private struct ProcessedJob: Identifiable {
+    let id: UUID
+    let exerciseName: String
+    let outputPath: String
+    let userId: UUID?
+    let createdAt: Date
+
+    var fileName: String {
+        URL(fileURLWithPath: outputPath).lastPathComponent
+    }
+
+    var displayDate: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, yyyy 'at' h:mm a"
+        return formatter.string(from: createdAt)
     }
 }
 

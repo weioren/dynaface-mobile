@@ -5,14 +5,31 @@ This is a mobile app extension of Dynaface. The computer version and accompanyin
 # Phase 1: Start Assessment & Exercise Modules
 **Branch:** `feature/start-assessment`
 
-### 1. Start Assessment — Quick Start Modules
 
-- Added **Quick Start** section with one-tap module buttons:
-  - **Full Assessment (10)** — all exercises
-  - **Eye Movements (4)** — Eyebrow Raise, Brow Furrow, Strong Eye Closure, Weak Eye Closure
-  - **Smile Movements (4)** — Full Smile, Half Smile, Lip Pucker, Lip Purse
-- Layout reserves space for future **Emotions** module (pending demo videos)
+# Next Steps
+1. Call ```VideoUploadService.swfit``` after the user presses Accept
+```
+Task {
+        do {
+            let uploadService = VideoUploadService()
 
+<<<<<<< HEAD
+            // If user is already signed in and service can read current user
+            let job = try await uploadService.uploadVideoAndCreateJobForCurrentUser(
+                videoURL: acceptedVideoURL,
+                exerciseName: "FullSmile" // replace with selected exercise
+            )
+
+            print("Queued job: \(job.jobId)")
+            print("Input path: \(job.inputVideoPath)")
+        } catch {
+            print("Failed to upload/queue video: \(error)")
+        }
+    }
+```
+2. Ensure you add, SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY as environment variables on server machine running the worker file
+3. Run worker file
+=======
 ### 2. Tutorial Page with Text & Video Demo
 
 - Each exercise displays instruction text and a bundled demo video
@@ -199,3 +216,4 @@ This is a mobile app extension of Dynaface. The computer version and accompanyin
 - **Emotions module** — requires 7 new demo videos and exercise definitions
 - **Video upload to Supabase** — integrate Alex's `VideoUploadService.swift` into app
 - **Real device testing** — requires Apple Developer Team access
+>>>>>>> origin/main

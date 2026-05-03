@@ -21,6 +21,7 @@
 		E42C44BC26274304A39B27DF /* UploadVideoPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FAB1D2736A94FEE8B6472A1 /* UploadVideoPage.swift */; };
 		8655019BF6B04E99A99ADD9F /* RecordingFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7724C311C54B4404BC726EDC /* RecordingFiles.swift */; };
 		DB533B052D560665003BFD1C /* HomePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB533B042D560661003BFD1C /* HomePage.swift */; };
+		B7F1A0022F00000100000001 /* VideoUploadService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7F1A0012F00000100000001 /* VideoUploadService.swift */; };
 		DB5F94972EB31ABF00AA3301 /* HalfSmile.MOV in Resources */ = {isa = PBXBuildFile; fileRef = DB5F94962EB31ABF00AA3301 /* HalfSmile.MOV */; };
 		DB5F94982EB31ABF00AA3301 /* FullSmile.MOV in Resources */ = {isa = PBXBuildFile; fileRef = DB5F94952EB31ABF00AA3301 /* FullSmile.MOV */; };
 		DB6164952E5FAE9E008DD0B7 /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = DB6164942E5FAE9E008DD0B7 /* Auth */; };
@@ -81,6 +82,7 @@
 		0FAB1D2736A94FEE8B6472A1 /* UploadVideoPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadVideoPage.swift; sourceTree = "<group>"; };
 		7724C311C54B4404BC726EDC /* RecordingFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingFiles.swift; sourceTree = "<group>"; };
 		DB533B042D560661003BFD1C /* HomePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomePage.swift; sourceTree = "<group>"; };
+		B7F1A0012F00000100000001 /* VideoUploadService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoUploadService.swift; sourceTree = "<group>"; };
 		DB5F94952EB31ABF00AA3301 /* FullSmile.MOV */ = {isa = PBXFileReference; lastKnownFileType = video.quicktime; path = FullSmile.MOV; sourceTree = "<group>"; };
 		DB5F94962EB31ABF00AA3301 /* HalfSmile.MOV */ = {isa = PBXFileReference; lastKnownFileType = video.quicktime; path = HalfSmile.MOV; sourceTree = "<group>"; };
 		DB6164A02E5FAEE4008DD0B7 /* SupabaseConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseConfig.swift; sourceTree = "<group>"; };
@@ -188,6 +190,7 @@
 				DB533AFE2D560601003BFD1C /* ExercisesPage.swift */,
 				DB533AFC2D560267003BFD1C /* RecordingPage.swift */,
 				DB533AFA2D560249003BFD1C /* CameraRecorderView.swift */,
+				B7F1A0012F00000100000001 /* VideoUploadService.swift */,
 				DBAB9FC02B59B8EF007B2B80 /* DynafaceMobileApp.swift */,
 				DBAB9FC22B59B8EF007B2B80 /* SignUp.swift */,
 				DB2159BF2C90E7EF00DD84DD /* SignIn.swift */,
@@ -384,6 +387,7 @@
 				DB533AFD2D56026E003BFD1C /* RecordingPage.swift in Sources */,
 				A1D7E2762E4849EA0030ABFA /* PracticePage.swift in Sources */,
 				DB6334672B7C914200601964 /* Dashboard.swift in Sources */,
+				B7F1A0022F00000100000001 /* VideoUploadService.swift in Sources */,
 				DBAB9FC12B59B8EF007B2B80 /* DynafaceMobileApp.swift in Sources */,
 				DB2159BE2C90E7D100DD84DD /* Authentication.swift in Sources */,
 				DB533AFB2D560256003BFD1C /* CameraRecorderView.swift in Sources */,
