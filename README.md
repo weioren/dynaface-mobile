@@ -141,17 +141,62 @@ Task {
 - SwiftUI ↔ UIKit communication via NotificationCenter (`.flipCamera`, `.recordingStateChanged`)
 - Proper observer cleanup in `viewWillDisappear` to prevent memory leaks
 
+---
+
+# Phase 5: Auto-Nav to History, Auto-Expand Fix, Player Leak Fix & Upload Video Tab
+**Branch:** `feature/ui-changes-3`
+
+### 1. Auto-Navigate to History After Assessment
+
+- After tapping **Finish Assessment**, the app auto-switches to the History tab (was returning to Exercises)
+- Implemented via `.onReceive(.assessmentCompleted)` on Dashboard's `TabView` with `withAnimation { selectedTab = 1 }`
+- Existing notification flow unchanged — `PracticePage` posts `.assessmentCompleted` then dismisses
+
+### 2. History Page Auto-Expand for Newly Added Sections
+
+- **Bug**: after recording, the new "Today" section stayed collapsed if any other section was already expanded — videos appeared "hidden" until the user tapped to expand
+- `reloadSections()` now snapshots previous section IDs before overwriting, computes `newIds.subtracting(previousIds)`, and `formUnion`s the diff into `expandedDays` / `expandedExercises`
+- First-load behavior preserved (auto-expand only the top section)
+- Respects user's explicit collapse — if a section already existed and the user collapsed it, it stays collapsed across reloads
+
+### 3. MirroredAVPlayerControllerView Dismantle Fix
+
+- **Bug**: video and audio kept playing after popping `HistoryDetailView` or collapsing the review accordion. Coordinator's `deinit` was eventually called, but ARC release timing combined with the loop observer closure and `AVPlayerViewController.player` both retaining the player meant playback continued meanwhile
+- Implemented `static dismantleUIViewController(_:coordinator:)` to immediately remove the loop observer, pause `vc.player`, and nil out all player references. SwiftUI calls this synchronously when the representable leaves the hierarchy
+- Covers all callers: `HistoryDetailView`, `PracticePage` review accordion, `RecordingPage` review phase
+
+### 4. Upload Video Tab (4th Tab)
+
+- New **Upload** tab using SwiftUI-native `PhotosPicker` (matches existing pattern in `ProfilePage`)
+- State machine `UploadPhase`: `empty → loading → previewing → readyToSave → saving → savedFlash`
+- Custom `Movie: Transferable` (`FileRepresentation` with `contentType: .movie`) streams a video URL into a temp file — no `Data` buffering for large videos
+- After picking, mirrored preview via existing `MirroredAVPlayerControllerView`
+- Sheet-based exercise selector lists all 10 exercises from `allExercises` (`ExercisesPage.swift`)
+- Save copies the file to Documents as `<exercise.title>_<N>.mov` — same convention as native recordings
+- Posts `.recordingAccepted` after save → `ExerciseHistoryPage` and `HomePage` (streak) auto-refresh, no new plumbing
+- 2-second success banner, returns to empty state for consecutive uploads
+- Profile tab moves from tag 2 to tag 3; Upload occupies tag 2
+
+### 5. Filename Helper Refactor
+
+- Extracted `getNextFileNumber(for:)` from `CameraRecorderView` into module-level `RecordingFiles.swift`
+- Added `saveImportedVideo(from:exerciseTitle:)` (used by Upload) and `nextFileNumber(for:in:)` (shared)
+- Native recording and Upload now share one source of truth for filename numbering — both write `<exercise.title>_<N>.mov` to Documents
+
+---
+
 ## Files Modified
 
-| File                       | Phase 1 | Phase 2 | Phase 3 | Phase 4 |
-| -------------------------- | ------- | ------- | ------- | ------- |
-| `PracticePage.swift`       | Progress bar, post-completion nav | Video looping, StepProgressBar, PiPDemoPlayer, back logic | — | Review page, phase state machine, recordings dict, accordion video |
-| `RecordingPage.swift`      | Retake / Save & Continue labels | Single-screen with PiP, back button, brand colors | — | Continue rename, flip camera button, recording state observer |
-| `ExercisesPage.swift`      | Modules, Quick Start buttons | Reset on assessment completion | — | — |
-| `CameraRecorderView.swift` | Simulator mode toggle | Brand blue button color | Face guide oval, Vision face detection | Camera flip, per-camera orientation, notification-driven flip |
-| `ExerciseHistoryPage.swift`| — | — | Removed nested NavigationView | — |
-| `Dashboard.swift`          | — | — | Removed Home tab | — |
-| `DynafaceMobileApp.swift`  | Auth skip toggle | — | — | — |
+| File                       | Phase 1 | Phase 2 | Phase 3 | Phase 4 | Phase 5 |
+| -------------------------- | ------- | ------- | ------- | ------- | ------- |
+| `PracticePage.swift`       | Progress bar, post-completion nav | Video looping, StepProgressBar, PiPDemoPlayer, back logic | — | Review page, phase state machine, recordings dict, accordion video | — |
+| `RecordingPage.swift`      | Retake / Save & Continue labels | Single-screen with PiP, back button, brand colors | — | Continue rename, flip camera button, recording state observer | — |
+| `ExercisesPage.swift`      | Modules, Quick Start buttons | Reset on assessment completion | — | — | — |
+| `CameraRecorderView.swift` | Simulator mode toggle | Brand blue button color | Face guide oval, Vision face detection | Camera flip, per-camera orientation, notification-driven flip | Use shared `RecordingFiles` helper for filename numbering |
+| `ExerciseHistoryPage.swift`| — | — | Removed nested NavigationView | — | Auto-expand newly added sections (snapshot/diff in `reloadSections`) |
+| `Dashboard.swift`          | — | — | Removed Home tab | — | Auto-nav to History on `.assessmentCompleted`; new Upload tab at tag 2 |
+| `Players.swift`            | — | — | — | — | `dismantleUIViewController` to stop playback on view removal |
+| `DynafaceMobileApp.swift`  | Auth skip toggle | — | — | — | — |
 
 ## New Components
 
@@ -161,6 +206,10 @@ Task {
 | `PiPDemoPlayer` | `PracticePage.swift` | Fill-frame, no-black-bar, muted looping video player |
 | `FaceGuideOverlayView` | `CameraRecorderView.swift` | CAShapeLayer oval with dashed/solid states and alignment callback |
 | `PracticePhase` (enum) | `PracticePage.swift` | Three-state machine (exercising / review / rerecording) |
+| `UploadVideoPage` | `UploadVideoPage.swift` | New 4th tab — Photos import + exercise selection + save flow |
+| `UploadPhase` (enum) | `UploadVideoPage.swift` | State machine for upload (`empty → previewing → readyToSave → saving → savedFlash`) |
+| `Movie` (Transferable) | `UploadVideoPage.swift` | `FileRepresentation` bridge from `PhotosPickerItem` to a temp video URL |
+| `RecordingFiles` (helpers) | `RecordingFiles.swift` | Module-level `nextFileNumber(for:in:)` + `saveImportedVideo(from:exerciseTitle:)` shared by recording and upload paths |
 
 ## Pending
 

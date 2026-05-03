@@ -18,6 +18,8 @@
 		DB533AFF2D56060C003BFD1C /* ExercisesPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB533AFE2D560601003BFD1C /* ExercisesPage.swift */; };
 		DB533B012D560622003BFD1C /* ExerciseHistoryPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB533B002D560618003BFD1C /* ExerciseHistoryPage.swift */; };
 		DB533B032D560641003BFD1C /* ProfilePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB533B022D56063E003BFD1C /* ProfilePage.swift */; };
+		E42C44BC26274304A39B27DF /* UploadVideoPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FAB1D2736A94FEE8B6472A1 /* UploadVideoPage.swift */; };
+		8655019BF6B04E99A99ADD9F /* RecordingFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7724C311C54B4404BC726EDC /* RecordingFiles.swift */; };
 		DB533B052D560665003BFD1C /* HomePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB533B042D560661003BFD1C /* HomePage.swift */; };
 		B7F1A0022F00000100000001 /* VideoUploadService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7F1A0012F00000100000001 /* VideoUploadService.swift */; };
 		DB5F94972EB31ABF00AA3301 /* HalfSmile.MOV in Resources */ = {isa = PBXBuildFile; fileRef = DB5F94962EB31ABF00AA3301 /* HalfSmile.MOV */; };
@@ -77,6 +79,8 @@
 		DB533AFE2D560601003BFD1C /* ExercisesPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExercisesPage.swift; sourceTree = "<group>"; };
 		DB533B002D560618003BFD1C /* ExerciseHistoryPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseHistoryPage.swift; sourceTree = "<group>"; };
 		DB533B022D56063E003BFD1C /* ProfilePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilePage.swift; sourceTree = "<group>"; };
+		0FAB1D2736A94FEE8B6472A1 /* UploadVideoPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadVideoPage.swift; sourceTree = "<group>"; };
+		7724C311C54B4404BC726EDC /* RecordingFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingFiles.swift; sourceTree = "<group>"; };
 		DB533B042D560661003BFD1C /* HomePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomePage.swift; sourceTree = "<group>"; };
 		B7F1A0012F00000100000001 /* VideoUploadService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoUploadService.swift; sourceTree = "<group>"; };
 		DB5F94952EB31ABF00AA3301 /* FullSmile.MOV */ = {isa = PBXFileReference; lastKnownFileType = video.quicktime; path = FullSmile.MOV; sourceTree = "<group>"; };
@@ -180,6 +184,8 @@
 				A1D7E2752E4849EA0030ABFA /* PracticePage.swift */,
 				DB533B042D560661003BFD1C /* HomePage.swift */,
 				DB533B022D56063E003BFD1C /* ProfilePage.swift */,
+				0FAB1D2736A94FEE8B6472A1 /* UploadVideoPage.swift */,
+				7724C311C54B4404BC726EDC /* RecordingFiles.swift */,
 				DB533B002D560618003BFD1C /* ExerciseHistoryPage.swift */,
 				DB533AFE2D560601003BFD1C /* ExercisesPage.swift */,
 				DB533AFC2D560267003BFD1C /* RecordingPage.swift */,
@@ -372,6 +378,8 @@
 				DB533B052D560665003BFD1C /* HomePage.swift in Sources */,
 				DBAB9FC32B59B8EF007B2B80 /* SignUp.swift in Sources */,
 				DB533B032D560641003BFD1C /* ProfilePage.swift in Sources */,
+				E42C44BC26274304A39B27DF /* UploadVideoPage.swift in Sources */,
+				8655019BF6B04E99A99ADD9F /* RecordingFiles.swift in Sources */,
 				DB533B012D560622003BFD1C /* ExerciseHistoryPage.swift in Sources */,
 				DB0564A82E39F04E00BEB570 /* AuthSelector.swift in Sources */,
 				DB533AFF2D56060C003BFD1C /* ExercisesPage.swift in Sources */,
