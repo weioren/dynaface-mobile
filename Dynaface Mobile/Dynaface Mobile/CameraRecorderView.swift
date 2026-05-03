@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import Vision
 
 // [Phase 1] DEV ONLY: set to true to use a fake video on simulator (no camera needed)
 private let simulatorMode = false
@@ -7,7 +8,6 @@ private let simulatorMode = false
 struct CameraRecorderView: UIViewControllerRepresentable {
 
     let exerciseName: String
-    // Callback to notify parent when recording is finished
     var onFinishRecording: ((URL?) -> Void)?
 
     func makeUIViewController(context: Context) -> CameraRecorderViewController {
@@ -18,28 +18,132 @@ struct CameraRecorderView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: CameraRecorderViewController, context: Context) {
-        // Re-assign the callback to ensure it's always current, especially after permission changes
         uiViewController.onFinishRecording = onFinishRecording
     }
 }
 
-class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordingDelegate {
-    
+// MARK: - Face Guide Overlay (dashed oval that turns green when face is aligned)
+class FaceGuideOverlayView: UIView {
+
+    private(set) var isFaceAligned: Bool = false
+    private var isDismissed: Bool = false
+    var onFaceAlignmentChanged: ((Bool) -> Void)?
+
+    private let feedbackLabel: UILabel = {
+        let l = UILabel()
+        l.textAlignment = .center
+        l.font = .systemFont(ofSize: 15, weight: .medium)
+        l.textColor = .white.withAlphaComponent(0.8)
+        l.text = "Position your face in the oval"
+        l.translatesAutoresizingMaskIntoConstraints = false
+        return l
+    }()
+
+    private let ovalLayer: CAShapeLayer = {
+        let layer = CAShapeLayer()
+        layer.fillColor = UIColor.clear.cgColor
+        layer.lineWidth = 2.5
+        return layer
+    }()
+
+    var ovalRect: CGRect {
+        let w = bounds.width * 0.6
+        let h = w * 1.35
+        let x = (bounds.width - w) / 2
+        let y = (bounds.height - h) / 2
+        return CGRect(x: x, y: y, width: w, height: h)
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setup()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setup()
+    }
+
+    private func setup() {
+        backgroundColor = .clear
+        isUserInteractionEnabled = false
+        layer.addSublayer(ovalLayer)
+        addSubview(feedbackLabel)
+
+        NSLayoutConstraint.activate([
+            feedbackLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            feedbackLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -20)
+        ])
+
+        updateOvalAppearance(aligned: false)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard !isDismissed else { return }
+        let path = UIBezierPath(ovalIn: ovalRect)
+        ovalLayer.path = path.cgPath
+    }
+
+    private func updateOvalAppearance(aligned: Bool) {
+        if aligned {
+            ovalLayer.strokeColor = UIColor.systemGreen.cgColor
+            ovalLayer.lineDashPattern = nil // solid line
+            ovalLayer.lineWidth = 3.0
+            feedbackLabel.text = nil
+        } else {
+            ovalLayer.strokeColor = UIColor.white.withAlphaComponent(0.6).cgColor
+            ovalLayer.lineDashPattern = [8, 6]
+            ovalLayer.lineWidth = 2.5
+            feedbackLabel.text = "Center your face"
+            feedbackLabel.textColor = .white.withAlphaComponent(0.8)
+        }
+    }
+
+    /// Called by the controller on every face detection result
+    func updateFaceAlignment(faceInOval: Bool) {
+        guard !isDismissed else { return }
+
+        if faceInOval != isFaceAligned {
+            isFaceAligned = faceInOval
+            updateOvalAppearance(aligned: faceInOval)
+            onFaceAlignmentChanged?(faceInOval)
+        }
+    }
+
+    /// Immediately hide (called when recording starts)
+    func dismiss() {
+        isDismissed = true
+        isHidden = true
+    }
+}
+
+// MARK: - Camera Recorder
+class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordingDelegate, AVCaptureVideoDataOutputSampleBufferDelegate {
+
     var captureSession: AVCaptureSession?
     var videoOutput = AVCaptureMovieFileOutput()
-    
+    private var videoDataOutput = AVCaptureVideoDataOutput()
+    private let videoDataQueue = DispatchQueue(label: "com.dynaface.facedetection", qos: .userInteractive)
+
     var previewLayer: AVCaptureVideoPreviewLayer?
     var exerciseName: String = ""
     var recordButton: UIButton!
     var buttonContainer: UIView!
-    
-    // This closure will be called once recording is finished
+    private var flipCameraObserver: NSObjectProtocol?
+
     var onFinishRecording: ((URL?) -> Void)?
-    
-    // Add state tracking
+
     private var isSetupComplete = false
-    private var recordedFileURL: URL? // Store the recorded file URL
-    
+    private var recordedFileURL: URL?
+    private var currentCameraPosition: AVCaptureDevice.Position = .front
+
+    // Face guide
+    private var faceGuideOverlay: FaceGuideOverlayView!
+    private var faceDetectionRequest: VNDetectFaceRectanglesRequest?
+    private var isProcessingFrame = false
+    private var faceGuideCompleted = false
+
     override func viewDidLoad() {
         super.viewDidLoad()
 
@@ -49,11 +153,93 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
         }
 
         setupUI()
-        // Permission is already requested on ExercisesPage, so directly setup camera
+        setupFaceGuide()
         setupCamera()
     }
 
-    // [Phase 1] DEV ONLY: fake recording for simulator testing
+    // MARK: - Face Guide
+    private func setupFaceGuide() {
+        faceGuideOverlay = FaceGuideOverlayView(frame: .zero)
+        faceGuideOverlay.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(faceGuideOverlay)
+
+        NSLayoutConstraint.activate([
+            faceGuideOverlay.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            faceGuideOverlay.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            faceGuideOverlay.topAnchor.constraint(equalTo: view.topAnchor),
+            faceGuideOverlay.bottomAnchor.constraint(equalTo: buttonContainer.topAnchor)
+        ])
+
+        faceGuideOverlay.onFaceAlignmentChanged = { [weak self] aligned in
+            guard let self = self else { return }
+            if aligned {
+                self.recordButton.isEnabled = true
+                self.recordButton.backgroundColor = UIColor(red: 0.12, green: 0.29, blue: 0.64, alpha: 1.0)
+            } else {
+                self.recordButton.isEnabled = false
+                self.recordButton.backgroundColor = UIColor.gray
+            }
+        }
+
+        view.bringSubviewToFront(faceGuideOverlay)
+        view.bringSubviewToFront(buttonContainer)
+
+        // Listen for flip camera notification from SwiftUI layer
+        flipCameraObserver = NotificationCenter.default.addObserver(
+            forName: .flipCamera, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.flipCamera()
+        }
+
+        faceDetectionRequest = VNDetectFaceRectanglesRequest { [weak self] request, _ in
+            guard let self = self else { return }
+            let faces = request.results as? [VNFaceObservation]
+            DispatchQueue.main.async {
+                self.processFaceResult(faces: faces)
+            }
+        }
+    }
+
+    private func processFaceResult(faces: [VNFaceObservation]?) {
+        guard let previewLayer = previewLayer, !faceGuideCompleted else { return }
+
+        guard let face = faces?.first else {
+            faceGuideOverlay.updateFaceAlignment(faceInOval: false)
+            return
+        }
+
+        // Convert Vision coordinates to preview layer coordinates
+        let faceBounds = previewLayer.layerRectConverted(fromMetadataOutputRect: face.boundingBox)
+        let faceCenter = CGPoint(x: faceBounds.midX, y: faceBounds.midY)
+
+        // Check if face center is within the guide oval
+        let oval = faceGuideOverlay.ovalRect
+        let cx = oval.midX, cy = oval.midY
+        let a = oval.width / 2, b = oval.height / 2
+        let dx = faceCenter.x - cx, dy = faceCenter.y - cy
+        let inOval = (dx * dx) / (a * a) + (dy * dy) / (b * b) <= 1.3
+
+        faceGuideOverlay.updateFaceAlignment(faceInOval: inOval)
+    }
+
+    // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        guard !faceGuideCompleted, !isProcessingFrame else { return }
+        isProcessingFrame = true
+
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer),
+              let request = faceDetectionRequest else {
+            isProcessingFrame = false
+            return
+        }
+
+        let orientation: CGImagePropertyOrientation = (currentCameraPosition == .front) ? .leftMirrored : .right
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: orientation, options: [:])
+        try? handler.perform([request])
+        isProcessingFrame = false
+    }
+
+    // MARK: - Simulator Mode
     private func setupSimulatorMode() {
         view.backgroundColor = .darkGray
 
@@ -86,7 +272,6 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
     }
 
     @objc private func simulateRecording() {
-        // Copy a bundled video to Documents as a fake recording
         let extensions = ["MOV", "mp4"]
         var sourceURL: URL?
         for ext in extensions {
@@ -105,15 +290,14 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
         try? FileManager.default.copyItem(at: source, to: dest)
         onFinishRecording?(dest)
     }
-    
+
+    // MARK: - Camera Setup
     func setupCamera() {
-        // Prevent multiple setup attempts
         guard !isSetupComplete else { return }
-        
+
         let session = AVCaptureSession()
         session.beginConfiguration()
-        
-        // Use the front camera if available
+
         guard
             let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front),
             let videoInput = try? AVCaptureDeviceInput(device: device),
@@ -124,75 +308,66 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
             return
         }
         session.addInput(videoInput)
-        
-        // Remove audio input - we only want video
-        
-        // Add movie output
+
         if session.canAddOutput(videoOutput) {
             session.addOutput(videoOutput)
         }
-        
+
+        // Video data output for face detection
+        videoDataOutput.setSampleBufferDelegate(self, queue: videoDataQueue)
+        videoDataOutput.alwaysDiscardsLateVideoFrames = true
+        if session.canAddOutput(videoDataOutput) {
+            session.addOutput(videoDataOutput)
+        }
+
         session.commitConfiguration()
-        
-        // Preview layer
+
         let previewLayer = AVCaptureVideoPreviewLayer(session: session)
         previewLayer.videoGravity = .resizeAspectFill
-        view.layer.insertSublayer(previewLayer, at: 0) // Insert at index 0 to be behind UI elements
+        view.layer.insertSublayer(previewLayer, at: 0)
         self.previewLayer = previewLayer
-        
+
         self.captureSession = session
         isSetupComplete = true
-        
-        // Start session on background queue
+
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             self?.captureSession?.startRunning()
             DispatchQueue.main.async {
-                self?.recordButton.isEnabled = true
-                // Ensure preview layer frame is set after session starts
+                // Button stays disabled until face is aligned
+                self?.recordButton.isEnabled = false
+                self?.recordButton.backgroundColor = UIColor.gray
                 self?.updatePreviewLayerFrame()
                 print("Camera setup complete and running")
             }
         }
     }
-    
+
     private func updatePreviewLayerFrame() {
         guard let previewLayer = previewLayer else { return }
-        
-        // Calculate the camera preview frame to leave space for the button
+
         let buttonHeight: CGFloat = 90
         let cameraPreviewHeight = view.bounds.height - buttonHeight
-        
-        // Set the preview layer frame to leave space at the bottom
+
         previewLayer.frame = CGRect(
-            x: 0,
-            y: 0,
+            x: 0, y: 0,
             width: view.bounds.width,
             height: cameraPreviewHeight
         )
-        
-        // Ensure the preview layer is properly oriented
-        if let connection = previewLayer.connection {
-            if connection.isVideoOrientationSupported {
-                let orientation = UIDevice.current.orientation
-                switch orientation {
-                case .portrait:
-                    connection.videoOrientation = .portrait
-                case .portraitUpsideDown:
-                    connection.videoOrientation = .portraitUpsideDown
-                case .landscapeLeft:
-                    connection.videoOrientation = .landscapeRight
-                case .landscapeRight:
-                    connection.videoOrientation = .landscapeLeft
-                default:
-                    connection.videoOrientation = .portrait
-                }
+
+        if let connection = previewLayer.connection, connection.isVideoOrientationSupported {
+            let orientation = UIDevice.current.orientation
+            switch orientation {
+            case .portrait: connection.videoOrientation = .portrait
+            case .portraitUpsideDown: connection.videoOrientation = .portraitUpsideDown
+            case .landscapeLeft: connection.videoOrientation = .landscapeRight
+            case .landscapeRight: connection.videoOrientation = .landscapeLeft
+            default: connection.videoOrientation = .portrait
             }
         }
-        
-        // Force a layout update
+
         previewLayer.setNeedsLayout()
     }
-    
+
     func showCameraUnavailableAlert() {
         let alert = UIAlertController(
             title: "Camera Unavailable",
@@ -200,62 +375,54 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
             preferredStyle: .alert
         )
         alert.addAction(UIAlertAction(title: "OK", style: .default) { [weak self] _ in
-            // Notify parent that recording failed due to camera unavailability
             self?.onFinishRecording?(nil)
         })
         present(alert, animated: true)
     }
-    
+
+    // MARK: - UI Setup
     func setupUI() {
-        // Create a container view for the button to ensure it's above the camera preview
         buttonContainer = UIView()
         buttonContainer.backgroundColor = UIColor.clear
         view.addSubview(buttonContainer)
         buttonContainer.translatesAutoresizingMaskIntoConstraints = false
-        
+
         recordButton = UIButton(type: .system)
         recordButton.setTitle("Start", for: .normal)
         recordButton.setTitleColor(.white, for: .normal)
-        recordButton.backgroundColor = UIColor.systemGreen // Green for start
+        recordButton.backgroundColor = UIColor.gray
         recordButton.layer.cornerRadius = 10
-        recordButton.isEnabled = false // Disable until camera is ready
+        recordButton.isEnabled = false
         recordButton.addTarget(self, action: #selector(toggleRecording), for: .touchUpInside)
-        
-        // Add button to the container
+
         buttonContainer.addSubview(recordButton)
         recordButton.translatesAutoresizingMaskIntoConstraints = false
-        
-        // Constrain the container
+
         NSLayoutConstraint.activate([
             buttonContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             buttonContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             buttonContainer.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
             buttonContainer.heightAnchor.constraint(equalToConstant: 90)
         ])
-        
-        // Constrain the button within the container
+
         NSLayoutConstraint.activate([
             recordButton.heightAnchor.constraint(equalToConstant: 50),
             recordButton.leadingAnchor.constraint(equalTo: buttonContainer.leadingAnchor, constant: 20),
             recordButton.trailingAnchor.constraint(equalTo: buttonContainer.trailingAnchor, constant: -20),
             recordButton.bottomAnchor.constraint(equalTo: buttonContainer.bottomAnchor, constant: -20)
         ])
-        
-        // Ensure the button container is above the camera preview
+
         view.bringSubviewToFront(buttonContainer)
     }
-    
+
+    // MARK: - Layout
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        
-        // Update preview layer frame whenever layout changes
         updatePreviewLayerFrame()
     }
-    
+
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-
-        // Ensure session is running when view appears
         if isSetupComplete {
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 self?.captureSession?.startRunning()
@@ -268,156 +435,147 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-
-        // Ensure preview layer frame is set
         if isSetupComplete {
             updatePreviewLayerFrame()
         }
-        
-        // Listen for orientation changes
         NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(orientationChanged),
-            name: UIDevice.orientationDidChangeNotification,
-            object: nil
+            self, selector: #selector(orientationChanged),
+            name: UIDevice.orientationDidChangeNotification, object: nil
         )
     }
-    
+
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        
-        // Remove orientation change observer
         NotificationCenter.default.removeObserver(
-            self,
-            name: UIDevice.orientationDidChangeNotification,
-            object: nil
+            self, name: UIDevice.orientationDidChangeNotification, object: nil
         )
-        
-        // Stop the session when leaving the view
+        if let obs = flipCameraObserver {
+            NotificationCenter.default.removeObserver(obs)
+            flipCameraObserver = nil
+        }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             self?.captureSession?.stopRunning()
         }
     }
-    
+
     @objc private func orientationChanged() {
         DispatchQueue.main.async { [weak self] in
             self?.updatePreviewLayerFrame()
         }
     }
-    
-    // Method to explicitly request the recorded file and call the completion callback
+
     func requestRecordedFile() {
-        print("CameraRecorder: Requesting recorded file, URL: \(String(describing: recordedFileURL))")
         onFinishRecording?(recordedFileURL)
     }
-    
-    // Method to check if we have a recorded file ready
+
     var hasRecordedFile: Bool {
         return recordedFileURL != nil
     }
-    
+
+    // MARK: - Camera Flip
+    @objc private func flipCamera() {
+        guard let session = captureSession, !videoOutput.isRecording else { return }
+
+        let newPosition: AVCaptureDevice.Position = (currentCameraPosition == .front) ? .back : .front
+
+        guard let newDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: newPosition),
+              let newInput = try? AVCaptureDeviceInput(device: newDevice) else { return }
+
+        session.beginConfiguration()
+
+        // Remove existing video input
+        if let currentInput = session.inputs.first(where: { ($0 as? AVCaptureDeviceInput)?.device.hasMediaType(.video) == true }) {
+            session.removeInput(currentInput)
+        }
+
+        if session.canAddInput(newInput) {
+            session.addInput(newInput)
+            currentCameraPosition = newPosition
+        }
+
+        session.commitConfiguration()
+
+        // Show/hide face guide based on camera
+        if newPosition == .front {
+            faceGuideOverlay?.isHidden = false
+            faceGuideOverlay?.updateFaceAlignment(faceInOval: false) // Reset visual state
+            faceGuideCompleted = false
+            recordButton.isEnabled = false
+            recordButton.backgroundColor = UIColor.gray
+        } else {
+            // Back camera: hide face guide, enable record button
+            faceGuideOverlay?.isHidden = true
+            faceGuideCompleted = true
+            recordButton.isEnabled = true
+            recordButton.backgroundColor = UIColor(red: 0.12, green: 0.29, blue: 0.64, alpha: 1.0)
+        }
+    }
+
+    // MARK: - Recording
     @objc func toggleRecording() {
         guard let captureSession = captureSession, captureSession.isRunning else {
             print("Capture session is not running")
             return
         }
-        
+
         if videoOutput.isRecording {
-            // Stop recording - this will trigger the delegate method
             print("CameraRecorder: Stopping recording")
             videoOutput.stopRecording()
             recordButton.setTitle("Start", for: .normal)
-            recordButton.backgroundColor = UIColor.systemGreen // Green for start
-            // Don't call onFinishRecording here - wait for the delegate method
+            recordButton.backgroundColor = UIColor(red: 0.12, green: 0.29, blue: 0.64, alpha: 1.0)
+            NotificationCenter.default.post(name: .recordingStateChanged, object: false) // Not recording
         } else {
-            // Start recording
+            // Dismiss face guide when recording starts
+            faceGuideOverlay?.dismiss()
+            faceGuideCompleted = true
+            NotificationCenter.default.post(name: .recordingStateChanged, object: true) // Recording
+
             print("CameraRecorder: Starting recording")
-            let nextNumber = getNextFileNumber(for: exerciseName)
+            let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+            let nextNumber = nextFileNumber(for: exerciseName, in: documentsURL)
             let fileName = "\(exerciseName)_\(nextNumber).mov"
-            
+
             let outputPath = NSTemporaryDirectory() + fileName
             let outputFileURL = URL(fileURLWithPath: outputPath)
             videoOutput.startRecording(to: outputFileURL, recordingDelegate: self)
             recordButton.setTitle("Finish", for: .normal)
-            recordButton.backgroundColor = UIColor.systemRed // Red for finish
+            recordButton.backgroundColor = UIColor.systemRed
         }
     }
-    
-    func getNextFileNumber(for exerciseName: String) -> Int {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        
-        do {
-            let files = try FileManager.default.contentsOfDirectory(at: documentsURL, includingPropertiesForKeys: nil)
-            let movFiles = files.filter { $0.pathExtension.lowercased() == "mov" }
-            
-            // Find files that match the exercise name pattern
-            let exerciseFiles = movFiles.filter { file in
-                let filename = file.lastPathComponent
-                return filename.hasPrefix("\(exerciseName)_") && filename.hasSuffix(".mov")
-            }
-            
-            // Extract numbers from existing files
-            var existingNumbers: [Int] = []
-            for file in exerciseFiles {
-                let filename = file.lastPathComponent
-                let components = filename.split(separator: "_")
-                if components.count >= 2 {
-                    let numberPart = components.last?.split(separator: ".").first ?? ""
-                    if let number = Int(numberPart) {
-                        existingNumbers.append(number)
-                    }
-                }
-            }
-            
-            // Return the next available number
-            return existingNumbers.isEmpty ? 1 : (existingNumbers.max() ?? 0) + 1
-            
-        } catch {
-            print("Error reading directory: \(error)")
-            return 1
-        }
-    }
-    
+
     // MARK: - AVCaptureFileOutputRecordingDelegate
     func fileOutput(_ output: AVCaptureFileOutput,
                     didFinishRecordingTo outputFileURL: URL,
                     from connections: [AVCaptureConnection],
                     error: Error?) {
-        
+
         print("CameraRecorder: Recording finished, error: \(String(describing: error))")
-        
+
         DispatchQueue.main.async { [weak self] in
             self?.recordButton.setTitle("Start", for: .normal)
-            self?.recordButton.backgroundColor = UIColor.systemGreen // Reset to green
+            self?.recordButton.backgroundColor = UIColor(red: 0.12, green: 0.29, blue: 0.64, alpha: 1.0)
         }
-        
+
         if error == nil {
-            // Move file from temp to Documents directory
             let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-            
-            // Extract the filename from the temporary URL (it already has the correct format)
             let fileName = outputFileURL.lastPathComponent
             let destinationURL = documentsURL.appendingPathComponent(fileName)
-            
+
             do {
                 if FileManager.default.fileExists(atPath: destinationURL.path) {
                     try FileManager.default.removeItem(at: destinationURL)
                 }
                 try FileManager.default.moveItem(at: outputFileURL, to: destinationURL)
                 print("CameraRecorder: File saved successfully at \(destinationURL)")
-                
-                // Store the recorded file URL and notify parent that recording is ready for review
+
                 DispatchQueue.main.async { [weak self] in
                     self?.recordedFileURL = destinationURL
-                    print("CameraRecorder: Recording completed, file ready for review: \(destinationURL)")
-                    // Call the callback to transition to review phase
                     self?.onFinishRecording?(destinationURL)
                 }
             } catch {
                 print("Error moving recorded file: \(error)")
                 DispatchQueue.main.async { [weak self] in
                     self?.recordedFileURL = nil
-                    // Call the callback with nil to indicate failure
                     self?.onFinishRecording?(nil)
                 }
             }
@@ -425,7 +583,6 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
             print("Recording error: \(String(describing: error))")
             DispatchQueue.main.async { [weak self] in
                 self?.recordedFileURL = nil
-                // Call the callback with nil to indicate failure
                 self?.onFinishRecording?(nil)
             }
         }

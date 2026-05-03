@@ -7,6 +7,7 @@ struct ProfilePage: View {
     let baseHeight: CGFloat = 844
 
     @EnvironmentObject var authService: AuthenticationService
+    @AppStorage("videoUploadsEnabled") private var videoUploadsEnabled = true
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var profileImage: UIImage?
     @State private var showingEditProfile = false
@@ -68,6 +69,24 @@ struct ProfilePage: View {
 
                 // Menu items
                 VStack(spacing: 20 * heightScale) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Cloud video upload")
+                                .font(.system(size: 18 * widthScale))
+                                .foregroundColor(.black)
+                            Text(videoUploadsEnabled ? "Processed videos will be uploaded to Supabase." : "Uploads are disabled. Videos stay local only.")
+                                .font(.system(size: 12 * widthScale))
+                                .foregroundColor(.gray)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $videoUploadsEnabled)
+                            .labelsHidden()
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.gray.opacity(0.2))
+                    .cornerRadius(10 * widthScale)
+
                     ProfileMenuItem(text: "Edit profile", widthScale: widthScale, heightScale: heightScale) {
                         showingEditProfile = true
                     }

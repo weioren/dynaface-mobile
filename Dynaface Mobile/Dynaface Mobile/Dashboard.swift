@@ -6,27 +6,27 @@ struct Dashboard: View {
     var body: some View {
         NavigationView {
             TabView(selection: $selectedTab) {
-                HomePage()
-                    .tabItem {
-                        Image(systemName: "house.fill")
-                        Text("Home")
-                    }
-                    .tag(0)
-                
                 ExercisesPage()
                     .tabItem {
                         Image(systemName: "dumbbell.fill")
                         Text("Exercise")
                     }
-                    .tag(1)
-                
+                    .tag(0)
+
                 ExerciseHistoryPage()
                     .tabItem {
                         Image(systemName: "video.fill")
                         Text("History")
                     }
+                    .tag(1)
+
+                ProcessedVideosPage()
+                    .tabItem {
+                        Image(systemName: "sparkles.tv")
+                        Text("Processed")
+                    }
                     .tag(2)
-                
+
                 ProfilePage()
                     .tabItem {
                         Image(systemName: "person.fill")
@@ -36,6 +36,7 @@ struct Dashboard: View {
             }
             .navigationBarHidden(true)
         }
+        .navigationViewStyle(.stack)
         .onAppear {
             // Check if we should navigate to a specific tab
             if let tabToSelect = UserDefaults.standard.object(forKey: "selectedTab") as? Int {
