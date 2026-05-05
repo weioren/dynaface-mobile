@@ -1,8 +1,25 @@
 import SwiftUI
 
 struct Dashboard: View {
+    @EnvironmentObject var authService: AuthenticationService
+
+    // Single source of truth for the patient list (clinician-only feature).
+    // Created here so it persists for the lifetime of the Dashboard regardless
+    // of which tab is currently selected.
+    @StateObject private var patientService = PatientService()
+
     @State private var selectedTab = 0
-    
+
+    /// Whether the signed-in user is a clinician. Drives the optional
+    /// "Patients" tab. Falls back to `false` (no extra tab) for any state
+    /// where there isn't a signed-in profile yet (loading / signedOut / error).
+    private var isClinician: Bool {
+        if case .signedIn(let profile) = authService.authState {
+            return profile.accountType == .clinician
+        }
+        return false
+    }
+
     var body: some View {
         NavigationView {
             TabView(selection: $selectedTab) {
@@ -27,12 +44,24 @@ struct Dashboard: View {
                     }
                     .tag(2)
 
+                // [Phase 6] Clinician-only "Patients" tab. Only attached
+                // when accountType == .clinician so patients see the
+                // same 4-tab layout as before.
+                if isClinician {
+                    PatientListPage()
+                        .tabItem {
+                            Image(systemName: "person.3.fill")
+                            Text("Patients")
+                        }
+                        .tag(3)
+                }
+
                 ProfilePage()
                     .tabItem {
                         Image(systemName: "person.fill")
                         Text("Profile")
                     }
-                    .tag(3)
+                    .tag(isClinician ? 4 : 3)
             }
             .navigationBarHidden(true)
         }
@@ -50,4 +79,5 @@ struct Dashboard: View {
 // MARK: - Preview
 #Preview {
     Dashboard()
+        .environmentObject(AuthenticationService())
 }

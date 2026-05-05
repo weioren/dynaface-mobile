@@ -39,8 +39,8 @@ struct RootContainer: View {
                 case .signedOut:
                     AuthSelector()
 
-                case .accountCreated(let email):
-                    SurveyFlow(email: email)
+                case .accountCreated(let email, let accountType):
+                    SurveyFlow(email: email, accountType: accountType)
 
                 case .error(let message):
                     VStack(spacing: 12) {
