@@ -47,6 +47,11 @@
 		DBAD9B322EA76049005F0C67 /* NoseWrinkle.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = DBAD9B272EA76049005F0C67 /* NoseWrinkle.mp4 */; };
 		DBAD9B332EA76049005F0C67 /* StrongEyeClosure.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = DBAD9B282EA76049005F0C67 /* StrongEyeClosure.mp4 */; };
 		E42C44BC26274304A39B27DF /* UploadVideoPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FAB1D2736A94FEE8B6472A1 /* UploadVideoPage.swift */; };
+		D3BDB109E2EE46BE8D76D955 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AB0331B0EBB4451A6E59399 /* Models.swift */; };
+		D601DACF9B464EC88C305ECD /* PatientService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8DD3DF87F5C4BCCBC4F8848 /* PatientService.swift */; };
+		299DC057DA4C400285DE2619 /* PatientListPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F59DFA32B2C49969A524943 /* PatientListPage.swift */; };
+		7FB9E64E53D94A958063B2F2 /* AddPatientSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC78D6AF103040E88488CA78 /* AddPatientSheet.swift */; };
+		2206C651352944068103DEEF /* PatientDetailPlaceholder.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF906CDDC4694FEC974913AC /* PatientDetailPlaceholder.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -105,6 +110,11 @@
 		DBAD9B272EA76049005F0C67 /* NoseWrinkle.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = NoseWrinkle.mp4; sourceTree = "<group>"; };
 		DBAD9B282EA76049005F0C67 /* StrongEyeClosure.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = StrongEyeClosure.mp4; sourceTree = "<group>"; };
 		DBAD9B292EA76049005F0C67 /* WeakEyeClosure.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = WeakEyeClosure.mp4; sourceTree = "<group>"; };
+		3AB0331B0EBB4451A6E59399 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		A8DD3DF87F5C4BCCBC4F8848 /* PatientService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientService.swift; sourceTree = "<group>"; };
+		5F59DFA32B2C49969A524943 /* PatientListPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientListPage.swift; sourceTree = "<group>"; };
+		EC78D6AF103040E88488CA78 /* AddPatientSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddPatientSheet.swift; sourceTree = "<group>"; };
+		EF906CDDC4694FEC974913AC /* PatientDetailPlaceholder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientDetailPlaceholder.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */

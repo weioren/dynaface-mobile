@@ -90,8 +90,8 @@ struct PatientListPage: View {
     private var list: some View {
         List {
             ForEach(filtered) { candidate in
-                // 直接 push placeholder — Alex 的 PatientDetailView(profileId:)
-                // 着陆后只换这一行的 destination 类型即可,row UI 不变。
+                // Push the placeholder — once Alex's PatientDetailView(profileId:)
+                // lands, swap this one destination line; the row UI stays the same.
                 NavigationLink {
                     PatientDetailPlaceholder(displayName: candidate.username)
                 } label: {
@@ -111,8 +111,8 @@ struct PatientListPage: View {
                 .foregroundColor(.gray.opacity(0.6))
             Text("No patients yet")
                 .font(.title3).fontWeight(.semibold)
-            // 空态文案锁定英文(per product). "Pull to refresh" 是字面提示——
-            // list 已经接了 .refreshable { await reload() }。
+            // Empty-state copy locked to English (per product). "Pull to refresh"
+            // is literal — `list` already wires `.refreshable { await reload() }`.
             Text("Patients appear here after they sign up. Pull to refresh.")
                 .font(.subheadline)
                 .foregroundColor(.secondary)

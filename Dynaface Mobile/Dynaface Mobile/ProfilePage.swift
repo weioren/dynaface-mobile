@@ -14,15 +14,17 @@ struct ProfilePage: View {
 
     // MARK: - Menu data model
     //
-    // 角色相关菜单项。id 用 text 而不是 UUID(),保证每次 render 同一项 ID 稳定,
-    // ForEach 不会把所有行当新元素重建。
+    // Role-conditional menu rows. Using `text` as the id (instead of UUID())
+    // keeps each row's identity stable across renders so ForEach doesn't
+    // rebuild every cell on each pass.
     private struct MenuRow: Identifiable {
         var id: String { text }
         let text: String
         let action: () -> Void
     }
 
-    /// 按角色返回菜单项。Sign out 单独渲染(红色样式),不在这里。
+    /// Returns the menu rows for the given account type. Sign-out is rendered
+    /// separately (red styling) below this list, not as a row here.
     private func menuItems(for accountType: AccountType) -> [MenuRow] {
         let edit     = MenuRow(text: "Edit profile") { showingEditProfile = true }
         let faq      = MenuRow(text: "FAQ") { /* TODO: FAQ */ }
@@ -41,8 +43,9 @@ struct ProfilePage: View {
             return [
                 edit,
                 MenuRow(text: "My patients") {
-                    // Dashboard 是同一个实例 — UserDefaults 路径只走 onAppear,
-                    // 这里走 NotificationCenter 走通。
+                    // Dashboard is the same instance the user is already in — the
+                    // UserDefaults("selectedTab") path only fires on Dashboard's
+                    // onAppear, so use NotificationCenter to switch tabs live.
                     NotificationCenter.default.post(name: .navigateToPatientsTab, object: nil)
                 },
                 upcoming,
@@ -110,7 +113,7 @@ struct ProfilePage: View {
                 .background(Color(red: 30/255, green: 75/255, blue: 162/255).opacity(0.18))
                 .cornerRadius(17 * widthScale)
 
-                // Menu items — 按角色渲染,Sign out 单独
+                // Menu items — rendered by role; Sign out is a separate sibling below.
                 VStack(spacing: 20 * heightScale) {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
@@ -225,14 +228,15 @@ struct EditProfilePage: View {
     @State private var isLoading: Bool = false
     @State private var errorMessage: String?
 
-    /// Username 客户端校验 — 非空 + 长度 ≤ 32(无全局唯一约束)。
+    /// Client-side username validation — non-empty + length ≤ 32 (no global
+    /// uniqueness constraint at the DB layer for now).
     private var trimmedUsername: String {
         username.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     private var isUsernameValid: Bool {
         !trimmedUsername.isEmpty && trimmedUsername.count <= 32
     }
-    /// Clinician 看不到 symptom / diagnosis 字段。
+    /// Clinicians don't see the symptom / diagnosis fields.
     private var isClinician: Bool {
         if case .signedIn(let profile) = authService.authState {
             return profile.accountType == .clinician
@@ -248,8 +252,9 @@ struct EditProfilePage: View {
             NavigationView {
                 ScrollView {
                     VStack(spacing: 20 * heightScale) {
-                        // Form fields — Email 永远 disabled,Username 双角色都可改,
-                        // Symptom/Diagnosis 仅 patient 可见且可改。
+                        // Form fields — Email is always disabled. Username is
+                        // editable for both roles. Symptom/diagnosis fields are
+                        // visible and editable only for patients.
                         VStack(spacing: 15 * heightScale) {
                             VStack(alignment: .leading, spacing: 4) {
                                 FormField(title: "Email", text: $email, widthScale: widthScale, isDisabled: true)
@@ -265,7 +270,7 @@ struct EditProfilePage: View {
                             }
                         }
 
-                        // Save button — isLoading 时显示 spinner; 校验失败时变灰禁用
+                        // Save button — shows a spinner while loading; greys out and disabled when invalid.
                         Button(action: {
                             Task { await saveProfile() }
                         }) {
@@ -344,8 +349,9 @@ struct EditProfilePage: View {
         isLoading = true
         defer { isLoading = false }
 
-        // Build a role-scoped patch — clinician 只更新 username,patient 把
-        // symptom + diagnosis 一起带上(空串也会写过去,清空字段是可行的)。
+        // Build a role-scoped patch — clinicians update only username; patients
+        // also send symptom + diagnosis. Empty strings get written through, so
+        // clearing a field is supported.
         var patch = AuthenticationService.ProfilePatch(username: trimmedUsername)
         if !isClinician {
             patch.symptoms_location = symptomsLocation

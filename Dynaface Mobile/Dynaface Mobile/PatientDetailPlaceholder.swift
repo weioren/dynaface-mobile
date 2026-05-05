@@ -28,9 +28,9 @@ struct PatientDetailPlaceholder: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
-        // Dashboard 在外层 NavigationView 上设了 .navigationBarHidden(true),
-        // iOS 16/17 上 push 进来的 destination 会继承隐藏状态,导致 back 按钮
-        // 也消失。这里强制显示。
+        // Dashboard sets .navigationBarHidden(true) on the outer NavigationView.
+        // On iOS 16/17 a pushed destination inherits the hidden state and the
+        // back chevron disappears with it. Force the bar visible here.
         .toolbar(.visible, for: .navigationBar)
     }
 }

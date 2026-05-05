@@ -63,6 +63,17 @@ struct Dashboard: View {
                     }
                     .tag(isClinician ? 4 : 3)
             }
+            .environmentObject(patientService)
+            .onReceive(NotificationCenter.default.publisher(for: .assessmentCompleted)) { _ in
+                withAnimation { selectedTab = 1 }
+            }
+            // [Gap 4] ProfilePage's "My patients" row deep-links here.
+            // isClinician guard prevents accidental fires in patient mode
+            // (they don't have this tab).
+            .onReceive(NotificationCenter.default.publisher(for: .navigateToPatientsTab)) { _ in
+                guard isClinician else { return }
+                withAnimation { selectedTab = 3 }
+            }
             .navigationBarHidden(true)
         }
         .navigationViewStyle(.stack)
