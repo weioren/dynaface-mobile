@@ -74,3 +74,66 @@ struct PatientCandidate: Identifiable, Hashable, Codable {
         case createdAt = "created_at"
     }
 }
+
+// MARK: - TimelineEventType
+//
+// The clinical event categories the timeline supports in V1. Stored as
+// a snake_case string in `timeline_events.type`; matched by a CHECK
+// constraint in the 2026-05-08 migration. Adding cases later requires
+// updating that CHECK constraint at the same time.
+
+enum TimelineEventType: String, Codable, CaseIterable, Identifiable {
+    case surgery
+    case injection
+    case clinicVisit  = "clinic_visit"
+    case note
+
+    var id: String { rawValue }
+
+    /// Title shown on the picker and on event row badges.
+    var displayName: String {
+        switch self {
+        case .surgery:      return "Surgery"
+        case .injection:    return "Injection"
+        case .clinicVisit:  return "Clinic visit"
+        case .note:         return "Note"
+        }
+    }
+
+    /// SF Symbol used for the type badge.
+    var symbolName: String {
+        switch self {
+        case .surgery:      return "scissors"
+        case .injection:    return "syringe.fill"
+        case .clinicVisit:  return "stethoscope"
+        case .note:         return "note.text"
+        }
+    }
+}
+
+// MARK: - TimelineEvent
+//
+// A single row in the patient's care journey. Lives on the
+// `timeline_events` table. Both clinicians and the owning patient can
+// insert; only clinicians can update (per 2026-05-08 RLS). `notes` is
+// always non-nil — empty string when the type alone is the entire payload.
+
+struct TimelineEvent: Identifiable, Hashable, Codable {
+    let id: UUID
+    var patientId: UUID
+    var type: TimelineEventType
+    var occurredAt: Date          // date-only column on the server
+    var notes: String
+    let createdBy: UUID
+    let createdAt: Date
+    var updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, type, notes
+        case patientId  = "patient_id"
+        case occurredAt = "occurred_at"
+        case createdBy  = "created_by"
+        case createdAt  = "created_at"
+        case updatedAt  = "updated_at"
+    }
+}
