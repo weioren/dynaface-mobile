@@ -2,10 +2,12 @@ import SwiftUI
 
 // MARK: - PatientDetailView
 //
-// Host view for a single patient's detail screen. V1 contains only
-// the Timeline section. Future iterations (Alex's worker pipeline will
-// surface annotated videos here, plus an Analysis section) attach
-// alongside the timeline.
+// Host view for a single patient's detail screen. Hosts three
+// sub-tabs at the top of the page:
+//
+//   1. Timeline   — clinical events log (surgery, injection, etc.)
+//   2. History    — every recording uploaded for this patient
+//   3. Processed  — annotated/completed videos for this patient
 //
 // Two entry points:
 //   - Clinician taps a row in PatientListPage → push with that
@@ -20,10 +22,23 @@ import SwiftUI
 // list stays consistent across child views.
 
 struct PatientDetailView: View {
+    enum SubTab: Int, Hashable, CaseIterable {
+        case timeline, history, processed
+
+        var title: String {
+            switch self {
+            case .timeline:  return "Timeline"
+            case .history:   return "History"
+            case .processed: return "Processed"
+            }
+        }
+    }
+
     let displayName: String
     let patientId: UUID
 
     @StateObject private var timelineService: TimelineService
+    @State private var selectedTab: SubTab = .timeline
 
     init(displayName: String, patientId: UUID) {
         self.displayName = displayName
@@ -38,14 +53,33 @@ struct PatientDetailView: View {
     }
 
     var body: some View {
-        TimelinePage()
-            .environmentObject(timelineService)
-            .navigationTitle(displayName)
-            .navigationBarTitleDisplayMode(.inline)
-            // Dashboard sets .navigationBarHidden(true) on the outer
-            // NavigationView. On iOS 16/17 a pushed destination inherits
-            // the hidden state and the back chevron disappears with it.
-            // Force the bar visible here so back-navigation always works.
-            .toolbar(.visible, for: .navigationBar)
+        VStack(spacing: 0) {
+            Picker("View", selection: $selectedTab) {
+                ForEach(SubTab.allCases, id: \.self) { tab in
+                    Text(tab.title).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
+
+            switch selectedTab {
+            case .timeline:
+                TimelinePage()
+                    .environmentObject(timelineService)
+            case .history:
+                PatientHistoryTab(patientId: patientId)
+            case .processed:
+                PatientProcessedTab(patientId: patientId)
+            }
+        }
+        .navigationTitle(displayName)
+        .navigationBarTitleDisplayMode(.inline)
+        // Dashboard sets .navigationBarHidden(true) on the outer
+        // NavigationView. On iOS 16/17 a pushed destination inherits
+        // the hidden state and the back chevron disappears with it.
+        // Force the bar visible here so back-navigation always works.
+        .toolbar(.visible, for: .navigationBar)
     }
 }

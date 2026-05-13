@@ -136,4 +136,36 @@ struct TimelineEvent: Identifiable, Hashable, Codable {
         case createdAt  = "created_at"
         case updatedAt  = "updated_at"
     }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id        = try c.decode(UUID.self, forKey: .id)
+        patientId = try c.decode(UUID.self, forKey: .patientId)
+        type      = try c.decode(TimelineEventType.self, forKey: .type)
+        notes     = try c.decode(String.self, forKey: .notes)
+        createdBy = try c.decode(UUID.self, forKey: .createdBy)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+
+        // occurred_at is a Postgres `date` column → "2026-05-10",
+        // not a timestamptz, so the SDK's ISO 8601 decoder can't
+        // parse it. Decode as string and convert manually.
+        let dateString = try c.decode(String.self, forKey: .occurredAt)
+        guard let parsed = Self.dateOnlyFormatter.date(from: dateString) else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .occurredAt, in: c,
+                debugDescription: "Expected yyyy-MM-dd, got \(dateString)"
+            )
+        }
+        occurredAt = parsed
+    }
+
+    private static let dateOnlyFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .iso8601)
+        f.locale   = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(secondsFromGMT: 0)
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
 }
