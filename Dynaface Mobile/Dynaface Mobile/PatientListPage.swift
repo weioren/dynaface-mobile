@@ -90,10 +90,11 @@ struct PatientListPage: View {
     private var list: some View {
         List {
             ForEach(filtered) { candidate in
-                // Push the placeholder — once Alex's PatientDetailView(profileId:)
-                // lands, swap this one destination line; the row UI stays the same.
+                // Push PatientDetailView — V1 contains the Timeline section
+                // only; future iterations attach Alex's annotated-video and
+                // analysis sections alongside the existing init.
                 NavigationLink {
-                    PatientDetailPlaceholder(displayName: candidate.username)
+                    PatientDetailView(patient: candidate)
                 } label: {
                     PatientRow(candidate: candidate)
                 }
