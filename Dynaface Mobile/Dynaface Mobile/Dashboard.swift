@@ -8,6 +8,12 @@ struct Dashboard: View {
     // of which tab is currently selected.
     @StateObject private var patientService = PatientService()
 
+    // Cross-cutting service for the job_patient_attributions junction
+    // table. Lives at Dashboard scope so both the post-upload attribution
+    // sheet (PracticePage) and the patient-scoped History/Processed tabs
+    // (PatientDetailView) share one instance.
+    @StateObject private var attributionService = JobAttributionService()
+
     @State private var selectedTab = 0
 
     /// Whether the signed-in user is a clinician. Drives the optional
@@ -64,6 +70,7 @@ struct Dashboard: View {
                     .tag(isClinician ? 4 : 3)
             }
             .environmentObject(patientService)
+            .environmentObject(attributionService)
             .onReceive(NotificationCenter.default.publisher(for: .assessmentCompleted)) { _ in
                 withAnimation { selectedTab = 1 }
             }

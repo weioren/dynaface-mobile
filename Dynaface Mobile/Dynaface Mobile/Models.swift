@@ -74,3 +74,28 @@ struct PatientCandidate: Identifiable, Hashable, Codable {
         case createdAt = "created_at"
     }
 }
+
+// MARK: - JobPatientAttribution
+//
+// A row on the `job_patient_attributions` junction table (added by
+// the 2026-05-11 migration). Used to say "this processing_jobs row
+// belongs to patient X" without modifying the processing_jobs table
+// or Alex's worker. RLS guarantees a clinician sees all rows while
+// a patient sees only attributions about themselves.
+
+struct JobPatientAttribution: Identifiable, Hashable, Codable {
+    let jobId: UUID
+    let patientId: UUID
+    let attributedBy: UUID
+    let attributedAt: Date
+
+    /// Identifiable conformance — `job_id` is the table's PK.
+    var id: UUID { jobId }
+
+    enum CodingKeys: String, CodingKey {
+        case jobId        = "job_id"
+        case patientId    = "patient_id"
+        case attributedBy = "attributed_by"
+        case attributedAt = "attributed_at"
+    }
+}

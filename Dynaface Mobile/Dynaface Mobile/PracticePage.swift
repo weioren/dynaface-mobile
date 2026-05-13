@@ -19,6 +19,10 @@ struct PracticePage: View {
     @State private var isUploadingAll = false
     @State private var uploadErrorMessage: String?
     @State private var uploadedCount: Int = 0
+    // Phase 8: collected job IDs from the upload batch + sheet trigger
+    // for the post-upload "attribute to patient" picker. Clinician-only.
+    @State private var uploadedJobIds: [UUID] = []
+    @State private var showAttributionSheet = false
     @AppStorage("videoUploadsEnabled") private var videoUploadsEnabled = true
     @Environment(\.presentationMode) var presentationMode
     @EnvironmentObject private var authService: AuthenticationService
@@ -307,6 +311,13 @@ struct PracticePage: View {
         } message: {
             Text(uploadErrorMessage ?? "Unknown error")
         }
+        .sheet(isPresented: $showAttributionSheet) {
+            AttributeRecordingsSheet(
+                jobIds: uploadedJobIds,
+                onDone: { finishAfterAttribution() }
+            )
+            .interactiveDismissDisabled(true)
+        }
     }
 
     @MainActor
@@ -327,9 +338,11 @@ struct PracticePage: View {
         isUploadingAll = true
         uploadErrorMessage = nil
         uploadedCount = 0
+        uploadedJobIds = []
 
         do {
             let uploader = VideoUploadService(supabase: authService.supabaseClient)
+            var collectedJobIds: [UUID] = []
 
             for i in exercises.indices {
                 guard let videoURL = recordings[i] else {
@@ -340,14 +353,27 @@ struct PracticePage: View {
                     )
                 }
 
-                _ = try await uploader.uploadVideoAndCreateJobForCurrentUser(
+                let job = try await uploader.uploadVideoAndCreateJobForCurrentUser(
                     videoURL: videoURL,
                     exerciseName: exercises[i].title
                 )
+                collectedJobIds.append(job.jobId)
                 uploadedCount += 1
             }
 
             NotificationCenter.default.post(name: .processedVideosUpdated, object: nil)
+
+            // Phase 8: clinicians get the attribute-to-patient sheet so the
+            // freshly-uploaded recordings can be linked to a specific
+            // patient roster. Patients self-recording auto-associate via
+            // processing_jobs.user_id, so they skip straight to finish.
+            if isClinician {
+                uploadedJobIds = collectedJobIds
+                isUploadingAll = false
+                showAttributionSheet = true
+                return
+            }
+
             NotificationCenter.default.post(name: .assessmentCompleted, object: nil)
             NotificationCenter.default.post(name: .recordingAccepted, object: nil)
             presentationMode.wrappedValue.dismiss()
@@ -356,6 +382,19 @@ struct PracticePage: View {
         }
 
         isUploadingAll = false
+    }
+
+    private var isClinician: Bool {
+        if case .signedIn(let profile) = authService.authState {
+            return profile.accountType == .clinician
+        }
+        return false
+    }
+
+    private func finishAfterAttribution() {
+        NotificationCenter.default.post(name: .assessmentCompleted, object: nil)
+        NotificationCenter.default.post(name: .recordingAccepted, object: nil)
+        presentationMode.wrappedValue.dismiss()
     }
 }
 

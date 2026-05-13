@@ -49,6 +49,8 @@
 		E42C44BC26274304A39B27DF /* UploadVideoPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FAB1D2736A94FEE8B6472A1 /* UploadVideoPage.swift */; };
 		D3BDB109E2EE46BE8D76D955 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AB0331B0EBB4451A6E59399 /* Models.swift */; };
 		D601DACF9B464EC88C305ECD /* PatientService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8DD3DF87F5C4BCCBC4F8848 /* PatientService.swift */; };
+		FFBE00EE35274005B09921DF /* JobAttributionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60CFC9B5E2B14528A3BE79D0 /* JobAttributionService.swift */; };
+		71D6571366154B268301E57C /* AttributeRecordingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12A53B24F73D4BA989BE841A /* AttributeRecordingsSheet.swift */; };
 		299DC057DA4C400285DE2619 /* PatientListPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F59DFA32B2C49969A524943 /* PatientListPage.swift */; };
 		7FB9E64E53D94A958063B2F2 /* AddPatientSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC78D6AF103040E88488CA78 /* AddPatientSheet.swift */; };
 		2206C651352944068103DEEF /* PatientDetailPlaceholder.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF906CDDC4694FEC974913AC /* PatientDetailPlaceholder.swift */; };
@@ -112,6 +114,8 @@
 		DBAD9B292EA76049005F0C67 /* WeakEyeClosure.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = WeakEyeClosure.mp4; sourceTree = "<group>"; };
 		3AB0331B0EBB4451A6E59399 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		A8DD3DF87F5C4BCCBC4F8848 /* PatientService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientService.swift; sourceTree = "<group>"; };
+		60CFC9B5E2B14528A3BE79D0 /* JobAttributionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobAttributionService.swift; sourceTree = "<group>"; };
+		12A53B24F73D4BA989BE841A /* AttributeRecordingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttributeRecordingsSheet.swift; sourceTree = "<group>"; };
 		5F59DFA32B2C49969A524943 /* PatientListPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientListPage.swift; sourceTree = "<group>"; };
 		EC78D6AF103040E88488CA78 /* AddPatientSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddPatientSheet.swift; sourceTree = "<group>"; };
 		EF906CDDC4694FEC974913AC /* PatientDetailPlaceholder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientDetailPlaceholder.swift; sourceTree = "<group>"; };
@@ -198,6 +202,8 @@
 				7724C311C54B4404BC726EDC /* RecordingFiles.swift */,
 				3AB0331B0EBB4451A6E59399 /* Models.swift */,
 				A8DD3DF87F5C4BCCBC4F8848 /* PatientService.swift */,
+				60CFC9B5E2B14528A3BE79D0 /* JobAttributionService.swift */,
+				12A53B24F73D4BA989BE841A /* AttributeRecordingsSheet.swift */,
 				5F59DFA32B2C49969A524943 /* PatientListPage.swift */,
 				EC78D6AF103040E88488CA78 /* AddPatientSheet.swift */,
 				EF906CDDC4694FEC974913AC /* PatientDetailPlaceholder.swift */,
@@ -397,6 +403,8 @@
 				8655019BF6B04E99A99ADD9F /* RecordingFiles.swift in Sources */,
 				D3BDB109E2EE46BE8D76D955 /* Models.swift in Sources */,
 				D601DACF9B464EC88C305ECD /* PatientService.swift in Sources */,
+				FFBE00EE35274005B09921DF /* JobAttributionService.swift in Sources */,
+				71D6571366154B268301E57C /* AttributeRecordingsSheet.swift in Sources */,
 				299DC057DA4C400285DE2619 /* PatientListPage.swift in Sources */,
 				7FB9E64E53D94A958063B2F2 /* AddPatientSheet.swift in Sources */,
 				2206C651352944068103DEEF /* PatientDetailPlaceholder.swift in Sources */,
