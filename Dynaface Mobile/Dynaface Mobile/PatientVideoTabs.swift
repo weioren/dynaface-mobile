@@ -4,14 +4,20 @@ import Supabase
 // MARK: - PatientVideoTabs
 //
 // History + Processed sub-tab content for PatientDetailView. Both
-// query the shared `processing_jobs` table filtered by user_id.
+// tabs surface every recording associated with the patient via two
+// independent sources, unioned client-side:
 //
-// V1 scope: shows only jobs where `processing_jobs.user_id` equals
-// the patient's profile id — i.e. recordings the patient uploaded
-// themselves. Clinician-uploaded recordings will surface here too
-// once `feature/job_patient_attributions` lands and we union with
-// the junction table. Until then, those clinician uploads stay
-// attached to the clinician's own History tab on the Dashboard.
+//   1. Self-recorded jobs — `processing_jobs.user_id = patient.id`
+//      (the patient recorded on their own device).
+//   2. Attribution-linked jobs — rows in `job_patient_attributions`
+//      where `patient_id = patient.id` (typically a clinician
+//      recorded for the patient and picked them in the post-upload
+//      attribution sheet).
+//
+// We don't UNION server-side because the two queries have different
+// shapes (one filters by user_id, the other looks up by job_id), and
+// Supabase's PostgREST does not expose a single endpoint for that
+// without a custom view. Two round-trips, merge in Swift.
 
 // MARK: - PatientHistoryTab
 //
@@ -22,6 +28,7 @@ struct PatientHistoryTab: View {
     let patientId: UUID
 
     @EnvironmentObject private var authService: AuthenticationService
+    @EnvironmentObject private var attributionService: JobAttributionService
 
     @State private var jobs: [PatientJobRow] = []
     @State private var isLoading = false
@@ -66,7 +73,7 @@ struct PatientHistoryTab: View {
             Text("No recordings yet")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
-            Text("Recordings this patient uploads will appear here.")
+            Text("Recordings uploaded for this patient will appear here.")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -85,14 +92,13 @@ struct PatientHistoryTab: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            let rows: [PatientJobRow] = try await authService.supabaseClient
-                .from("processing_jobs")
-                .select("id, exercise_name, status, created_at, output_video_path, output_csv_path")
-                .eq("user_id", value: patientId.uuidString)
-                .order("created_at", ascending: false)
-                .execute()
-                .value
-            self.jobs = rows
+            let merged = try await fetchAllJobs(
+                forPatient: patientId,
+                supabase: authService.supabaseClient,
+                attributionService: attributionService,
+                onlyCompleted: false
+            )
+            self.jobs = merged
         } catch is CancellationError {
             return
         } catch let urlError as URLError where urlError.code == .cancelled {
@@ -113,6 +119,7 @@ struct PatientProcessedTab: View {
     let patientId: UUID
 
     @EnvironmentObject private var authService: AuthenticationService
+    @EnvironmentObject private var attributionService: JobAttributionService
 
     @State private var jobs: [PatientJobRow] = []
     @State private var isLoading = false
@@ -176,15 +183,13 @@ struct PatientProcessedTab: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            let rows: [PatientJobRow] = try await authService.supabaseClient
-                .from("processing_jobs")
-                .select("id, exercise_name, status, created_at, output_video_path, output_csv_path")
-                .eq("user_id", value: patientId.uuidString)
-                .eq("status", value: "completed")
-                .order("created_at", ascending: false)
-                .execute()
-                .value
-            self.jobs = rows.filter {
+            let merged = try await fetchAllJobs(
+                forPatient: patientId,
+                supabase: authService.supabaseClient,
+                attributionService: attributionService,
+                onlyCompleted: true
+            )
+            self.jobs = merged.filter {
                 let out = $0.output_video_path ?? $0.output_csv_path
                 return !(out?.isEmpty ?? true)
             }
@@ -198,6 +203,62 @@ struct PatientProcessedTab: View {
     }
 }
 
+// MARK: - Shared fetch helper
+//
+// Two round-trips against `processing_jobs`:
+//   1. user_id = patient.id  (self-recorded)
+//   2. id IN (attribution job_ids)  (clinician-recorded, attributed)
+// Then merge + dedupe + sort newest first.
+
+@MainActor
+private func fetchAllJobs(
+    forPatient patientId: UUID,
+    supabase: SupabaseClient,
+    attributionService: JobAttributionService,
+    onlyCompleted: Bool
+) async throws -> [PatientJobRow] {
+
+    // 1. Pull the attribution job IDs first. If the network blip happens
+    //    here we still return whatever the user-side query gives.
+    let attributedIds = await attributionService.loadAttributedJobIds(forPatient: patientId)
+
+    // 2. Self-recorded jobs (processing_jobs.user_id == patientId).
+    var selfQuery = supabase
+        .from("processing_jobs")
+        .select("id, exercise_name, status, created_at, output_video_path, output_csv_path, user_id")
+        .eq("user_id", value: patientId.uuidString)
+    if onlyCompleted {
+        selfQuery = selfQuery.eq("status", value: "completed")
+    }
+    let selfJobs: [PatientJobRow] = try await selfQuery
+        .order("created_at", ascending: false)
+        .execute()
+        .value
+
+    // 3. Attribution-linked jobs that aren't already in selfJobs.
+    let selfIds = Set(selfJobs.map(\.id))
+    let extraIds = attributedIds.subtracting(selfIds)
+
+    var attributedJobs: [PatientJobRow] = []
+    if !extraIds.isEmpty {
+        var attrQuery = supabase
+            .from("processing_jobs")
+            .select("id, exercise_name, status, created_at, output_video_path, output_csv_path, user_id")
+            .in("id", values: extraIds.map { $0.uuidString })
+        if onlyCompleted {
+            attrQuery = attrQuery.eq("status", value: "completed")
+        }
+        attributedJobs = try await attrQuery
+            .execute()
+            .value
+    }
+
+    // 4. Merge + sort newest first by the raw created_at string. The
+    //    server returns ISO 8601, which sorts lexicographically.
+    return (selfJobs + attributedJobs)
+        .sorted { ($0.created_at ?? "") > ($1.created_at ?? "") }
+}
+
 // MARK: - Shared row + decode model
 
 struct PatientJobRow: Identifiable, Decodable, Hashable {
@@ -207,6 +268,7 @@ struct PatientJobRow: Identifiable, Decodable, Hashable {
     let created_at: String?
     let output_video_path: String?
     let output_csv_path: String?
+    let user_id: UUID?
 }
 
 private struct PatientJobListRow: View {
