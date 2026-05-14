@@ -7,6 +7,11 @@ struct ProfilePage: View {
     let baseHeight: CGFloat = 844
 
     @EnvironmentObject var authService: AuthenticationService
+    // Forwarded into PatientDetailView's pushed destination — NavigationLink
+    // doesn't propagate env objects scoped to TabView, so we hold them here
+    // and re-inject at the destination.
+    @EnvironmentObject var patientService: PatientService
+    @EnvironmentObject var attributionService: JobAttributionService
     @AppStorage("videoUploadsEnabled") private var videoUploadsEnabled = true
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var profileImage: UIImage?
@@ -161,6 +166,9 @@ struct ProfilePage: View {
                                     displayName: profile.username,
                                     patientId: myUUID
                                 )
+                                .environmentObject(authService)
+                                .environmentObject(patientService)
+                                .environmentObject(attributionService)
                             } label: {
                                 EmptyView()
                             }
