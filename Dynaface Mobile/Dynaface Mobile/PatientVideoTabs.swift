@@ -30,15 +30,19 @@ struct PatientHistoryTab: View {
     @EnvironmentObject private var authService: AuthenticationService
     @EnvironmentObject private var attributionService: JobAttributionService
 
-    // Mirrors the "Upload videos to cloud" toggle in ProfilePage. When OFF,
-    // patient self-view falls back to local FileManager recordings — the
-    // cloud is intentionally empty in that case so we shouldn't render an
-    // empty list when the user actually has recordings on the device.
+    // Mirrors the "Upload videos to cloud" toggle in ProfilePage. When
+    // OFF and the user is viewing their OWN My care, show an empty-state
+    // hint explaining recordings aren't synced — we don't fall back to
+    // local files per product decision.
     @AppStorage("videoUploadsEnabled") private var videoUploadsEnabled = true
 
     @State private var jobs: [PatientJobRow] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
+
+    private var cloudDisabledForSelf: Bool {
+        isOwnDetail(patientId, authService: authService) && !videoUploadsEnabled
+    }
 
     var body: some View {
         Group {
@@ -70,21 +74,40 @@ struct PatientHistoryTab: View {
         }
     }
 
+    @ViewBuilder
     private var emptyState: some View {
-        VStack(spacing: 12) {
-            Spacer()
-            Image(systemName: "video.slash")
-                .font(.system(size: 50))
-                .foregroundColor(.gray.opacity(0.5))
-            Text("No recordings yet")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            Text("Recordings uploaded for this patient will appear here.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-            Spacer()
+        if cloudDisabledForSelf {
+            VStack(spacing: 12) {
+                Spacer()
+                Image(systemName: "icloud.slash")
+                    .font(.system(size: 50))
+                    .foregroundColor(.gray.opacity(0.5))
+                Text("Cloud uploads are off")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Text("Turn on \"Upload videos to cloud\" in Profile to see your recordings here.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                Spacer()
+            }
+        } else {
+            VStack(spacing: 12) {
+                Spacer()
+                Image(systemName: "video.slash")
+                    .font(.system(size: 50))
+                    .foregroundColor(.gray.opacity(0.5))
+                Text("No recordings yet")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Text("Recordings uploaded for this patient will appear here.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                Spacer()
+            }
         }
     }
 
@@ -98,12 +121,10 @@ struct PatientHistoryTab: View {
         isLoading = true
         defer { isLoading = false }
 
-        // Toggle-driven data source. When patient views their own detail
-        // and has cloud uploads disabled, show their device-local
-        // recordings instead — otherwise My care would always look empty
-        // for that patient.
-        if isOwnDetail(patientId, authService: authService) && !videoUploadsEnabled {
-            self.jobs = loadLocalRecordings()
+        // Patient with cloud upload disabled: don't hit the network —
+        // the empty-state hint handles UX.
+        if cloudDisabledForSelf {
+            self.jobs = []
             return
         }
 
@@ -343,9 +364,9 @@ private func fetchAllJobs(
 // MARK: - Self-view detection
 //
 // True when the signed-in user is looking at THEIR OWN PatientDetailView
-// (via Profile → My care). Used to gate the local-FileManager fallback
-// when cloud uploads are off — we don't want a clinician's local files
-// surfacing when they're viewing a patient.
+// (via Profile → My care). Used to scope the "cloud uploads are off"
+// empty-state hint to the patient themselves — clinicians always query
+// cloud regardless of their own toggle.
 
 @MainActor
 private func isOwnDetail(_ patientId: UUID, authService: AuthenticationService) -> Bool {
@@ -354,84 +375,6 @@ private func isOwnDetail(_ patientId: UUID, authService: AuthenticationService) 
         return uuid == patientId
     }
     return false
-}
-
-// MARK: - Local file fallback
-//
-// Scans the app's Documents directory for `.mov` recordings and maps each
-// one to a synthetic `PatientJobRow`. Used by patient self-view when the
-// "Upload videos to cloud" toggle is off — otherwise the History tab is
-// always empty even though the device clearly holds recordings.
-//
-// The synthetic row carries:
-//   - id: a deterministic UUID derived from the filename (so SwiftUI's
-//         List preserves identity across reloads)
-//   - status: "local" so the existing status pill differentiates from
-//             queued/processing/completed cloud rows
-//   - created_at: ISO 8601 of the file's creation date (lexicographic
-//                 sort works the same as for cloud rows)
-
-@MainActor
-private func loadLocalRecordings() -> [PatientJobRow] {
-    let docs: URL
-    if let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
-        docs = url
-    } else {
-        return []
-    }
-
-    let isoFormatter = ISO8601DateFormatter()
-    isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-    do {
-        let files = try FileManager.default.contentsOfDirectory(
-            at: docs,
-            includingPropertiesForKeys: [.creationDateKey, .contentModificationDateKey],
-            options: [.skipsHiddenFiles]
-        )
-        let movs = files.filter { $0.pathExtension.lowercased() == "mov" }
-        return movs.map { url in
-            let values = try? url.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey])
-            let date = values?.creationDate ?? values?.contentModificationDate ?? .distantPast
-            return PatientJobRow(
-                id: stableUUID(from: url.lastPathComponent),
-                exercise_name: exerciseNameFromMovURL(url),
-                status: "local",
-                created_at: isoFormatter.string(from: date),
-                output_video_path: nil,
-                output_csv_path: nil,
-                user_id: nil
-            )
-        }
-        .sorted { ($0.created_at ?? "") > ($1.created_at ?? "") }
-    } catch {
-        print("[loadLocalRecordings] FAILED type=\(type(of: error)) error=\(error)")
-        return []
-    }
-}
-
-/// Filename of the form "Cheek Puff_5.mov" → "Cheek Puff".
-private func exerciseNameFromMovURL(_ url: URL) -> String {
-    let filename = url.lastPathComponent
-    let comps = filename.split(separator: "_")
-    guard comps.count >= 2 else { return filename }
-    return comps.dropLast().joined(separator: " ")
-}
-
-/// Maps a String → a deterministic UUID by padding/truncating UTF-8 bytes
-/// to 16. Used so re-loading the same file yields the same id and SwiftUI
-/// List doesn't blow away cells on every reload.
-private func stableUUID(from string: String) -> UUID {
-    let bytes = Array(string.utf8.prefix(16))
-    var padded = bytes
-    while padded.count < 16 { padded.append(0) }
-    let t = (
-        padded[0],  padded[1],  padded[2],  padded[3],
-        padded[4],  padded[5],  padded[6],  padded[7],
-        padded[8],  padded[9],  padded[10], padded[11],
-        padded[12], padded[13], padded[14], padded[15]
-    )
-    return UUID(uuid: t)
 }
 
 // MARK: - Shared row + decode model
