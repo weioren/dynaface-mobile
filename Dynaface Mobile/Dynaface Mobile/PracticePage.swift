@@ -254,7 +254,9 @@ struct PracticePage: View {
                     await uploadAllRecordingsAndFinish()
                 }
             } label: {
-                Text(isUploadingAll ? "Uploading..." : (videoUploadsEnabled ? "Upload All & Finish" : "Finish Assessment"))
+                Text(isUploadingAll
+                     ? "Uploading..."
+                     : ((videoUploadsEnabled || isClinician) ? "Upload All & Finish" : "Finish Assessment"))
                     .foregroundColor(.white)
                     .font(.headline)
                     .frame(maxWidth: .infinity)
@@ -328,7 +330,11 @@ struct PracticePage: View {
             return
         }
 
-        if !videoUploadsEnabled {
+        // Phase 8: clinicians MUST upload + attribute to a patient — the
+        // post-upload AttributeRecordingsSheet requires real processing_jobs
+        // rows to attribute against. Honour the upload toggle only for
+        // patient accounts (who already have user_id-based association).
+        if !videoUploadsEnabled && !isClinician {
             NotificationCenter.default.post(name: .assessmentCompleted, object: nil)
             NotificationCenter.default.post(name: .recordingAccepted, object: nil)
             presentationMode.wrappedValue.dismiss()

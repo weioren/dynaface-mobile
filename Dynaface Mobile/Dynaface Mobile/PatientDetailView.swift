@@ -39,6 +39,7 @@ struct PatientDetailView: View {
 
     @StateObject private var timelineService: TimelineService
     @State private var selectedTab: SubTab = .timeline
+    @State private var showingAddEvent = false
 
     init(displayName: String, patientId: UUID) {
         self.displayName = displayName
@@ -66,7 +67,7 @@ struct PatientDetailView: View {
 
             switch selectedTab {
             case .timeline:
-                TimelinePage()
+                TimelinePage(showingAddSheet: $showingAddEvent)
                     .environmentObject(timelineService)
             case .history:
                 PatientHistoryTab(patientId: patientId)
@@ -81,5 +82,20 @@ struct PatientDetailView: View {
         // the hidden state and the back chevron disappears with it.
         // Force the bar visible here so back-navigation always works.
         .toolbar(.visible, for: .navigationBar)
+        .toolbar {
+            // Single toolbar owned by PatientDetailView so the
+            // NavigationLink back button never gets clobbered by child
+            // views adding their own `.toolbar { ... }` (the previous
+            // setup did and broke back-navigation on push).
+            if selectedTab == .timeline {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button { showingAddEvent = true } label: {
+                        Label("Add event", systemImage: "plus.circle.fill")
+                            .labelStyle(.iconOnly)
+                            .font(.title2)
+                    }
+                }
+            }
+        }
     }
 }

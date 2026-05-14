@@ -54,14 +54,6 @@ struct AttributeRecordingsSheet: View {
             }
             .navigationTitle("Attribute Recordings")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Skip") {
-                        finish()
-                    }
-                    .disabled(isSaving)
-                }
-            }
             .task {
                 if patientService.patientProfiles.isEmpty {
                     await patientService.loadAllPatientProfiles()
@@ -79,7 +71,9 @@ struct AttributeRecordingsSheet: View {
             } message: { msg in
                 Text(msg)
             }
-            .interactiveDismissDisabled(isSaving)
+            // Attribution is mandatory — clinicians can't dismiss until
+            // they pick a patient (or create one and pick them).
+            .interactiveDismissDisabled(true)
             // Present AddPatientSheet over this sheet so the clinician can
             // claim a new patient profile mid-attribution. When it
             // dismisses we refresh the candidate list so the new patient
@@ -99,11 +93,13 @@ struct AttributeRecordingsSheet: View {
     private var header: some View {
         VStack(spacing: 6) {
             Text("Who are these recordings for?")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            Text("\(jobIds.count) recording\(jobIds.count == 1 ? "" : "s") will be attributed")
+                .font(.subheadline).fontWeight(.semibold)
+                .foregroundColor(.primary)
+            Text("\(jobIds.count) recording\(jobIds.count == 1 ? "" : "s") must be attributed to a patient before continuing")
                 .font(.caption)
                 .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
