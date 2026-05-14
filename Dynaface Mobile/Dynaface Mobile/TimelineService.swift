@@ -43,6 +43,7 @@ final class TimelineService: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
+        print("[TimelineService] loadEvents patient=\(patientId.uuidString)")
         do {
             let rows: [TimelineEvent] = try await supabase
                 .from("timeline_events")
@@ -52,8 +53,9 @@ final class TimelineService: ObservableObject {
                 .execute()
                 .value
             self.events = rows
+            print("[TimelineService] loadEvents OK count=\(rows.count)")
         } catch {
-            print("TimelineService.loadEvents failed: \(error)")
+            print("[TimelineService] loadEvents FAILED type=\(type(of: error)) error=\(error)")
             errorMessage = "Couldn't load timeline: \(error.localizedDescription)"
         }
     }
