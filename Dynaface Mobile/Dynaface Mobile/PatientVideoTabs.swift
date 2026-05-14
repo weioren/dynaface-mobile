@@ -141,10 +141,6 @@ struct PatientHistoryTab: View {
         } catch let urlError as URLError where urlError.code == .cancelled {
             return
         } catch {
-            print("[PatientHistoryTab] ERROR loading recordings:")
-            print("  type: \(type(of: error))")
-            print("  description: \(error)")
-            print("  localized: \(error.localizedDescription)")
             errorMessage = "Couldn't load recordings: \(error.localizedDescription)"
         }
     }
@@ -272,10 +268,6 @@ struct PatientProcessedTab: View {
         } catch let urlError as URLError where urlError.code == .cancelled {
             return
         } catch {
-            print("[PatientProcessedTab] ERROR loading processed videos:")
-            print("  type: \(type(of: error))")
-            print("  description: \(error)")
-            print("  localized: \(error.localizedDescription)")
             errorMessage = "Couldn't load processed videos: \(error.localizedDescription)"
         }
     }
@@ -296,63 +288,42 @@ private func fetchAllJobs(
     onlyCompleted: Bool
 ) async throws -> [PatientJobRow] {
 
-    print("[fetchAllJobs] start patient=\(patientId.uuidString) onlyCompleted=\(onlyCompleted)")
-
     // 1. Pull the attribution job IDs first. If the network blip happens
     //    here we still return whatever the user-side query gives.
     let attributedIds = await attributionService.loadAttributedJobIds(forPatient: patientId)
-    print("[fetchAllJobs] attributedIds count=\(attributedIds.count) ids=\(attributedIds.map { $0.uuidString })")
 
     // 2. Self-recorded jobs (processing_jobs.user_id == patientId).
+    //    Select all columns — the table may not have output_video_path /
+    //    output_csv_path (Alex's worker adds these later). PostgREST
+    //    errors on missing named columns, but "*" tolerates absence.
     var selfQuery = supabase
         .from("processing_jobs")
-        // Select all columns — the table may not have output_video_path /
-        // output_csv_path (Alex's worker adds these later). PostgREST
-        // errors on missing named columns, but "*" tolerates absence.
         .select()
         .eq("user_id", value: patientId.uuidString)
     if onlyCompleted {
         selfQuery = selfQuery.eq("status", value: "completed")
     }
-
-    let selfJobs: [PatientJobRow]
-    do {
-        selfJobs = try await selfQuery
-            .order("created_at", ascending: false)
-            .execute()
-            .value
-        print("[fetchAllJobs] selfJobs count=\(selfJobs.count)")
-    } catch {
-        print("[fetchAllJobs] SELF QUERY FAILED type=\(type(of: error)) error=\(error)")
-        throw error
-    }
+    let selfJobs: [PatientJobRow] = try await selfQuery
+        .order("created_at", ascending: false)
+        .execute()
+        .value
 
     // 3. Attribution-linked jobs that aren't already in selfJobs.
     let selfIds = Set(selfJobs.map(\.id))
     let extraIds = attributedIds.subtracting(selfIds)
-    print("[fetchAllJobs] extraIds count=\(extraIds.count)")
 
     var attributedJobs: [PatientJobRow] = []
     if !extraIds.isEmpty {
         var attrQuery = supabase
             .from("processing_jobs")
-            // Select all columns — the table may not have output_video_path /
-        // output_csv_path (Alex's worker adds these later). PostgREST
-        // errors on missing named columns, but "*" tolerates absence.
-        .select()
+            .select()
             .in("id", values: extraIds.map { $0.uuidString })
         if onlyCompleted {
             attrQuery = attrQuery.eq("status", value: "completed")
         }
-        do {
-            attributedJobs = try await attrQuery
-                .execute()
-                .value
-            print("[fetchAllJobs] attributedJobs count=\(attributedJobs.count)")
-        } catch {
-            print("[fetchAllJobs] ATTR QUERY FAILED type=\(type(of: error)) error=\(error)")
-            throw error
-        }
+        attributedJobs = try await attrQuery
+            .execute()
+            .value
     }
 
     // 4. Merge + sort newest first by the raw created_at string. The

@@ -52,7 +52,6 @@ final class JobAttributionService: ObservableObject {
         } catch let urlError as URLError where urlError.code == .cancelled {
             return []
         } catch {
-            print("[JobAttributionService.loadAttributedJobIds] FAILED type=\(type(of: error)) error=\(error)")
             errorMessage = "Couldn't load attributions: \(error.localizedDescription)"
             return []
         }
