@@ -29,6 +29,9 @@ struct Dashboard: View {
     var body: some View {
         NavigationView {
             TabView(selection: $selectedTab) {
+                // Exercise is the leftmost tab for both roles — clinicians
+                // need to start a recording fast without first picking a
+                // patient (attribution happens in the post-upload sheet).
                 ExercisesPage()
                     .tabItem {
                         Image(systemName: "dumbbell.fill")
@@ -36,30 +39,31 @@ struct Dashboard: View {
                     }
                     .tag(0)
 
-                ExerciseHistoryPage()
-                    .tabItem {
-                        Image(systemName: "video.fill")
-                        Text("History")
-                    }
-                    .tag(1)
-
-                ProcessedVideosPage()
-                    .tabItem {
-                        Image(systemName: "sparkles.tv")
-                        Text("Processed")
-                    }
-                    .tag(2)
-
-                // [Phase 6] Clinician-only "Patients" tab. Only attached
-                // when accountType == .clinician so patients see the
-                // same 4-tab layout as before.
+                // [Phase 8] Clinicians see Patient List in tag 1; patients
+                // see History/Processed instead. Each patient's per-patient
+                // History/Processed lives inside PatientDetailView for the
+                // clinician, so the dashboard doesn't need those tabs.
                 if isClinician {
                     PatientListPage()
                         .tabItem {
                             Image(systemName: "person.3.fill")
                             Text("Patients")
                         }
-                        .tag(3)
+                        .tag(1)
+                } else {
+                    ExerciseHistoryPage()
+                        .tabItem {
+                            Image(systemName: "video.fill")
+                            Text("History")
+                        }
+                        .tag(1)
+
+                    ProcessedVideosPage()
+                        .tabItem {
+                            Image(systemName: "sparkles.tv")
+                            Text("Processed")
+                        }
+                        .tag(2)
                 }
 
                 ProfilePage()
@@ -67,11 +71,15 @@ struct Dashboard: View {
                         Image(systemName: "person.fill")
                         Text("Profile")
                     }
-                    .tag(isClinician ? 4 : 3)
+                    .tag(isClinician ? 2 : 3)
             }
             .environmentObject(patientService)
             .environmentObject(attributionService)
             .onReceive(NotificationCenter.default.publisher(for: .assessmentCompleted)) { _ in
+                // Patient → History tab (their freshly-uploaded clip).
+                // Clinician → Patients tab (where they'd browse the patient
+                // they just attributed the upload to). Both happen to be
+                // tag 1 under the current layout.
                 withAnimation { selectedTab = 1 }
             }
             // [Gap 4] ProfilePage's "My patients" row deep-links here.
@@ -79,7 +87,7 @@ struct Dashboard: View {
             // (they don't have this tab).
             .onReceive(NotificationCenter.default.publisher(for: .navigateToPatientsTab)) { _ in
                 guard isClinician else { return }
-                withAnimation { selectedTab = 3 }
+                withAnimation { selectedTab = 1 }
             }
             .navigationBarHidden(true)
         }
