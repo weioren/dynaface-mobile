@@ -26,6 +26,10 @@ struct PracticePage: View {
     @AppStorage("videoUploadsEnabled") private var videoUploadsEnabled = true
     @Environment(\.presentationMode) var presentationMode
     @EnvironmentObject private var authService: AuthenticationService
+    // Phase 8: needed so the attribution sheet inherits these via explicit
+    // .environmentObject() — sheets sometimes lose env chain on push.
+    @EnvironmentObject private var patientService: PatientService
+    @EnvironmentObject private var attributionService: JobAttributionService
 
     var body: some View {
         if exercises.isEmpty {
@@ -318,7 +322,11 @@ struct PracticePage: View {
                 jobIds: uploadedJobIds,
                 onDone: { finishAfterAttribution() }
             )
-            .interactiveDismissDisabled(true)
+            // Explicitly re-inject env objects so the sheet's view
+            // hierarchy doesn't lose them across the modal boundary.
+            .environmentObject(authService)
+            .environmentObject(patientService)
+            .environmentObject(attributionService)
         }
     }
 

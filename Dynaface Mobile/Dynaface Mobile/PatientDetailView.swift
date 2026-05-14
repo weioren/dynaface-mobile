@@ -55,47 +55,49 @@ struct PatientDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("View", selection: $selectedTab) {
-                ForEach(SubTab.allCases, id: \.self) { tab in
-                    Text(tab.title).tag(tab)
+            // Header row: segmented picker + an inline "+" for Timeline.
+            // Putting the action button HERE (not in `.toolbar`) avoids
+            // composing nested .toolbar modifiers with the parent
+            // NavigationLink, which was causing the back chevron and the
+            // tab UI to freeze on push.
+            HStack(spacing: 8) {
+                Picker("View", selection: $selectedTab) {
+                    ForEach(SubTab.allCases, id: \.self) { tab in
+                        Text(tab.title).tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                if selectedTab == .timeline {
+                    Button { showingAddEvent = true } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.title2)
+                            .foregroundColor(Color(red: 0.12, green: 0.29, blue: 0.64))
+                    }
+                    .accessibilityLabel("Add event")
                 }
             }
-            .pickerStyle(.segmented)
             .padding(.horizontal)
             .padding(.top, 8)
             .padding(.bottom, 4)
 
-            switch selectedTab {
-            case .timeline:
-                TimelinePage(showingAddSheet: $showingAddEvent)
-                    .environmentObject(timelineService)
-            case .history:
-                PatientHistoryTab(patientId: patientId)
-            case .processed:
-                PatientProcessedTab(patientId: patientId)
+            Group {
+                switch selectedTab {
+                case .timeline:
+                    TimelinePage(showingAddSheet: $showingAddEvent)
+                        .environmentObject(timelineService)
+                case .history:
+                    PatientHistoryTab(patientId: patientId)
+                case .processed:
+                    PatientProcessedTab(patientId: patientId)
+                }
             }
         }
         .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
         // Dashboard sets .navigationBarHidden(true) on the outer
-        // NavigationView. On iOS 16/17 a pushed destination inherits
-        // the hidden state and the back chevron disappears with it.
-        // Force the bar visible here so back-navigation always works.
+        // NavigationView. Force the bar visible here so the
+        // NavigationLink back chevron renders correctly.
         .toolbar(.visible, for: .navigationBar)
-        .toolbar {
-            // Single toolbar owned by PatientDetailView so the
-            // NavigationLink back button never gets clobbered by child
-            // views adding their own `.toolbar { ... }` (the previous
-            // setup did and broke back-navigation on push).
-            if selectedTab == .timeline {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { showingAddEvent = true } label: {
-                        Label("Add event", systemImage: "plus.circle.fill")
-                            .labelStyle(.iconOnly)
-                            .font(.title2)
-                    }
-                }
-            }
-        }
     }
 }
