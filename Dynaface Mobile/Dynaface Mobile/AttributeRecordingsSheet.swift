@@ -29,7 +29,6 @@ struct AttributeRecordingsSheet: View {
     @State private var searchText = ""
     @State private var isSaving = false
     @State private var saveErrorMessage: String?
-    @State private var showingAddPatient = false
 
     private var filteredPatients: [PatientCandidate] {
         patientService.searchedPatientProfiles(matching: searchText)
@@ -48,7 +47,6 @@ struct AttributeRecordingsSheet: View {
             VStack(spacing: 0) {
                 header
                 searchField
-                addNewPatientRow
                 Divider()
                 listOrEmpty
             }
@@ -72,19 +70,10 @@ struct AttributeRecordingsSheet: View {
                 Text(msg)
             }
             // Attribution is mandatory — clinicians can't dismiss until
-            // they pick a patient (or create one and pick them).
+            // they pick a patient. The candidate list already shows every
+            // patient profile in the system, so there's no in-sheet
+            // "Add new patient" path; the user finds the patient via search.
             .interactiveDismissDisabled(true)
-            // Present AddPatientSheet over this sheet so the clinician can
-            // claim a new patient profile mid-attribution. When it
-            // dismisses we refresh the candidate list so the new patient
-            // shows up immediately.
-            .sheet(isPresented: $showingAddPatient, onDismiss: {
-                Task { await patientService.loadAllPatientProfiles() }
-            }) {
-                AddPatientSheet()
-                    .environmentObject(authService)
-                    .environmentObject(patientService)
-            }
         }
     }
 
@@ -128,40 +117,6 @@ struct AttributeRecordingsSheet: View {
         .cornerRadius(10)
         .padding(.horizontal)
         .padding(.bottom, 8)
-    }
-
-    private var addNewPatientRow: some View {
-        Button {
-            showingAddPatient = true
-        } label: {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(Color(red: 0.12, green: 0.29, blue: 0.64).opacity(0.18))
-                        .frame(width: 40, height: 40)
-                    Image(systemName: "person.badge.plus")
-                        .font(.body)
-                        .foregroundColor(Color(red: 0.12, green: 0.29, blue: 0.64))
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Add new patient")
-                        .font(.body).fontWeight(.medium)
-                        .foregroundColor(.primary)
-                    Text("Claim a patient profile to your roster")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(isSaving)
     }
 
     @ViewBuilder
