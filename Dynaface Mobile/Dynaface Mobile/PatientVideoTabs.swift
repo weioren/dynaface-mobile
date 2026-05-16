@@ -154,6 +154,7 @@ struct PatientHistoryTab: View {
 
 struct PatientProcessedTab: View {
     let patientId: UUID
+    private let resultsBucket = "results"
 
     @EnvironmentObject private var authService: AuthenticationService
     @EnvironmentObject private var attributionService: JobAttributionService
@@ -163,6 +164,9 @@ struct PatientProcessedTab: View {
     @State private var jobs: [PatientJobRow] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
+    // Playback state — mirrors ProcessedVideosPage in ExerciseHistoryPage.
+    @State private var selectedVideo: PatientProcessedPlayback?
+    @State private var activeDownloadJobId: UUID?
 
     private var cloudDisabledForSelf: Bool {
         isOwnDetail(patientId, authService: authService) && !videoUploadsEnabled
@@ -177,7 +181,18 @@ struct PatientProcessedTab: View {
                 emptyState
             } else {
                 List(jobs) { job in
-                    PatientJobListRow(job: job)
+                    Button {
+                        Task { await openProcessedVideo(job) }
+                    } label: {
+                        HStack {
+                            PatientJobListRow(job: job)
+                            if activeDownloadJobId == job.id {
+                                ProgressView()
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
                 .listStyle(.plain)
             }
@@ -195,6 +210,13 @@ struct PatientProcessedTab: View {
             Button("OK", role: .cancel) {}
         } message: { msg in
             Text(msg)
+        }
+        .sheet(item: $selectedVideo) { video in
+            HistoryDetailView(
+                videoURL: video.playbackURL,
+                exerciseTitle: video.exerciseTitle,
+                recordingDate: video.recordingDate
+            )
         }
     }
 
@@ -271,6 +293,128 @@ struct PatientProcessedTab: View {
             errorMessage = "Couldn't load processed videos: \(error.localizedDescription)"
         }
     }
+
+    // MARK: - Playback (mirrors ProcessedVideosPage in ExerciseHistoryPage)
+
+    @MainActor
+    private func openProcessedVideo(_ job: PatientJobRow) async {
+        activeDownloadJobId = job.id
+        defer { activeDownloadJobId = nil }
+
+        do {
+            let playbackURL = try await signedPlayableURL(for: job)
+            selectedVideo = PatientProcessedPlayback(
+                id: job.id,
+                playbackURL: playbackURL,
+                exerciseTitle: job.exercise_name?.isEmpty == false ? job.exercise_name! : "Unknown Exercise",
+                recordingDate: displayDate(for: job)
+            )
+        } catch is CancellationError {
+            return
+        } catch {
+            if isCancellationLike(error) { return }
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func signedPlayableURL(for job: PatientJobRow) async throws -> URL {
+        let rawPath = job.output_video_path ?? job.output_csv_path ?? ""
+        let candidates = resultPathCandidates(from: rawPath, userId: job.user_id, jobId: job.id)
+        var lastError: Error?
+
+        for path in candidates {
+            do {
+                let signedURL = try await authService.supabaseClient.storage
+                    .from(resultsBucket)
+                    .createSignedURL(path: path, expiresIn: 3600)
+                return signedURL
+            } catch {
+                lastError = error
+                continue
+            }
+        }
+
+        throw lastError ?? NSError(
+            domain: "PatientProcessedTab",
+            code: 404,
+            userInfo: [NSLocalizedDescriptionKey: "Processed video object not found in storage."]
+        )
+    }
+
+    private func normalizeResultObjectPath(_ path: String) -> String {
+        let prefix = "\(resultsBucket)/"
+        if path.hasPrefix(prefix) {
+            return String(path.dropFirst(prefix.count))
+        }
+        return path
+    }
+
+    private func resultPathCandidates(from rawPath: String, userId: UUID?, jobId: UUID) -> [String] {
+        let normalized = normalizeResultObjectPath(rawPath)
+        var candidates: [String] = [normalized]
+
+        if normalized.hasSuffix(".mov") {
+            candidates.append(String(normalized.dropLast(4)) + ".mp4")
+        } else if normalized.hasSuffix(".mp4") {
+            candidates.append(String(normalized.dropLast(4)) + ".mov")
+        } else if normalized.hasSuffix(".csv") {
+            let base = String(normalized.dropLast(4))
+            candidates.append(base + ".mp4")
+            candidates.append(base + ".mov")
+        }
+
+        // Common worker output convention fallback: <user>/<job>/annotated.mp4
+        let directory = (normalized as NSString).deletingLastPathComponent
+        if !directory.isEmpty {
+            candidates.append("\(directory)/annotated.mp4")
+            candidates.append("\(directory)/annotated.mov")
+        }
+
+        // Canonical worker fallback path
+        if let userId {
+            candidates.append("\(userId.uuidString)/\(jobId.uuidString)/annotated.mp4")
+            candidates.append("\(userId.uuidString)/\(jobId.uuidString)/annotated.mov")
+        }
+
+        // De-duplicate while preserving order
+        var seen = Set<String>()
+        var deduped: [String] = []
+        for c in candidates where !c.isEmpty {
+            if !seen.contains(c) {
+                seen.insert(c)
+                deduped.append(c)
+            }
+        }
+        return deduped
+    }
+
+    private func isCancellationLike(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled {
+            return true
+        }
+        let text = error.localizedDescription.lowercased()
+        return text.contains("cancelled") || text.contains("canceled")
+    }
+
+    private func displayDate(for job: PatientJobRow) -> String {
+        guard let raw = job.created_at,
+              let parsed = ISO8601DateFormatter.flexible.date(from: raw) else {
+            return "Unknown date"
+        }
+        let f = DateFormatter()
+        f.dateFormat = "MMM d, yyyy 'at' h:mm a"
+        return f.string(from: parsed)
+    }
+}
+
+// MARK: - PatientProcessedPlayback
+
+private struct PatientProcessedPlayback: Identifiable {
+    let id: UUID
+    let playbackURL: URL
+    let exerciseTitle: String
+    let recordingDate: String
 }
 
 // MARK: - Shared fetch helper
