@@ -128,7 +128,11 @@ struct TimelinePage: View {
         defer { loadingAssessmentJobId = nil }
 
         do {
-            let url = try await signedAssessmentURL(for: jobId)
+            // `event.createdBy` is the uploader's profile.id by
+            // construction (set at insert time in both flows), which
+            // matches the storage path prefix the worker writes under.
+            // Using auth.uid() here would break cross-user playback.
+            let url = try await signedAssessmentURL(for: jobId, uploaderId: event.createdBy)
             let dateText = TimelineEventRow.displayDateFormatter.string(from: event.occurredAt)
             selectedAssessmentVideo = AssessmentVideoPlayback(
                 id: jobId,
@@ -143,29 +147,15 @@ struct TimelinePage: View {
         }
     }
 
-    /// Mirrors PatientProcessedTab's signed URL resolution. We don't have
-    /// the row's exact output paths here, so we rely on the canonical
-    /// worker convention `{user_id}/{job_id}/annotated.{mp4|mov}`. If the
-    /// job hasn't been processed yet, none of the candidates resolve and
-    /// we surface a friendly error.
-    private func signedAssessmentURL(for jobId: UUID) async throws -> URL {
-        // The clinician/patient ID isn't on the event; the worker writes
-        // annotated.mp4 under the uploader's user_id directory. We
-        // can't always reconstruct that here, so try common conventions:
-        //   1. <signed-in user>/<jobId>/annotated.mp4
-        //   2. <signed-in user>/<jobId>/annotated.mov
-        // For the cross-user case (clinician viewing patient), this
-        // currently won't find the file — follow-up: query processing_jobs
-        // for input_video_path's prefix. Acceptable for V1.
-        guard
-            case .signedIn(let profile) = authService.authState,
-            let uid = UUID(uuidString: profile.id)
-        else {
-            throw NSError(domain: "TimelinePage", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not signed in"])
-        }
+    /// Resolve a playback URL using the canonical worker convention:
+    /// `{uploader_id}/{job_id}/annotated.{mp4|mov}` in the `results`
+    /// bucket. `uploaderId` comes from `event.createdBy`, which is
+    /// always the original uploader (either the patient who self-
+    /// recorded or the clinician who recorded on the patient's behalf).
+    private func signedAssessmentURL(for jobId: UUID, uploaderId: UUID) async throws -> URL {
         let candidates = [
-            "\(uid.uuidString)/\(jobId.uuidString)/annotated.mp4",
-            "\(uid.uuidString)/\(jobId.uuidString)/annotated.mov",
+            "\(uploaderId.uuidString)/\(jobId.uuidString)/annotated.mp4",
+            "\(uploaderId.uuidString)/\(jobId.uuidString)/annotated.mov",
         ]
         var lastError: Error?
         for path in candidates {
