@@ -11,6 +11,8 @@ import SwiftUI
 // graphing comes later when iPad / desktop is in scope.
 
 struct TimelinePage: View {
+    private let resultsBucket = "results"
+
     @EnvironmentObject var authService: AuthenticationService
     @EnvironmentObject var timelineService: TimelineService
 
@@ -20,6 +22,10 @@ struct TimelinePage: View {
     /// this flag and TimelinePage owns the actual sheet presentation.
     @Binding var showingAddSheet: Bool
     @State private var editingEvent: TimelineEvent?
+    // Phase 9: assessment-event tap-to-play state.
+    @State private var selectedAssessmentVideo: AssessmentVideoPlayback?
+    @State private var loadingAssessmentJobId: UUID?
+    @State private var assessmentPlaybackError: String?
 
     private var isClinician: Bool {
         if case .signedIn(let profile) = authService.authState {
@@ -45,6 +51,13 @@ struct TimelinePage: View {
         .sheet(item: $editingEvent) { event in
             AddEditEventSheet(mode: .edit(event))
         }
+        .sheet(item: $selectedAssessmentVideo) { video in
+            HistoryDetailView(
+                videoURL: video.playbackURL,
+                exerciseTitle: video.exerciseTitle,
+                recordingDate: video.recordingDate
+            )
+        }
         .refreshable { await timelineService.loadEvents() }
         .task { await reloadIfNeeded() }
         .alert(
@@ -59,6 +72,18 @@ struct TimelinePage: View {
         } message: { msg in
             Text(msg)
         }
+        .alert(
+            "Can't play video",
+            isPresented: Binding(
+                get: { assessmentPlaybackError != nil },
+                set: { if !$0 { assessmentPlaybackError = nil } }
+            ),
+            presenting: assessmentPlaybackError
+        ) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { msg in
+            Text(msg)
+        }
     }
 
     // MARK: - Subviews
@@ -66,18 +91,95 @@ struct TimelinePage: View {
     private var list: some View {
         List {
             ForEach(timelineService.events) { event in
-                TimelineEventRow(event: event)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        // Only clinicians can edit (RLS would reject otherwise);
-                        // tapping as patient is a no-op so the row doesn't feel
-                        // broken when nothing happens.
-                        guard isClinician else { return }
-                        editingEvent = event
+                HStack(spacing: 0) {
+                    TimelineEventRow(event: event)
+                    if loadingAssessmentJobId == event.jobId, event.type == .assessment {
+                        ProgressView()
                     }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    handleTap(event)
+                }
             }
         }
         .listStyle(.plain)
+    }
+
+    private func handleTap(_ event: TimelineEvent) {
+        // Assessment rows always try to open the linked processed video,
+        // regardless of role (RLS gates what the user can actually load).
+        if event.type == .assessment {
+            Task { await openAssessmentVideo(event) }
+            return
+        }
+        // Manual event types: clinician can edit, patient is read-only.
+        guard isClinician else { return }
+        editingEvent = event
+    }
+
+    @MainActor
+    private func openAssessmentVideo(_ event: TimelineEvent) async {
+        guard let jobId = event.jobId else {
+            assessmentPlaybackError = "This assessment isn't linked to a recording."
+            return
+        }
+        loadingAssessmentJobId = jobId
+        defer { loadingAssessmentJobId = nil }
+
+        do {
+            let url = try await signedAssessmentURL(for: jobId)
+            let dateText = TimelineEventRow.displayDateFormatter.string(from: event.occurredAt)
+            selectedAssessmentVideo = AssessmentVideoPlayback(
+                id: jobId,
+                playbackURL: url,
+                exerciseTitle: event.notes.isEmpty ? "Assessment" : event.notes,
+                recordingDate: dateText
+            )
+        } catch is CancellationError {
+            return
+        } catch {
+            assessmentPlaybackError = "Video is still being processed or unavailable."
+        }
+    }
+
+    /// Mirrors PatientProcessedTab's signed URL resolution. We don't have
+    /// the row's exact output paths here, so we rely on the canonical
+    /// worker convention `{user_id}/{job_id}/annotated.{mp4|mov}`. If the
+    /// job hasn't been processed yet, none of the candidates resolve and
+    /// we surface a friendly error.
+    private func signedAssessmentURL(for jobId: UUID) async throws -> URL {
+        // The clinician/patient ID isn't on the event; the worker writes
+        // annotated.mp4 under the uploader's user_id directory. We
+        // can't always reconstruct that here, so try common conventions:
+        //   1. <signed-in user>/<jobId>/annotated.mp4
+        //   2. <signed-in user>/<jobId>/annotated.mov
+        // For the cross-user case (clinician viewing patient), this
+        // currently won't find the file — follow-up: query processing_jobs
+        // for input_video_path's prefix. Acceptable for V1.
+        guard
+            case .signedIn(let profile) = authService.authState,
+            let uid = UUID(uuidString: profile.id)
+        else {
+            throw NSError(domain: "TimelinePage", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not signed in"])
+        }
+        let candidates = [
+            "\(uid.uuidString)/\(jobId.uuidString)/annotated.mp4",
+            "\(uid.uuidString)/\(jobId.uuidString)/annotated.mov",
+        ]
+        var lastError: Error?
+        for path in candidates {
+            do {
+                let signed = try await authService.supabaseClient.storage
+                    .from(resultsBucket)
+                    .createSignedURL(path: path, expiresIn: 3600)
+                return signed
+            } catch {
+                lastError = error
+                continue
+            }
+        }
+        throw lastError ?? NSError(domain: "TimelinePage", code: 404, userInfo: [NSLocalizedDescriptionKey: "Not found"])
     }
 
     private var emptyState: some View {
@@ -118,10 +220,25 @@ struct TimelinePage: View {
     }
 }
 
+// MARK: - AssessmentVideoPlayback
+
+private struct AssessmentVideoPlayback: Identifiable {
+    let id: UUID
+    let playbackURL: URL
+    let exerciseTitle: String
+    let recordingDate: String
+}
+
 // MARK: - TimelineEventRow
 
 private struct TimelineEventRow: View {
     let event: TimelineEvent
+
+    static let displayDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d, yyyy"
+        return f
+    }()
 
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()

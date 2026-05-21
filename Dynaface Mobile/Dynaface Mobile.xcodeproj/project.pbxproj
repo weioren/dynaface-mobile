@@ -7,10 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0B568ACFE37D40EE8BE318DA /* PatientVideoTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F237503A24E42C6AF35A78C /* PatientVideoTabs.swift */; };
 		2206C651352944068103DEEF /* PatientDetailPlaceholder.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF906CDDC4694FEC974913AC /* PatientDetailPlaceholder.swift */; };
 		299DC057DA4C400285DE2619 /* PatientListPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F59DFA32B2C49969A524943 /* PatientListPage.swift */; };
 		45A64E4D0EBB4A3CA462698B /* AddEditEventSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA54A385076247D0B8F1191F /* AddEditEventSheet.swift */; };
 		613393B0DF924D41BC3BE74A /* TimelinePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 586F0E0CECE24F1C81F78053 /* TimelinePage.swift */; };
+		71D6571366154B268301E57C /* AttributeRecordingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12A53B24F73D4BA989BE841A /* AttributeRecordingsSheet.swift */; };
 		7FB9E64E53D94A958063B2F2 /* AddPatientSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC78D6AF103040E88488CA78 /* AddPatientSheet.swift */; };
 		8655019BF6B04E99A99ADD9F /* RecordingFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7724C311C54B4404BC726EDC /* RecordingFiles.swift */; };
 		A1D7E2762E4849EA0030ABFA /* PracticePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D7E2752E4849EA0030ABFA /* PracticePage.swift */; };
@@ -55,15 +57,8 @@
 		DBAD9B322EA76049005F0C67 /* NoseWrinkle.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = DBAD9B272EA76049005F0C67 /* NoseWrinkle.mp4 */; };
 		DBAD9B332EA76049005F0C67 /* StrongEyeClosure.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = DBAD9B282EA76049005F0C67 /* StrongEyeClosure.mp4 */; };
 		E0488C76B46143CB93846C51 /* PatientDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E08E16AD1914D3C8815862F /* PatientDetailView.swift */; };
-		0B568ACFE37D40EE8BE318DA /* PatientVideoTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F237503A24E42C6AF35A78C /* PatientVideoTabs.swift */; };
 		E42C44BC26274304A39B27DF /* UploadVideoPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FAB1D2736A94FEE8B6472A1 /* UploadVideoPage.swift */; };
-		D3BDB109E2EE46BE8D76D955 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AB0331B0EBB4451A6E59399 /* Models.swift */; };
-		D601DACF9B464EC88C305ECD /* PatientService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8DD3DF87F5C4BCCBC4F8848 /* PatientService.swift */; };
 		FFBE00EE35274005B09921DF /* JobAttributionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60CFC9B5E2B14528A3BE79D0 /* JobAttributionService.swift */; };
-		71D6571366154B268301E57C /* AttributeRecordingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12A53B24F73D4BA989BE841A /* AttributeRecordingsSheet.swift */; };
-		299DC057DA4C400285DE2619 /* PatientListPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F59DFA32B2C49969A524943 /* PatientListPage.swift */; };
-		7FB9E64E53D94A958063B2F2 /* AddPatientSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC78D6AF103040E88488CA78 /* AddPatientSheet.swift */; };
-		2206C651352944068103DEEF /* PatientDetailPlaceholder.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF906CDDC4694FEC974913AC /* PatientDetailPlaceholder.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -85,12 +80,14 @@
 
 /* Begin PBXFileReference section */
 		0FAB1D2736A94FEE8B6472A1 /* UploadVideoPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadVideoPage.swift; sourceTree = "<group>"; };
+		12A53B24F73D4BA989BE841A /* AttributeRecordingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttributeRecordingsSheet.swift; sourceTree = "<group>"; };
 		2E08E16AD1914D3C8815862F /* PatientDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientDetailView.swift; sourceTree = "<group>"; };
-		7F237503A24E42C6AF35A78C /* PatientVideoTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientVideoTabs.swift; sourceTree = "<group>"; };
 		3AB0331B0EBB4451A6E59399 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		586F0E0CECE24F1C81F78053 /* TimelinePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelinePage.swift; sourceTree = "<group>"; };
 		5F59DFA32B2C49969A524943 /* PatientListPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientListPage.swift; sourceTree = "<group>"; };
+		60CFC9B5E2B14528A3BE79D0 /* JobAttributionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobAttributionService.swift; sourceTree = "<group>"; };
 		7724C311C54B4404BC726EDC /* RecordingFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordingFiles.swift; sourceTree = "<group>"; };
+		7F237503A24E42C6AF35A78C /* PatientVideoTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientVideoTabs.swift; sourceTree = "<group>"; };
 		A1D7E2752E4849EA0030ABFA /* PracticePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticePage.swift; sourceTree = "<group>"; };
 		A1D7E2772E4857100030ABFA /* Players.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Players.swift; sourceTree = "<group>"; };
 		A8DD3DF87F5C4BCCBC4F8848 /* PatientService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientService.swift; sourceTree = "<group>"; };
@@ -129,11 +126,6 @@
 		DBAD9B272EA76049005F0C67 /* NoseWrinkle.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = NoseWrinkle.mp4; sourceTree = "<group>"; };
 		DBAD9B282EA76049005F0C67 /* StrongEyeClosure.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = StrongEyeClosure.mp4; sourceTree = "<group>"; };
 		DBAD9B292EA76049005F0C67 /* WeakEyeClosure.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = WeakEyeClosure.mp4; sourceTree = "<group>"; };
-		3AB0331B0EBB4451A6E59399 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
-		A8DD3DF87F5C4BCCBC4F8848 /* PatientService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientService.swift; sourceTree = "<group>"; };
-		60CFC9B5E2B14528A3BE79D0 /* JobAttributionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobAttributionService.swift; sourceTree = "<group>"; };
-		12A53B24F73D4BA989BE841A /* AttributeRecordingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttributeRecordingsSheet.swift; sourceTree = "<group>"; };
-		5F59DFA32B2C49969A524943 /* PatientListPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientListPage.swift; sourceTree = "<group>"; };
 		EA54A385076247D0B8F1191F /* AddEditEventSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddEditEventSheet.swift; sourceTree = "<group>"; };
 		EC78D6AF103040E88488CA78 /* AddPatientSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddPatientSheet.swift; sourceTree = "<group>"; };
 		EF906CDDC4694FEC974913AC /* PatientDetailPlaceholder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientDetailPlaceholder.swift; sourceTree = "<group>"; };
@@ -338,7 +330,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1520;
-				LastUpgradeCheck = 1620;
+				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					DBAB9FBC2B59B8EF007B2B80 = {
 						CreatedOnToolsVersion = 15.2;
@@ -542,6 +534,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -598,6 +591,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};

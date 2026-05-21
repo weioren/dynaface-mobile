@@ -105,6 +105,54 @@ final class TimelineService: ObservableObject {
         }
     }
 
+    /// Insert an `assessment`-type event that links back to a
+    /// processing_jobs row (so the row's tap-target can play the
+    /// processed video). Called after an upload completes if the user
+    /// opts in via the "Add to timeline?" confirmation alert.
+    /// `exerciseNames` are comma-joined into the event's notes field.
+    @discardableResult
+    func addAssessmentEvent(
+        jobId: UUID?,
+        occurredAt: Date,
+        exerciseNames: [String],
+        createdBy: UUID
+    ) async -> Bool {
+        struct EventInsert: Encodable {
+            let patient_id: String
+            let type: String
+            let occurred_at: String
+            let notes: String
+            let created_by: String
+            let job_id: String?
+        }
+
+        let payload = EventInsert(
+            patient_id:  patientId.uuidString,
+            type:        TimelineEventType.assessment.rawValue,
+            occurred_at: Self.dateFormatter.string(from: occurredAt),
+            notes:       exerciseNames.joined(separator: ", "),
+            created_by:  createdBy.uuidString,
+            job_id:      jobId?.uuidString
+        )
+
+        do {
+            let inserted: TimelineEvent = try await supabase
+                .from("timeline_events")
+                .insert(payload)
+                .select()
+                .single()
+                .execute()
+                .value
+            events.insert(inserted, at: 0)
+            events.sort { $0.occurredAt > $1.occurredAt }
+            return true
+        } catch {
+            print("TimelineService.addAssessmentEvent failed: \(error)")
+            errorMessage = "Couldn't log assessment: \(error.localizedDescription)"
+            return false
+        }
+    }
+
     /// Patch an existing event. Only clinicians will succeed (RLS).
     /// On success, the local copy is updated in place.
     func updateEvent(

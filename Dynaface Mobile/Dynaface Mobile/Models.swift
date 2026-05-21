@@ -87,8 +87,17 @@ enum TimelineEventType: String, Codable, CaseIterable, Identifiable {
     case injection
     case clinicVisit  = "clinic_visit"
     case note
+    /// Auto-generated when an upload completes and the user opts to log
+    /// it on the timeline (links back to processing_jobs via job_id).
+    case assessment
 
     var id: String { rawValue }
+
+    /// User-pickable cases for AddEditEventSheet. `assessment` is
+    /// system-managed and excluded from the picker.
+    static var manualCases: [TimelineEventType] {
+        allCases.filter { $0 != .assessment }
+    }
 
     /// Title shown on the picker and on event row badges.
     var displayName: String {
@@ -97,6 +106,7 @@ enum TimelineEventType: String, Codable, CaseIterable, Identifiable {
         case .injection:    return "Injection"
         case .clinicVisit:  return "Clinic visit"
         case .note:         return "Note"
+        case .assessment:   return "Assessment"
         }
     }
 
@@ -107,6 +117,7 @@ enum TimelineEventType: String, Codable, CaseIterable, Identifiable {
         case .injection:    return "syringe.fill"
         case .clinicVisit:  return "stethoscope"
         case .note:         return "note.text"
+        case .assessment:   return "video.fill"
         }
     }
 }
@@ -127,6 +138,10 @@ struct TimelineEvent: Identifiable, Hashable, Codable {
     let createdBy: UUID
     let createdAt: Date
     var updatedAt: Date
+    /// Set only on `assessment`-type rows. Links back to the
+    /// processing_jobs row that triggered this timeline entry, so the
+    /// row tap can open the processed video.
+    var jobId: UUID?
 
     enum CodingKeys: String, CodingKey {
         case id, type, notes
@@ -135,6 +150,7 @@ struct TimelineEvent: Identifiable, Hashable, Codable {
         case createdBy  = "created_by"
         case createdAt  = "created_at"
         case updatedAt  = "updated_at"
+        case jobId      = "job_id"
     }
 
     init(from decoder: Decoder) throws {
@@ -146,6 +162,7 @@ struct TimelineEvent: Identifiable, Hashable, Codable {
         createdBy = try c.decode(UUID.self, forKey: .createdBy)
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+        jobId     = try c.decodeIfPresent(UUID.self, forKey: .jobId)
 
         // occurred_at is a Postgres `date` column → "2026-05-10",
         // not a timestamptz, so the SDK's ISO 8601 decoder can't
