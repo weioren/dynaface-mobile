@@ -54,6 +54,9 @@
 		DBAD9B312EA76049005F0C67 /* EyebrowRaise.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = DBAD9B212EA76049005F0C67 /* EyebrowRaise.mp4 */; };
 		DBAD9B322EA76049005F0C67 /* NoseWrinkle.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = DBAD9B272EA76049005F0C67 /* NoseWrinkle.mp4 */; };
 		DBAD9B332EA76049005F0C67 /* StrongEyeClosure.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = DBAD9B282EA76049005F0C67 /* StrongEyeClosure.mp4 */; };
+		DBDCD0AD2FCB483D00C5D367 /* AttributeRecordingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBDCD0AC2FCB483D00C5D367 /* AttributeRecordingsSheet.swift */; };
+		DBDCD0B02FCB484E00C5D367 /* JobAttributionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBDCD0AE2FCB484E00C5D367 /* JobAttributionService.swift */; };
+		DBDCD0B12FCB484E00C5D367 /* PatientVideoTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBDCD0AF2FCB484E00C5D367 /* PatientVideoTabs.swift */; };
 		E0488C76B46143CB93846C51 /* PatientDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E08E16AD1914D3C8815862F /* PatientDetailView.swift */; };
 		E42C44BC26274304A39B27DF /* UploadVideoPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FAB1D2736A94FEE8B6472A1 /* UploadVideoPage.swift */; };
 /* End PBXBuildFile section */
@@ -120,6 +123,9 @@
 		DBAD9B272EA76049005F0C67 /* NoseWrinkle.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = NoseWrinkle.mp4; sourceTree = "<group>"; };
 		DBAD9B282EA76049005F0C67 /* StrongEyeClosure.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = StrongEyeClosure.mp4; sourceTree = "<group>"; };
 		DBAD9B292EA76049005F0C67 /* WeakEyeClosure.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = WeakEyeClosure.mp4; sourceTree = "<group>"; };
+		DBDCD0AC2FCB483D00C5D367 /* AttributeRecordingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttributeRecordingsSheet.swift; sourceTree = "<group>"; };
+		DBDCD0AE2FCB484E00C5D367 /* JobAttributionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobAttributionService.swift; sourceTree = "<group>"; };
+		DBDCD0AF2FCB484E00C5D367 /* PatientVideoTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientVideoTabs.swift; sourceTree = "<group>"; };
 		EA54A385076247D0B8F1191F /* AddEditEventSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddEditEventSheet.swift; sourceTree = "<group>"; };
 		EC78D6AF103040E88488CA78 /* AddPatientSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddPatientSheet.swift; sourceTree = "<group>"; };
 		EF906CDDC4694FEC974913AC /* PatientDetailPlaceholder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientDetailPlaceholder.swift; sourceTree = "<group>"; };
@@ -187,6 +193,9 @@
 		DBAB9FBF2B59B8EF007B2B80 /* Dynaface Mobile */ = {
 			isa = PBXGroup;
 			children = (
+				DBDCD0AE2FCB484E00C5D367 /* JobAttributionService.swift */,
+				DBDCD0AF2FCB484E00C5D367 /* PatientVideoTabs.swift */,
+				DBDCD0AC2FCB483D00C5D367 /* AttributeRecordingsSheet.swift */,
 				DB5F94952EB31ABF00AA3301 /* FullSmile.MOV */,
 				DB5F94962EB31ABF00AA3301 /* HalfSmile.MOV */,
 				DBAD9B1F2EA76049005F0C67 /* Blowfish.mp4 */,
@@ -206,13 +215,10 @@
 				7724C311C54B4404BC726EDC /* RecordingFiles.swift */,
 				3AB0331B0EBB4451A6E59399 /* Models.swift */,
 				A8DD3DF87F5C4BCCBC4F8848 /* PatientService.swift */,
-				60CFC9B5E2B14528A3BE79D0 /* JobAttributionService.swift */,
-				12A53B24F73D4BA989BE841A /* AttributeRecordingsSheet.swift */,
 				5F59DFA32B2C49969A524943 /* PatientListPage.swift */,
 				EC78D6AF103040E88488CA78 /* AddPatientSheet.swift */,
 				EF906CDDC4694FEC974913AC /* PatientDetailPlaceholder.swift */,
 				2E08E16AD1914D3C8815862F /* PatientDetailView.swift */,
-				7F237503A24E42C6AF35A78C /* PatientVideoTabs.swift */,
 				AC4853EEE04540BB9715424C /* TimelineService.swift */,
 				586F0E0CECE24F1C81F78053 /* TimelinePage.swift */,
 				EA54A385076247D0B8F1191F /* AddEditEventSheet.swift */,
@@ -408,17 +414,17 @@
 				DB533B052D560665003BFD1C /* HomePage.swift in Sources */,
 				DBAB9FC32B59B8EF007B2B80 /* SignUp.swift in Sources */,
 				DB533B032D560641003BFD1C /* ProfilePage.swift in Sources */,
+				DBDCD0AD2FCB483D00C5D367 /* AttributeRecordingsSheet.swift in Sources */,
 				E42C44BC26274304A39B27DF /* UploadVideoPage.swift in Sources */,
 				8655019BF6B04E99A99ADD9F /* RecordingFiles.swift in Sources */,
+				DBDCD0B02FCB484E00C5D367 /* JobAttributionService.swift in Sources */,
+				DBDCD0B12FCB484E00C5D367 /* PatientVideoTabs.swift in Sources */,
 				D3BDB109E2EE46BE8D76D955 /* Models.swift in Sources */,
 				D601DACF9B464EC88C305ECD /* PatientService.swift in Sources */,
-				FFBE00EE35274005B09921DF /* JobAttributionService.swift in Sources */,
-				71D6571366154B268301E57C /* AttributeRecordingsSheet.swift in Sources */,
 				299DC057DA4C400285DE2619 /* PatientListPage.swift in Sources */,
 				7FB9E64E53D94A958063B2F2 /* AddPatientSheet.swift in Sources */,
 				2206C651352944068103DEEF /* PatientDetailPlaceholder.swift in Sources */,
 				E0488C76B46143CB93846C51 /* PatientDetailView.swift in Sources */,
-				0B568ACFE37D40EE8BE318DA /* PatientVideoTabs.swift in Sources */,
 				B6E63B63B2A648FD9D987699 /* TimelineService.swift in Sources */,
 				613393B0DF924D41BC3BE74A /* TimelinePage.swift in Sources */,
 				45A64E4D0EBB4A3CA462698B /* AddEditEventSheet.swift in Sources */,
@@ -598,7 +604,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Dynaface Mobile/Preview Content\"";
-				DEVELOPMENT_TEAM = 8VKMH58ASF;
+				DEVELOPMENT_TEAM = LL25GT5UY4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Dynaface;
@@ -633,7 +639,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Dynaface Mobile/Preview Content\"";
-				DEVELOPMENT_TEAM = 8VKMH58ASF;
+				DEVELOPMENT_TEAM = LL25GT5UY4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Dynaface;
