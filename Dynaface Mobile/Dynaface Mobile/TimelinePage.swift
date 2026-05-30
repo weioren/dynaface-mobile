@@ -14,7 +14,11 @@ struct TimelinePage: View {
     @EnvironmentObject var authService: AuthenticationService
     @EnvironmentObject var timelineService: TimelineService
 
-    @State private var showingAddSheet = false
+    /// "Add event" trigger lives on PatientDetailView's toolbar so the
+    /// navigation back button doesn't get clobbered by nested toolbars.
+    /// PatientDetailView passes a binding so the toolbar button flips
+    /// this flag and TimelinePage owns the actual sheet presentation.
+    @Binding var showingAddSheet: Bool
     @State private var editingEvent: TimelineEvent?
 
     private var isClinician: Bool {
@@ -33,15 +37,6 @@ struct TimelinePage: View {
                 emptyState
             } else {
                 list
-            }
-        }
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button { showingAddSheet = true } label: {
-                    Label("Add event", systemImage: "plus.circle.fill")
-                        .labelStyle(.iconOnly)
-                        .font(.title2)
-                }
             }
         }
         .sheet(isPresented: $showingAddSheet) {

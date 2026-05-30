@@ -53,7 +53,6 @@ final class TimelineService: ObservableObject {
                 .value
             self.events = rows
         } catch {
-            print("TimelineService.loadEvents failed: \(error)")
             errorMessage = "Couldn't load timeline: \(error.localizedDescription)"
         }
     }

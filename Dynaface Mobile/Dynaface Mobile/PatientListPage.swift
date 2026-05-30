@@ -14,6 +14,10 @@ import SwiftUI
 struct PatientListPage: View {
     @EnvironmentObject var patientService: PatientService
     @EnvironmentObject var authService: AuthenticationService
+    // Held only so we can forward it into PatientDetailView's pushed
+    // destination — NavigationLink targets don't inherit env objects
+    // that were attached at TabView scope.
+    @EnvironmentObject var attributionService: JobAttributionService
 
     @State private var searchText = ""
 
@@ -95,6 +99,9 @@ struct PatientListPage: View {
                 // analysis sections alongside the existing init.
                 NavigationLink {
                     PatientDetailView(patient: candidate)
+                        .environmentObject(authService)
+                        .environmentObject(patientService)
+                        .environmentObject(attributionService)
                 } label: {
                     PatientRow(candidate: candidate)
                 }

@@ -42,6 +42,10 @@ final class PatientService: ObservableObject {
                 .execute()
                 .value
             self.patientProfiles = rows
+        } catch is CancellationError {
+            return
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            return
         } catch {
             print("PatientService.loadAllPatientProfiles failed: \(error)")
             errorMessage = "Couldn't load patients: \(error.localizedDescription)"
@@ -79,6 +83,10 @@ final class PatientService: ObservableObject {
                 .execute()
                 .value
             self.patients = rows
+        } catch is CancellationError {
+            return
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            return
         } catch {
             print("PatientService.loadAllPatients failed: \(error)")
             errorMessage = "Couldn't load patients: \(error.localizedDescription)"

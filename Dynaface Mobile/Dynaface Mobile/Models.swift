@@ -136,4 +136,61 @@ struct TimelineEvent: Identifiable, Hashable, Codable {
         case createdAt  = "created_at"
         case updatedAt  = "updated_at"
     }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id        = try c.decode(UUID.self, forKey: .id)
+        patientId = try c.decode(UUID.self, forKey: .patientId)
+        type      = try c.decode(TimelineEventType.self, forKey: .type)
+        notes     = try c.decode(String.self, forKey: .notes)
+        createdBy = try c.decode(UUID.self, forKey: .createdBy)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+
+        // occurred_at is a Postgres `date` column → "2026-05-10",
+        // not a timestamptz, so the SDK's ISO 8601 decoder can't
+        // parse it. Decode as string and convert manually.
+        let dateString = try c.decode(String.self, forKey: .occurredAt)
+        guard let parsed = Self.dateOnlyFormatter.date(from: dateString) else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .occurredAt, in: c,
+                debugDescription: "Expected yyyy-MM-dd, got \(dateString)"
+            )
+        }
+        occurredAt = parsed
+    }
+
+    private static let dateOnlyFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .iso8601)
+        f.locale   = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(secondsFromGMT: 0)
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+}
+
+// MARK: - JobPatientAttribution
+//
+// A row on the `job_patient_attributions` junction table (added by
+// the 2026-05-11 migration). Used to say "this processing_jobs row
+// belongs to patient X" without modifying the processing_jobs table
+// or Alex's worker. RLS guarantees a clinician sees all rows while
+// a patient sees only attributions about themselves.
+
+struct JobPatientAttribution: Identifiable, Hashable, Codable {
+    let jobId: UUID
+    let patientId: UUID
+    let attributedBy: UUID
+    let attributedAt: Date
+
+    /// Identifiable conformance — `job_id` is the table's PK.
+    var id: UUID { jobId }
+
+    enum CodingKeys: String, CodingKey {
+        case jobId        = "job_id"
+        case patientId    = "patient_id"
+        case attributedBy = "attributed_by"
+        case attributedAt = "attributed_at"
+    }
 }
