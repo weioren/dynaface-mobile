@@ -49,8 +49,11 @@ struct AddEditEventSheet: View {
         NavigationStack {
             Form {
                 Section("Type") {
+                    // Exclude `.assessment` — it's system-managed (inserted
+                    // automatically after an upload) and shouldn't be a
+                    // user-pickable manual category.
                     Picker("Type", selection: $type) {
-                        ForEach(TimelineEventType.allCases) { t in
+                        ForEach(TimelineEventType.manualCases) { t in
                             Label(t.displayName, systemImage: t.symbolName)
                                 .tag(t)
                         }

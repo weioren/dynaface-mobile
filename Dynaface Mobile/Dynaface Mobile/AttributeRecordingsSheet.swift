@@ -17,6 +17,11 @@ struct AttributeRecordingsSheet: View {
     /// All job IDs from the just-completed upload batch.
     let jobIds: [UUID]
 
+    /// Exercise names matching `jobIds` (same order, same length). Used
+    /// to populate the assessment timeline event's notes if the user
+    /// opts into logging this upload on the timeline.
+    let exerciseNames: [String]
+
     /// Called when the user finishes (either attributed or skipped).
     let onDone: () -> Void
 
@@ -29,6 +34,9 @@ struct AttributeRecordingsSheet: View {
     @State private var searchText = ""
     @State private var isSaving = false
     @State private var saveErrorMessage: String?
+    /// Patient just attributed — used to drive the "Add to timeline?"
+    /// confirmation alert before finishing.
+    @State private var pendingTimelinePatient: PatientCandidate?
 
     private var filteredPatients: [PatientCandidate] {
         patientService.searchedPatientProfiles(matching: searchText)
@@ -74,6 +82,25 @@ struct AttributeRecordingsSheet: View {
             // patient profile in the system, so there's no in-sheet
             // "Add new patient" path; the user finds the patient via search.
             .interactiveDismissDisabled(true)
+            // After successful attribution, ask the clinician whether to
+            // also log this as an `assessment` timeline event.
+            .alert(
+                "Add to timeline?",
+                isPresented: Binding(
+                    get: { pendingTimelinePatient != nil },
+                    set: { if !$0 { pendingTimelinePatient = nil } }
+                ),
+                presenting: pendingTimelinePatient
+            ) { patient in
+                Button("Add") {
+                    Task { await addToTimeline(for: patient); finish() }
+                }
+                Button("Skip", role: .cancel) {
+                    finish()
+                }
+            } message: { patient in
+                Text("Log this assessment on \(patient.username)'s timeline?")
+            }
         }
     }
 
@@ -179,7 +206,22 @@ struct AttributeRecordingsSheet: View {
                 return
             }
         }
-        finish()
+        // Attribution succeeded — defer dismissal until the timeline
+        // confirmation alert resolves.
+        pendingTimelinePatient = candidate
+    }
+
+    /// Insert an `assessment`-type event on the candidate patient's
+    /// timeline. Called from the confirmation alert's "Add" button.
+    private func addToTimeline(for candidate: PatientCandidate) async {
+        guard let clinicianId else { return }
+        let service = TimelineService(patientId: candidate.id)
+        _ = await service.addAssessmentEvent(
+            jobId: jobIds.first,
+            occurredAt: Date(),
+            exerciseNames: exerciseNames,
+            createdBy: clinicianId
+        )
     }
 
     private func finish() {
