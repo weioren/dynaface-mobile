@@ -12,6 +12,48 @@ struct ProfilePage: View {
     @State private var profileImage: UIImage?
     @State private var showingEditProfile = false
 
+    // MARK: - Menu data model
+    //
+    // Role-conditional menu rows. Using `text` as the id (instead of UUID())
+    // keeps each row's identity stable across renders so ForEach doesn't
+    // rebuild every cell on each pass.
+    private struct MenuRow: Identifiable {
+        var id: String { text }
+        let text: String
+        let action: () -> Void
+    }
+
+    /// Returns the menu rows for the given account type. Sign-out is rendered
+    /// separately (red styling) below this list, not as a row here.
+    private func menuItems(for accountType: AccountType) -> [MenuRow] {
+        let edit     = MenuRow(text: "Edit profile") { showingEditProfile = true }
+        let faq      = MenuRow(text: "FAQ") { /* TODO: FAQ */ }
+        let upcoming = MenuRow(text: "Upcoming appointments") { /* stub — button only */ }
+
+        switch accountType {
+        case .patient:
+            return [
+                edit,
+                MenuRow(text: "My progress")         { /* TODO */ },
+                MenuRow(text: "My past evaluations") { /* TODO */ },
+                upcoming,
+                faq,
+            ]
+        case .clinician:
+            return [
+                edit,
+                MenuRow(text: "My patients") {
+                    // Dashboard is the same instance the user is already in — the
+                    // UserDefaults("selectedTab") path only fires on Dashboard's
+                    // onAppear, so use NotificationCenter to switch tabs live.
+                    NotificationCenter.default.post(name: .navigateToPatientsTab, object: nil)
+                },
+                upcoming,
+                faq,
+            ]
+        }
+    }
+
     var body: some View {
         GeometryReader { geometry in
             let widthScale = geometry.size.width / baseWidth
@@ -54,11 +96,15 @@ struct ProfilePage: View {
                         }
                     }
 
-                    // Username display
+                    // Username + role display
                     if case .signedIn(let profile) = authService.authState {
                         Text(profile.username)
                             .font(.system(size: 20 * widthScale, weight: .bold))
                             .foregroundColor(.black)
+
+                        Text(profile.accountType.displayName)
+                            .font(.system(size: 14 * widthScale, weight: .medium))
+                            .foregroundColor(.gray)
                     }
                 }
                 .padding(.vertical, 20 * heightScale)
@@ -67,7 +113,7 @@ struct ProfilePage: View {
                 .background(Color(red: 30/255, green: 75/255, blue: 162/255).opacity(0.18))
                 .cornerRadius(17 * widthScale)
 
-                // Menu items
+                // Menu items — rendered by role; Sign out is a separate sibling below.
                 VStack(spacing: 20 * heightScale) {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
@@ -180,6 +226,23 @@ struct EditProfilePage: View {
     @State private var symptomsArea: String = ""
     @State private var diagnosis: String = ""
     @State private var isLoading: Bool = false
+    @State private var errorMessage: String?
+
+    /// Client-side username validation — non-empty + length ≤ 32 (no global
+    /// uniqueness constraint at the DB layer for now).
+    private var trimmedUsername: String {
+        username.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    private var isUsernameValid: Bool {
+        !trimmedUsername.isEmpty && trimmedUsername.count <= 32
+    }
+    /// Clinicians don't see the symptom / diagnosis fields.
+    private var isClinician: Bool {
+        if case .signedIn(let profile) = authService.authState {
+            return profile.accountType == .clinician
+        }
+        return false
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -189,36 +252,52 @@ struct EditProfilePage: View {
             NavigationView {
                 ScrollView {
                     VStack(spacing: 20 * heightScale) {
-                        // Form fields
+                        // Form fields — Email is always disabled. Username is
+                        // editable for both roles. Symptom/diagnosis fields are
+                        // visible and editable only for patients.
                         VStack(spacing: 15 * heightScale) {
-                            FormField(title: "Email", text: $email, widthScale: widthScale, isDisabled: true)
-                            FormField(title: "Username", text: $username, widthScale: widthScale, isDisabled: true)
-                            FormField(title: "Symptoms Location", text: $symptomsLocation, widthScale: widthScale, isDisabled: true)
-                            FormField(title: "Symptoms Area", text: $symptomsArea, widthScale: widthScale, isDisabled: true)
-                            FormField(title: "Diagnosis", text: $diagnosis, widthScale: widthScale, isDisabled: true)
+                            VStack(alignment: .leading, spacing: 4) {
+                                FormField(title: "Email", text: $email, widthScale: widthScale, isDisabled: true)
+                                Text("Contact support to change email.")
+                                    .font(.system(size: 12 * widthScale))
+                                    .foregroundColor(.gray)
+                            }
+                            FormField(title: "Username", text: $username, widthScale: widthScale, isDisabled: false)
+                            if !isClinician {
+                                FormField(title: "Symptoms Location", text: $symptomsLocation, widthScale: widthScale, isDisabled: false)
+                                FormField(title: "Symptoms Area", text: $symptomsArea, widthScale: widthScale, isDisabled: false)
+                                FormField(title: "Diagnosis", text: $diagnosis, widthScale: widthScale, isDisabled: false)
+                            }
                         }
 
-                        // Save button
+                        // Save button — shows a spinner while loading; greys out and disabled when invalid.
                         Button(action: {
-                            // Save profile changes
-                            Task {
-                                await saveProfile()
-                            }
+                            Task { await saveProfile() }
                         }) {
-                            Text("Save Changes")
-                                .font(.system(size: 18 * widthScale))
-                                .foregroundColor(.white)
-                                .frame(height: 44 * heightScale)
-                                .frame(maxWidth: .infinity)
-                                .background(Color(red: 0.12, green: 0.29, blue: 0.64))
-                                .cornerRadius(49 * widthScale)
-                                .shadow(
-                                    color: Color.black.opacity(0.25),
-                                    radius: 4 * widthScale,
-                                    x: 0, y: 4 * heightScale
-                                )
+                            Group {
+                                if isLoading {
+                                    ProgressView().tint(.white)
+                                } else {
+                                    Text("Save Changes")
+                                        .font(.system(size: 18 * widthScale))
+                                        .foregroundColor(.white)
+                                }
+                            }
+                            .frame(height: 44 * heightScale)
+                            .frame(maxWidth: .infinity)
+                            .background(
+                                isUsernameValid
+                                    ? Color(red: 0.12, green: 0.29, blue: 0.64)
+                                    : Color.gray
+                            )
+                            .cornerRadius(49 * widthScale)
+                            .shadow(
+                                color: Color.black.opacity(0.25),
+                                radius: 4 * widthScale,
+                                x: 0, y: 4 * heightScale
+                            )
                         }
-                        .disabled(isLoading)
+                        .disabled(isLoading || !isUsernameValid)
                         .padding(.top, 20 * heightScale)
 
                         Spacer()
@@ -235,6 +314,18 @@ struct EditProfilePage: View {
                             dismiss()
                         }
                     }
+                }
+                .alert(
+                    "Couldn't save",
+                    isPresented: Binding(
+                        get: { errorMessage != nil },
+                        set: { if !$0 { errorMessage = nil } }
+                    ),
+                    presenting: errorMessage
+                ) { _ in
+                    Button("OK", role: .cancel) {}
+                } message: { msg in
+                    Text(msg)
                 }
             }
         }
@@ -254,15 +345,26 @@ struct EditProfilePage: View {
     }
 
     private func saveProfile() async {
-        // Note: For now this is a placeholder. In a real app, you'd want to
-        // update the profile data in Supabase and refresh the auth state
+        guard isUsernameValid else { return }
         isLoading = true
+        defer { isLoading = false }
 
-        // Simulate API call
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        // Build a role-scoped patch — clinicians update only username; patients
+        // also send symptom + diagnosis. Empty strings get written through, so
+        // clearing a field is supported.
+        var patch = AuthenticationService.ProfilePatch(username: trimmedUsername)
+        if !isClinician {
+            patch.symptoms_location = symptomsLocation
+            patch.symptoms_area     = symptomsArea
+            patch.diagnosis         = diagnosis
+        }
 
-        isLoading = false
-        dismiss()
+        do {
+            try await authService.updateProfile(patch: patch)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }
 
