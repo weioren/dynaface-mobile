@@ -228,65 +228,43 @@ final class AuthenticationService: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
+        print("Starting account creation for email: \(email), accountType: \(accountType.rawValue)")
+
+        // Clear any stale session from a previous attempt
+        try? await supabase.auth.signOut()
+
+        // Pre-check username availability BEFORE any auth side
+        // effect — avoids orphan auth.users rows when username conflicts.
+        let usernameOK = await isUsernameAvailable(username)
+        if !usernameOK {
+            authState = .error("Username has been registered")
+            return
+        }
+
+        // Store credentials for later use in profile completion
+        pendingUsername = username
+        pendingPassword = password
+        pendingAccountType = accountType
+
+        // Attempt signup directly — no signIn pre-check (it was
+        // unreliable and created active sessions as a side effect).
         do {
-            print("Starting account creation for email: \(email), accountType: \(accountType.rawValue)")
-
-            // [Gap 5b] Pre-check username availability BEFORE any auth side
-            // effect — avoids orphan auth.users rows when username conflicts.
-            let usernameOK = await isUsernameAvailable(username)
-            if !usernameOK {
-                authState = .error("Username has been registered")
-                return
-            }
-
-            // First, check if user already exists by trying to sign in
-            do {
-                let existingUser = try await supabase.auth.signIn(email: email, password: password)
-                print("User already exists")
-                authState = .error("Email has been registered")
-                return
-            } catch {
-                // User doesn't exist or wrong password, proceed with signup
-                print("User doesn't exist, proceeding with signup")
-            }
-
-            // Store credentials for later use in profile completion
-            pendingUsername = username
-            pendingPassword = password
-            pendingAccountType = accountType
-
-            // Try creating the auth user with minimal data
-            do {
-                let authResponse = try await supabase.auth.signUp(
-                    email: email,
-                    password: password
-                )
-                print("Auth user created with ID: \(authResponse.user.id)")
-
-                // Set state to account created, which will trigger survey flow
-                authState = .accountCreated(email: email, accountType: accountType)
-
-            } catch {
-                print("Supabase signup failed: \(error)")
-
-                // [Gap 5b] Detect Supabase's "user already registered" error
-                // explicitly — wrong-password signIn above fails into this branch
-                // (catches as generic error), so the real email-taken signal
-                // surfaces here on signUp.
-                let msg = error.localizedDescription.lowercased()
-                if msg.contains("already") || msg.contains("registered") || msg.contains("exists") {
-                    authState = .error("Email has been registered")
-                    return
-                }
-
-                // Existing fallback: still proceed to survey for other failures
-                // (network glitch, etc.) — completeProfile retries signUp.
-                authState = .accountCreated(email: email, accountType: accountType)
-            }
-
+            let authResponse = try await supabase.auth.signUp(
+                email: email,
+                password: password
+            )
+            print("Auth user created with ID: \(authResponse.user.id)")
+            authState = .accountCreated(email: email, accountType: accountType)
         } catch {
-            print("Account creation error: \(error)")
-            authState = .error("Failed to create account. Please try again.")
+            print("Supabase signup failed: \(error)")
+            clearPendingSignupState()
+
+            let msg = error.localizedDescription.lowercased()
+            if msg.contains("already") || msg.contains("registered") || msg.contains("exists") {
+                authState = .error("Email has been registered")
+            } else {
+                authState = .error("Failed to create account: \(error.localizedDescription)")
+            }
         }
     }
     
