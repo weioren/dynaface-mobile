@@ -36,10 +36,10 @@ struct AttributeRecordingsSheet: View {
     @State private var saveErrorMessage: String?
     /// Patient just attributed — used to drive the "Add to timeline?"
     /// confirmation alert before finishing.
-    @State private var pendingTimelinePatient: PatientCandidate?
+    @State private var pendingTimelinePatient: PatientRef?
 
-    private var filteredPatients: [PatientCandidate] {
-        patientService.searchedPatientProfiles(matching: searchText)
+    private var filteredPatients: [PatientRef] {
+        patientService.searchedRoster(matching: searchText)
     }
 
     private var clinicianId: UUID? {
@@ -61,8 +61,9 @@ struct AttributeRecordingsSheet: View {
             .navigationTitle("Attribute Recordings")
             .navigationBarTitleDisplayMode(.inline)
             .task {
-                if patientService.patientProfiles.isEmpty {
+                if patientService.roster.isEmpty {
                     await patientService.loadAllPatientProfiles()
+                    await patientService.loadAllPatients()
                 }
             }
             .alert(
@@ -99,7 +100,7 @@ struct AttributeRecordingsSheet: View {
                     finish()
                 }
             } message: { patient in
-                Text("Log this assessment on \(patient.username)'s timeline?")
+                Text("Log this assessment on \(patient.displayName)'s timeline?")
             }
         }
     }
@@ -148,18 +149,18 @@ struct AttributeRecordingsSheet: View {
 
     @ViewBuilder
     private var listOrEmpty: some View {
-        if patientService.isLoading && patientService.patientProfiles.isEmpty {
+        if patientService.isLoading && patientService.roster.isEmpty {
             ProgressView("Loading patients…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if filteredPatients.isEmpty {
             emptyState
         } else {
             List {
-                ForEach(filteredPatients) { candidate in
+                ForEach(filteredPatients) { ref in
                     Button {
-                        Task { await attribute(to: candidate) }
+                        Task { await attribute(to: ref) }
                     } label: {
-                        AttributePatientRow(candidate: candidate)
+                        AttributePatientRow(ref: ref)
                     }
                     .buttonStyle(.plain)
                     .disabled(isSaving)
@@ -186,7 +187,7 @@ struct AttributeRecordingsSheet: View {
 
     // MARK: - Actions
 
-    private func attribute(to candidate: PatientCandidate) async {
+    private func attribute(to ref: PatientRef) async {
         guard let clinicianId else {
             saveErrorMessage = "You must be signed in."
             return
@@ -197,7 +198,7 @@ struct AttributeRecordingsSheet: View {
         for jobId in jobIds {
             let ok = await attributionService.attribute(
                 jobId: jobId,
-                patientId: candidate.id,
+                patientId: ref.id,
                 attributedBy: clinicianId
             )
             if !ok {
@@ -208,14 +209,14 @@ struct AttributeRecordingsSheet: View {
         }
         // Attribution succeeded — defer dismissal until the timeline
         // confirmation alert resolves.
-        pendingTimelinePatient = candidate
+        pendingTimelinePatient = ref
     }
 
     /// Insert an `assessment`-type event on the candidate patient's
     /// timeline. Called from the confirmation alert's "Add" button.
-    private func addToTimeline(for candidate: PatientCandidate) async {
+    private func addToTimeline(for ref: PatientRef) async {
         guard let clinicianId else { return }
-        let service = TimelineService(patientId: candidate.id)
+        let service = TimelineService(patientId: ref.id)
         _ = await service.addAssessmentEvent(
             jobId: jobIds.first,
             occurredAt: Date(),
@@ -233,10 +234,10 @@ struct AttributeRecordingsSheet: View {
 // MARK: - AttributePatientRow
 
 private struct AttributePatientRow: View {
-    let candidate: PatientCandidate
+    let ref: PatientRef
 
     private var initials: String {
-        let parts = candidate.username.split(separator: " ")
+        let parts = ref.displayName.split(separator: " ")
         let first = parts.first?.first.map(String.init) ?? "?"
         let last  = parts.dropFirst().first?.first.map(String.init) ?? ""
         return (first + last).uppercased()
@@ -253,10 +254,10 @@ private struct AttributePatientRow: View {
                     .foregroundColor(Color(red: 0.12, green: 0.29, blue: 0.64))
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(candidate.username)
+                Text(ref.displayName)
                     .font(.body).fontWeight(.medium)
                     .foregroundColor(.primary)
-                Text(candidate.email)
+                Text(ref.email ?? "Not registered yet")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

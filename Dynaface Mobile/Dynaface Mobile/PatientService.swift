@@ -16,6 +16,7 @@ final class PatientService: ObservableObject {
 
     @Published private(set) var patients: [Patient] = []
     @Published private(set) var patientProfiles: [PatientCandidate] = []
+    @Published private(set) var roster: [PatientRef] = []
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
 
@@ -42,6 +43,7 @@ final class PatientService: ObservableObject {
                 .execute()
                 .value
             self.patientProfiles = rows
+            rebuildRoster()
         } catch is CancellationError {
             return
         } catch let urlError as URLError where urlError.code == .cancelled {
@@ -64,6 +66,33 @@ final class PatientService: ObservableObject {
         }
     }
 
+    // MARK: - Unified roster (registered profiles ∪ unregistered patients)
+
+    /// Rebuilds the merged roster shown on PatientListPage:
+    ///   - every registered patient-role profile
+    ///   - every clinician-created, non-archived `patients` row NOT yet
+    ///     linked to a profile (claimed rows are represented by their
+    ///     profile, so they're skipped to avoid duplicates)
+    /// Sorted newest-first so a just-created patient shows at the top.
+    func rebuildRoster() {
+        let registered = patientProfiles.map(PatientRef.init(profile:))
+        let unregistered = patients
+            .filter { $0.claimedUserId == nil && $0.archivedAt == nil }
+            .map(PatientRef.init(patient:))
+        roster = (registered + unregistered).sorted { $0.createdAt > $1.createdAt }
+    }
+
+    /// Case-insensitive substring match on display name OR email over the
+    /// merged roster. Empty query returns the full roster.
+    func searchedRoster(matching query: String) -> [PatientRef] {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return roster }
+        return roster.filter {
+            $0.displayName.localizedCaseInsensitiveContains(trimmed)
+                || ($0.email?.localizedCaseInsensitiveContains(trimmed) ?? false)
+        }
+    }
+
     // MARK: - Read
 
     /// Pulls every (non-archived) patient visible to the signed-in
@@ -83,6 +112,7 @@ final class PatientService: ObservableObject {
                 .execute()
                 .value
             self.patients = rows
+            rebuildRoster()
         } catch is CancellationError {
             return
         } catch let urlError as URLError where urlError.code == .cancelled {
@@ -118,6 +148,7 @@ final class PatientService: ObservableObject {
                 .execute()
                 .value
             patients.insert(inserted, at: 0)
+            rebuildRoster()
         } catch {
             print("PatientService.addPatient failed: \(error)")
             errorMessage = "Couldn't add patient: \(error.localizedDescription)"
@@ -194,6 +225,7 @@ final class PatientService: ObservableObject {
                 .execute()
                 .value
             patients.insert(inserted, at: 0)
+            rebuildRoster()
         } catch {
             print("PatientService.addPatientFromProfile failed: \(error)")
             errorMessage = "Couldn't add patient: \(error.localizedDescription)"

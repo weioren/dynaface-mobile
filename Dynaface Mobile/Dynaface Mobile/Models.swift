@@ -75,6 +75,40 @@ struct PatientCandidate: Identifiable, Hashable, Codable {
     }
 }
 
+// MARK: - PatientRef
+//
+// Unified row model for the clinician's Patients list. Two sources map
+// into one namespace:
+//   - registered:   a `profiles` patient account (id = profiles.id)
+//   - unregistered: a clinician-created `patients` row not yet linked to
+//                   an account (id = patients.id), clinician-visible only.
+// `id` is the key used downstream for timeline / attribution / videos.
+
+struct PatientRef: Identifiable, Hashable {
+    enum Kind { case registered, unregistered }
+    let id: UUID
+    let displayName: String
+    let email: String?
+    let kind: Kind
+    let createdAt: Date
+
+    init(profile: PatientCandidate) {
+        self.id = profile.id
+        self.displayName = profile.username
+        self.email = profile.email
+        self.kind = .registered
+        self.createdAt = profile.createdAt
+    }
+
+    init(patient: Patient) {
+        self.id = patient.id
+        self.displayName = patient.name
+        self.email = nil
+        self.kind = .unregistered
+        self.createdAt = patient.createdAt
+    }
+}
+
 // MARK: - TimelineEventType
 //
 // The clinical event categories the timeline supports in V1. Stored as

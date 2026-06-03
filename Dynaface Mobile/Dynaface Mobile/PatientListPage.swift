@@ -21,9 +21,10 @@ struct PatientListPage: View {
 
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
+    @State private var showingAddPatient = false
 
-    private var filtered: [PatientCandidate] {
-        patientService.searchedPatientProfiles(matching: searchText)
+    private var filtered: [PatientRef] {
+        patientService.searchedRoster(matching: searchText)
     }
 
     var body: some View {
@@ -31,10 +32,10 @@ struct PatientListPage: View {
             header
             searchField
             Group {
-                if patientService.isLoading && patientService.patientProfiles.isEmpty {
+                if patientService.isLoading && patientService.roster.isEmpty {
                     ProgressView("Loading patients…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if patientService.patientProfiles.isEmpty {
+                } else if patientService.roster.isEmpty {
                     emptyState
                 } else if filtered.isEmpty {
                     noMatches
@@ -44,6 +45,11 @@ struct PatientListPage: View {
             }
         }
         .task { await reloadIfNeeded() }
+        .sheet(isPresented: $showingAddPatient) {
+            AddPatientSheet()
+                .environmentObject(patientService)
+                .environmentObject(authService)
+        }
         .alert(
             "Couldn't load patients",
             isPresented: Binding(
@@ -65,6 +71,12 @@ struct PatientListPage: View {
             Text("Patients")
                 .font(.largeTitle).fontWeight(.bold)
             Spacer()
+            Button { showingAddPatient = true } label: {
+                Image(systemName: "plus.circle.fill")
+                    .font(.title2)
+                    .foregroundColor(Color(red: 0.12, green: 0.29, blue: 0.64))
+            }
+            .accessibilityLabel("Add patient")
         }
         .padding(.horizontal)
         .padding(.top, 8)
@@ -106,17 +118,17 @@ struct PatientListPage: View {
 
     private var list: some View {
         List {
-            ForEach(filtered) { candidate in
-                // Push PatientDetailView — V1 contains the Timeline section
-                // only; future iterations attach Alex's annotated-video and
-                // analysis sections alongside the existing init.
+            ForEach(filtered) { ref in
+                // Registered (profiles.id) and unregistered (patients.id)
+                // both push via displayName/patientId. Unregistered rows
+                // are clinician-visible only (no patient account yet).
                 NavigationLink {
-                    PatientDetailView(patient: candidate)
+                    PatientDetailView(displayName: ref.displayName, patientId: ref.id)
                         .environmentObject(authService)
                         .environmentObject(patientService)
                         .environmentObject(attributionService)
                 } label: {
-                    PatientRow(candidate: candidate)
+                    PatientRow(ref: ref)
                 }
             }
         }
@@ -159,20 +171,23 @@ struct PatientListPage: View {
     // MARK: - Actions
 
     private func reloadIfNeeded() async {
-        if patientService.patientProfiles.isEmpty { await reload() }
+        if patientService.roster.isEmpty { await reload() }
     }
 
     private func reload() async {
+        // Sequential (not concurrent) so the two loads don't race on the
+        // shared `isLoading` flag and flash the empty state.
         await patientService.loadAllPatientProfiles()
+        await patientService.loadAllPatients()
     }
 }
 
 // MARK: - PatientRow
 private struct PatientRow: View {
-    let candidate: PatientCandidate
+    let ref: PatientRef
 
     private var initials: String {
-        let parts = candidate.username.split(separator: " ")
+        let parts = ref.displayName.split(separator: " ")
         let first = parts.first?.first.map(String.init) ?? "?"
         let last  = parts.dropFirst().first?.first.map(String.init) ?? ""
         return (first + last).uppercased()
@@ -189,10 +204,10 @@ private struct PatientRow: View {
                     .foregroundColor(Color(red: 0.12, green: 0.29, blue: 0.64))
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(candidate.username)
+                Text(ref.displayName)
                     .font(.body).fontWeight(.medium)
                     .foregroundColor(.primary)
-                Text(candidate.email)
+                Text(ref.email ?? "Not registered yet")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
