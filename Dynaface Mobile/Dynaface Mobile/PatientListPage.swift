@@ -20,6 +20,7 @@ struct PatientListPage: View {
     @EnvironmentObject var attributionService: JobAttributionService
 
     @State private var searchText = ""
+    @FocusState private var isSearchFocused: Bool
 
     private var filtered: [PatientCandidate] {
         patientService.searchedPatientProfiles(matching: searchText)
@@ -28,12 +29,15 @@ struct PatientListPage: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            searchField
             Group {
                 if patientService.isLoading && patientService.patientProfiles.isEmpty {
                     ProgressView("Loading patients…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if patientService.patientProfiles.isEmpty {
                     emptyState
+                } else if filtered.isEmpty {
+                    noMatches
                 } else {
                     list
                 }
@@ -73,6 +77,9 @@ struct PatientListPage: View {
             TextField("Search by name or email", text: $searchText)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .focused($isSearchFocused)
+                .submitLabel(.search)
+                .onSubmit { isSearchFocused = false }
             if !searchText.isEmpty {
                 Button {
                     searchText = ""
@@ -89,6 +96,12 @@ struct PatientListPage: View {
         .cornerRadius(10)
         .padding(.horizontal)
         .padding(.vertical, 8)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { isSearchFocused = false }
+            }
+        }
     }
 
     private var list: some View {
