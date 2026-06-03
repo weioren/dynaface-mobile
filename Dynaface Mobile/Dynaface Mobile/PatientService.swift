@@ -126,8 +126,11 @@ final class PatientService: ObservableObject {
     // MARK: - Write
 
     /// Inserts a new patient row for the given clinician and prepends it
-    /// to the local list on success. Errors surface via `errorMessage`.
-    func addPatient(name: String, clinicianId: UUID) async {
+    /// to the local list on success. Returns the inserted row so callers
+    /// can immediately select it; nil on failure. Errors surface via
+    /// `errorMessage`.
+    @discardableResult
+    func addPatient(name: String, clinicianId: UUID) async -> Patient? {
         isLoading = true
         defer { isLoading = false }
 
@@ -149,9 +152,11 @@ final class PatientService: ObservableObject {
                 .value
             patients.insert(inserted, at: 0)
             rebuildRoster()
+            return inserted
         } catch {
             print("PatientService.addPatient failed: \(error)")
             errorMessage = "Couldn't add patient: \(error.localizedDescription)"
+            return nil
         }
     }
 
