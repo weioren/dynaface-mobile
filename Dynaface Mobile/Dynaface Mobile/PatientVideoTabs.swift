@@ -318,74 +318,7 @@ struct PatientProcessedTab: View {
     }
 
     private func signedPlayableURL(for job: PatientJobRow) async throws -> URL {
-        let rawPath = job.output_video_path ?? job.output_csv_path ?? ""
-        let candidates = resultPathCandidates(from: rawPath, userId: job.user_id, jobId: job.id)
-        var lastError: Error?
-
-        for path in candidates {
-            do {
-                let signedURL = try await authService.supabaseClient.storage
-                    .from(resultsBucket)
-                    .createSignedURL(path: path, expiresIn: 3600)
-                return signedURL
-            } catch {
-                lastError = error
-                continue
-            }
-        }
-
-        throw lastError ?? NSError(
-            domain: "PatientProcessedTab",
-            code: 404,
-            userInfo: [NSLocalizedDescriptionKey: "Processed video object not found in storage."]
-        )
-    }
-
-    private func normalizeResultObjectPath(_ path: String) -> String {
-        let prefix = "\(resultsBucket)/"
-        if path.hasPrefix(prefix) {
-            return String(path.dropFirst(prefix.count))
-        }
-        return path
-    }
-
-    private func resultPathCandidates(from rawPath: String, userId: UUID?, jobId: UUID) -> [String] {
-        let normalized = normalizeResultObjectPath(rawPath)
-        var candidates: [String] = [normalized]
-
-        if normalized.hasSuffix(".mov") {
-            candidates.append(String(normalized.dropLast(4)) + ".mp4")
-        } else if normalized.hasSuffix(".mp4") {
-            candidates.append(String(normalized.dropLast(4)) + ".mov")
-        } else if normalized.hasSuffix(".csv") {
-            let base = String(normalized.dropLast(4))
-            candidates.append(base + ".mp4")
-            candidates.append(base + ".mov")
-        }
-
-        // Common worker output convention fallback: <user>/<job>/annotated.mp4
-        let directory = (normalized as NSString).deletingLastPathComponent
-        if !directory.isEmpty {
-            candidates.append("\(directory)/annotated.mp4")
-            candidates.append("\(directory)/annotated.mov")
-        }
-
-        // Canonical worker fallback path
-        if let userId {
-            candidates.append("\(userId.uuidString)/\(jobId.uuidString)/annotated.mp4")
-            candidates.append("\(userId.uuidString)/\(jobId.uuidString)/annotated.mov")
-        }
-
-        // De-duplicate while preserving order
-        var seen = Set<String>()
-        var deduped: [String] = []
-        for c in candidates where !c.isEmpty {
-            if !seen.contains(c) {
-                seen.insert(c)
-                deduped.append(c)
-            }
-        }
-        return deduped
+        try await signedProcessedVideoURL(for: job, supabase: authService.supabaseClient)
     }
 
     private func isCancellationLike(_ error: Error) -> Bool {
@@ -415,6 +348,90 @@ private struct PatientProcessedPlayback: Identifiable {
     let playbackURL: URL
     let exerciseTitle: String
     let recordingDate: String
+}
+
+// MARK: - Shared processed-video path resolution
+//
+// Single source of truth for turning a job's stored output path into the
+// candidate object paths in the `results` bucket. Used by BOTH the
+// Processed tab and TimelinePage so playback resolves identically.
+
+func processedVideoPathCandidates(
+    outputVideoPath: String?,
+    outputCsvPath: String?,
+    userId: UUID?,
+    jobId: UUID,
+    resultsBucket: String = "results"
+) -> [String] {
+    func normalize(_ path: String) -> String {
+        let prefix = "\(resultsBucket)/"
+        return path.hasPrefix(prefix) ? String(path.dropFirst(prefix.count)) : path
+    }
+
+    let normalized = normalize(outputVideoPath ?? outputCsvPath ?? "")
+    var candidates: [String] = [normalized]
+
+    if normalized.hasSuffix(".mov") {
+        candidates.append(String(normalized.dropLast(4)) + ".mp4")
+    } else if normalized.hasSuffix(".mp4") {
+        candidates.append(String(normalized.dropLast(4)) + ".mov")
+    } else if normalized.hasSuffix(".csv") {
+        let base = String(normalized.dropLast(4))
+        candidates.append(base + ".mp4")
+        candidates.append(base + ".mov")
+    }
+
+    let directory = (normalized as NSString).deletingLastPathComponent
+    if !directory.isEmpty {
+        candidates.append("\(directory)/annotated.mp4")
+        candidates.append("\(directory)/annotated.mov")
+    }
+
+    if let userId {
+        candidates.append("\(userId.uuidString)/\(jobId.uuidString)/annotated.mp4")
+        candidates.append("\(userId.uuidString)/\(jobId.uuidString)/annotated.mov")
+    }
+
+    var seen = Set<String>()
+    var deduped: [String] = []
+    for c in candidates where !c.isEmpty {
+        if !seen.contains(c) {
+            seen.insert(c)
+            deduped.append(c)
+        }
+    }
+    return deduped
+}
+
+/// The one and only "play this job's processed video" resolver. Called by
+/// both the Processed tab and the timeline so playback is identical.
+func signedProcessedVideoURL(
+    for job: PatientJobRow,
+    supabase: SupabaseClient,
+    resultsBucket: String = "results"
+) async throws -> URL {
+    let candidates = processedVideoPathCandidates(
+        outputVideoPath: job.output_video_path,
+        outputCsvPath: job.output_csv_path,
+        userId: job.user_id,
+        jobId: job.id
+    )
+    var lastError: Error?
+    for path in candidates {
+        do {
+            return try await supabase.storage
+                .from(resultsBucket)
+                .createSignedURL(path: path, expiresIn: 3600)
+        } catch {
+            lastError = error
+            continue
+        }
+    }
+    throw lastError ?? NSError(
+        domain: "PatientProcessedTab",
+        code: 404,
+        userInfo: [NSLocalizedDescriptionKey: "Processed video object not found in storage."]
+    )
 }
 
 // MARK: - Shared fetch helper
