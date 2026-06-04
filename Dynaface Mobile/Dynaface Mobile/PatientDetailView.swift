@@ -2,12 +2,12 @@ import SwiftUI
 
 // MARK: - PatientDetailView
 //
-// Host view for a single patient's detail screen. Hosts three
-// sub-tabs at the top of the page:
+// Host view for a single patient's detail screen. Hosts two sub-tabs:
 //
-//   1. Timeline   — clinical events log (surgery, injection, etc.)
-//   2. History    — every recording uploaded for this patient
-//   3. Processed  — annotated/completed videos for this patient
+//   1. Timeline   — clinical events + assessments (tap to replay)
+//   2. Processed  — annotated/completed videos for this patient
+//
+// History was folded into the Timeline (it already shows assessments).
 //
 // Two entry points:
 //   - Clinician taps a row in PatientListPage → push with that
@@ -23,12 +23,11 @@ import SwiftUI
 
 struct PatientDetailView: View {
     enum SubTab: Int, Hashable, CaseIterable {
-        case timeline, history, processed
+        case timeline, processed
 
         var title: String {
             switch self {
             case .timeline:  return "Timeline"
-            case .history:   return "History"
             case .processed: return "Processed"
             }
         }
@@ -86,8 +85,6 @@ struct PatientDetailView: View {
                 case .timeline:
                     TimelinePage(showingAddSheet: $showingAddEvent)
                         .environmentObject(timelineService)
-                case .history:
-                    PatientHistoryTab(patientId: patientId)
                 case .processed:
                     PatientProcessedTab(patientId: patientId)
                 }
