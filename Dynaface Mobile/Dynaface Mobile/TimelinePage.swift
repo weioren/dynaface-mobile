@@ -26,6 +26,8 @@ struct TimelinePage: View {
     @State private var selectedAssessmentVideo: AssessmentVideoPlayback?
     @State private var loadingAssessmentJobId: UUID?
     @State private var assessmentPlaybackError: String?
+    /// Timeline filter: nil = show all; otherwise only this event type.
+    @State private var selectedFilter: TimelineEventType?
 
     private var isClinician: Bool {
         if case .signedIn(let profile) = authService.authState {
@@ -42,7 +44,14 @@ struct TimelinePage: View {
             } else if timelineService.events.isEmpty {
                 emptyState
             } else {
-                list
+                VStack(spacing: 0) {
+                    filterBar
+                    if items.isEmpty {
+                        filterEmptyState
+                    } else {
+                        list
+                    }
+                }
             }
         }
         .sheet(isPresented: $showingAddSheet) {
@@ -109,11 +118,13 @@ struct TimelinePage: View {
         .listStyle(.plain)
     }
 
-    /// GMT calendar so day-grouping matches the UTC-midnight dates the
-    /// decoder produces (occurred_at is a date-only column).
-    private static let gmtCalendar: Calendar = {
+    /// Eastern calendar so assessments group by the US Eastern day they were
+    /// recorded — derived from createdAt (a real timestamp) rather than the
+    /// UTC date the date-only occurred_at column would give. (A late-evening
+    /// ET recording would otherwise land on the next UTC day.)
+    private static let easternCalendar: Calendar = {
         var c = Calendar(identifier: .gregorian)
-        c.timeZone = TimeZone(identifier: "GMT")!
+        c.timeZone = TimeZone(identifier: "America/New_York")!
         return c
     }()
 
@@ -123,9 +134,12 @@ struct TimelinePage: View {
     private var items: [TimelineItem] {
         var assessmentsByDay: [Date: [TimelineEvent]] = [:]
         var manuals: [TimelineEvent] = []
-        for event in timelineService.events {
+        let events = timelineService.events.filter {
+            selectedFilter == nil || $0.type == selectedFilter
+        }
+        for event in events {
             if event.type == .assessment {
-                let day = Self.gmtCalendar.startOfDay(for: event.occurredAt)
+                let day = Self.easternCalendar.startOfDay(for: event.createdAt)
                 assessmentsByDay[day, default: []].append(event)
             } else {
                 manuals.append(event)
@@ -140,6 +154,56 @@ struct TimelinePage: View {
                 ? $0.primaryDate > $1.primaryDate
                 : $0.secondaryDate > $1.secondaryDate
         }
+    }
+
+    private var filterBar: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Filter by:")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach([TimelineEventType.assessment, .surgery, .clinicVisit], id: \.self) { type in
+                        let isSelected = selectedFilter == type
+                        Button {
+                            selectedFilter = isSelected ? nil : type
+                        } label: {
+                            Text(type.displayName)
+                                .font(.subheadline)
+                                .foregroundColor(isSelected ? .white : .primary)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(isSelected ? Color(red: 0.12, green: 0.29, blue: 0.64) : Color.clear)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.gray.opacity(0.4), lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+    }
+
+    private var filterEmptyState: some View {
+        VStack(spacing: 8) {
+            Spacer()
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.system(size: 44))
+                .foregroundColor(.gray.opacity(0.5))
+            Text("No \(selectedFilter?.displayName.lowercased() ?? "") events")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func handleTap(_ event: TimelineEvent) {
@@ -281,6 +345,15 @@ private let timelineDateFormatter: DateFormatter = {
     return f
 }()
 
+// Each movement's "time recorded", fixed to US Eastern Time so every
+// viewer (regardless of device timezone) sees the same value.
+private let timelineTimeFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "h:mm a 'ET'"
+    f.timeZone = TimeZone(identifier: "America/New_York")
+    return f
+}()
+
 // MARK: - TimelineAssessmentGroupRow
 //
 // Same-day assessment events folded into one "Clinical Assessment" card.
@@ -354,6 +427,10 @@ private struct TimelineAssessmentGroupRow: View {
                                     Spacer()
                                     if loadingJobId == e.jobId {
                                         ProgressView()
+                                    } else {
+                                        Text(timelineTimeFormatter.string(from: e.createdAt))
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
                                     }
                                 }
                                 .contentShape(Rectangle())
