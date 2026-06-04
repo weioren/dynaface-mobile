@@ -549,16 +549,25 @@ func signedRawVideoURL(
     supabase: SupabaseClient,
     rawVideosBucket: String = "raw-videos"
 ) async throws -> URL {
-    guard let userId = job.user_id else {
-        throw NSError(domain: "PatientOriginal", code: 404,
-                      userInfo: [NSLocalizedDescriptionKey: "Recording owner unknown."])
+    var candidates: [String] = []
+    // Prefer the exact stored upload path (mirrors how Analyzed uses
+    // output_video_path), then fall back to the canonical convention.
+    if let input = job.input_video_path, !input.isEmpty {
+        let prefix = "\(rawVideosBucket)/"
+        candidates.append(input.hasPrefix(prefix) ? String(input.dropFirst(prefix.count)) : input)
     }
-    let candidates = [
-        "\(userId.uuidString)/\(job.id.uuidString)/video.mov",
-        "\(userId.uuidString)/\(job.id.uuidString)/video.mp4",
-    ]
+    if let userId = job.user_id {
+        candidates.append("\(userId.uuidString)/\(job.id.uuidString)/video.mov")
+        candidates.append("\(userId.uuidString)/\(job.id.uuidString)/video.mp4")
+    }
+    var seen = Set<String>()
+    var deduped: [String] = []
+    for c in candidates where !c.isEmpty {
+        if seen.insert(c).inserted { deduped.append(c) }
+    }
+
     var lastError: Error?
-    for path in candidates {
+    for path in deduped {
         do {
             let url = try await supabase.storage
                 .from(rawVideosBucket)
@@ -659,6 +668,7 @@ struct PatientJobRow: Identifiable, Decodable, Hashable {
     let created_at: String?
     let output_video_path: String?
     let output_csv_path: String?
+    let input_video_path: String?
     let user_id: UUID?
 }
 
