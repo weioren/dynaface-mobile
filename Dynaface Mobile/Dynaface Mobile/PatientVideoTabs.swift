@@ -39,6 +39,8 @@ struct PatientHistoryTab: View {
     @State private var jobs: [PatientJobRow] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var selectedVideo: PatientProcessedPlayback?
+    @State private var activeDownloadJobId: UUID?
 
     private var cloudDisabledForSelf: Bool {
         isOwnDetail(patientId, authService: authService) && !videoUploadsEnabled
@@ -53,7 +55,18 @@ struct PatientHistoryTab: View {
                 emptyState
             } else {
                 List(jobs) { job in
-                    PatientJobListRow(job: job)
+                    Button {
+                        Task { await openOriginalVideo(job) }
+                    } label: {
+                        HStack {
+                            PatientJobListRow(job: job)
+                            if activeDownloadJobId == job.id {
+                                ProgressView()
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
                 .listStyle(.plain)
             }
@@ -71,6 +84,13 @@ struct PatientHistoryTab: View {
             Button("OK", role: .cancel) {}
         } message: { msg in
             Text(msg)
+        }
+        .sheet(item: $selectedVideo) { video in
+            HistoryDetailView(
+                videoURL: video.playbackURL,
+                exerciseTitle: video.exerciseTitle,
+                recordingDate: video.recordingDate
+            )
         }
     }
 
@@ -142,6 +162,94 @@ struct PatientHistoryTab: View {
             return
         } catch {
             errorMessage = "Couldn't load recordings: \(error.localizedDescription)"
+        }
+    }
+
+    @MainActor
+    private func openOriginalVideo(_ job: PatientJobRow) async {
+        activeDownloadJobId = job.id
+        defer { activeDownloadJobId = nil }
+        do {
+            let url = try await signedRawVideoURL(for: job, supabase: authService.supabaseClient)
+            selectedVideo = PatientProcessedPlayback(
+                id: job.id,
+                playbackURL: url,
+                exerciseTitle: (job.exercise_name?.isEmpty == false) ? job.exercise_name! : "Recording",
+                recordingDate: displayDate(for: job)
+            )
+        } catch is CancellationError {
+            return
+        } catch {
+            errorMessage = "Couldn't load this recording: \(error.localizedDescription)"
+        }
+    }
+
+    private func displayDate(for job: PatientJobRow) -> String {
+        guard let raw = job.created_at,
+              let parsed = ISO8601DateFormatter.flexible.date(from: raw) else {
+            return "Unknown date"
+        }
+        let f = DateFormatter()
+        f.dateFormat = "MMM d, yyyy 'at' h:mm a"
+        return f.string(from: parsed)
+    }
+}
+
+// MARK: - PatientVideosTab
+//
+// Patient Dashboard "Videos" tab — merges the old History + Processed tabs
+// into one, flippable between Original (raw recordings) and Analyzed
+// (DynaFace-processed results) for the signed-in patient.
+
+struct PatientVideosTab: View {
+    @EnvironmentObject private var authService: AuthenticationService
+    @State private var segment: Segment = .original
+
+    enum Segment: String, CaseIterable, Identifiable {
+        case original = "Original"
+        case analyzed = "Analyzed"
+        var id: String { rawValue }
+    }
+
+    private var selfId: UUID? {
+        if case .signedIn(let profile) = authService.authState {
+            return UUID(uuidString: profile.id)
+        }
+        return nil
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Videos")
+                    .font(.largeTitle).fontWeight(.bold)
+                Spacer()
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+
+            Picker("Videos", selection: $segment) {
+                ForEach(Segment.allCases) { seg in
+                    Text(seg.rawValue).tag(seg)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+
+            if let selfId {
+                switch segment {
+                case .original:
+                    PatientHistoryTab(patientId: selfId)
+                case .analyzed:
+                    PatientProcessedTab(patientId: selfId)
+                }
+            } else {
+                Spacer()
+                Text("Sign in to view your videos.")
+                    .foregroundColor(.secondary)
+                Spacer()
+            }
         }
     }
 }
@@ -432,6 +540,39 @@ func signedProcessedVideoURL(
         code: 404,
         userInfo: [NSLocalizedDescriptionKey: "Processed video object not found in storage."]
     )
+}
+
+/// "Original" (raw) recording URL: `{user_id}/{job_id}/video.{mov|mp4}` in
+/// the raw-videos bucket. Used by the patient Videos "Original" segment.
+func signedRawVideoURL(
+    for job: PatientJobRow,
+    supabase: SupabaseClient,
+    rawVideosBucket: String = "raw-videos"
+) async throws -> URL {
+    guard let userId = job.user_id else {
+        throw NSError(domain: "PatientOriginal", code: 404,
+                      userInfo: [NSLocalizedDescriptionKey: "Recording owner unknown."])
+    }
+    let candidates = [
+        "\(userId.uuidString)/\(job.id.uuidString)/video.mov",
+        "\(userId.uuidString)/\(job.id.uuidString)/video.mp4",
+    ]
+    var lastError: Error?
+    for path in candidates {
+        do {
+            let url = try await supabase.storage
+                .from(rawVideosBucket)
+                .createSignedURL(path: path, expiresIn: 3600)
+            print("[Original] signed raw URL OK: \(rawVideosBucket)/\(path)")
+            return url
+        } catch {
+            print("[Original] signed raw URL FAILED: \(rawVideosBucket)/\(path): \(error)")
+            lastError = error
+            continue
+        }
+    }
+    throw lastError ?? NSError(domain: "PatientOriginal", code: 404,
+                              userInfo: [NSLocalizedDescriptionKey: "Original recording not found in storage."])
 }
 
 // MARK: - Shared fetch helper

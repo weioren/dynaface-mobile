@@ -26,6 +26,15 @@ struct Dashboard: View {
         return false
     }
 
+    /// The signed-in patient's own profile id (nil for clinician / signed out).
+    private var patientId: UUID? {
+        if case .signedIn(let profile) = authService.authState,
+           profile.accountType == .patient {
+            return UUID(uuidString: profile.id)
+        }
+        return nil
+    }
+
     var body: some View {
         NavigationView {
             TabView(selection: $selectedTab) {
@@ -51,17 +60,19 @@ struct Dashboard: View {
                         }
                         .tag(1)
                 } else {
-                    ExerciseHistoryPage()
+                    if let patientId {
+                        PatientTimelineTab(patientId: patientId)
+                            .tabItem {
+                                Image(systemName: "calendar")
+                                Text("Timeline")
+                            }
+                            .tag(1)
+                    }
+
+                    PatientVideosTab()
                         .tabItem {
                             Image(systemName: "video.fill")
-                            Text("History")
-                        }
-                        .tag(1)
-
-                    ProcessedVideosPage()
-                        .tabItem {
-                            Image(systemName: "sparkles.tv")
-                            Text("Processed")
+                            Text("Videos")
                         }
                         .tag(2)
                 }
