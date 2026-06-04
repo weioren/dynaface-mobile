@@ -127,10 +127,12 @@ enum TimelineEventType: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    /// User-pickable cases for AddEditEventSheet. `assessment` is
-    /// system-managed and excluded from the picker.
+    /// User-pickable cases for AddEditEventSheet. Meeting decision: the
+    /// timeline supports only Assessment / Surgery / Clinic visit.
+    /// `assessment` is system-managed; Injection / Note stay in the enum so
+    /// existing rows still decode, but they're no longer pickable.
     static var manualCases: [TimelineEventType] {
-        allCases.filter { $0 != .assessment }
+        [.surgery, .clinicVisit]
     }
 
     /// Title shown on the picker and on event row badges.

@@ -208,7 +208,7 @@ struct TimelinePage: View {
             Text("No events yet")
                 .font(.title3).fontWeight(.semibold)
             Text(isClinician
-                 ? "Add a surgery, injection, clinic visit, or note to start this patient's timeline."
+                 ? "Add a surgery or clinic visit to start this patient's timeline."
                  : "Tap + to log a clinical event. Your clinician will see it on their side.")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
