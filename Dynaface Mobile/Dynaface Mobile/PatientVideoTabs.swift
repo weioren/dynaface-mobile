@@ -569,13 +569,10 @@ func signedRawVideoURL(
     var lastError: Error?
     for path in deduped {
         do {
-            let url = try await supabase.storage
+            return try await supabase.storage
                 .from(rawVideosBucket)
                 .createSignedURL(path: path, expiresIn: 3600)
-            print("[Original] signed raw URL OK: \(rawVideosBucket)/\(path)")
-            return url
         } catch {
-            print("[Original] signed raw URL FAILED: \(rawVideosBucket)/\(path): \(error)")
             lastError = error
             continue
         }

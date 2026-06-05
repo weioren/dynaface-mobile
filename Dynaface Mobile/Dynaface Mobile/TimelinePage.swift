@@ -240,7 +240,6 @@ struct TimelinePage: View {
             return
         } catch {
             assessmentPlaybackError = "Can't load video: \(error.localizedDescription)"
-            print("[Timeline] playback failed for job \(jobId.uuidString): \(error)")
         }
     }
 
