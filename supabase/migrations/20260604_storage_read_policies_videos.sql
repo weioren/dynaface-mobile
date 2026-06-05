@@ -18,6 +18,12 @@
 --   so (storage.foldername(name))[1] = uploader uid
 --      (storage.foldername(name))[2] = job id
 --
+-- NOTE: the iOS app writes raw-videos paths with UPPERCASE uuids
+-- (Swift's UUID.uuidString), whereas auth.uid() and job_id render as
+-- lowercase text. The path side is therefore lower()'d so the match is
+-- case-insensitive (otherwise patients are blocked from their own / their
+-- attributed raw recordings even though the object exists).
+--
 -- Access granted (additive / permissive, OR'd with any existing
 -- policy on storage.objects):
 --   - clinicians: read all (mirrors the processing_jobs read-all)
@@ -38,11 +44,11 @@ CREATE POLICY "Read raw-videos: clinician, owner, or attributed patient"
         bucket_id = 'raw-videos'
         AND (
             public.is_clinician(auth.uid())
-            OR (storage.foldername(name))[1] = auth.uid()::text
+            OR lower((storage.foldername(name))[1]) = auth.uid()::text
             OR EXISTS (
                 SELECT 1 FROM public.job_patient_attributions jpa
                 WHERE jpa.patient_id = auth.uid()
-                  AND jpa.job_id::text = (storage.foldername(name))[2]
+                  AND jpa.job_id::text = lower((storage.foldername(name))[2])
             )
         )
     );
@@ -56,11 +62,11 @@ CREATE POLICY "Read results: clinician, owner, or attributed patient"
         bucket_id = 'results'
         AND (
             public.is_clinician(auth.uid())
-            OR (storage.foldername(name))[1] = auth.uid()::text
+            OR lower((storage.foldername(name))[1]) = auth.uid()::text
             OR EXISTS (
                 SELECT 1 FROM public.job_patient_attributions jpa
                 WHERE jpa.patient_id = auth.uid()
-                  AND jpa.job_id::text = (storage.foldername(name))[2]
+                  AND jpa.job_id::text = lower((storage.foldername(name))[2])
             )
         )
     );
