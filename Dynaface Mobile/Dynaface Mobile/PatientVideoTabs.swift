@@ -581,6 +581,119 @@ func signedRawVideoURL(
                               userInfo: [NSLocalizedDescriptionKey: "Original recording not found in storage."])
 }
 
+// MARK: - AssessmentVideoDetailView
+//
+// Opened from a timeline movement. Flips between the Original (raw) and
+// Processed (annotated) version of that one recording. Works for clinicians
+// (any patient, registered or not) and the patient themselves — storage RLS
+// gates what each can actually read.
+
+struct AssessmentVideoDetailView: View {
+    let jobId: UUID
+    let title: String
+    let dateText: String
+
+    @EnvironmentObject private var authService: AuthenticationService
+    @Environment(\.dismiss) private var dismiss
+
+    enum Segment: String, CaseIterable, Identifiable {
+        case original = "Original"
+        case processed = "Processed"
+        var id: String { rawValue }
+    }
+
+    @State private var segment: Segment = .original
+    @State private var job: PatientJobRow?
+    @State private var url: URL?
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                Picker("Version", selection: $segment) {
+                    ForEach(Segment.allCases) { seg in
+                        Text(seg.rawValue).tag(seg)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding()
+
+                ZStack {
+                    if let url {
+                        PlainAVPlayerControllerView(url: url)
+                            .id(url)
+                    } else if isLoading {
+                        ProgressView()
+                    } else {
+                        VStack(spacing: 8) {
+                            Image(systemName: "video.slash")
+                                .font(.system(size: 40))
+                                .foregroundColor(.gray.opacity(0.5))
+                            Text(errorMessage ?? "Video unavailable.")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 32)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if !dateText.isEmpty {
+                    Text(dateText)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.bottom, 8)
+                }
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .task(id: segment) { await resolve() }
+        }
+    }
+
+    private func resolve() async {
+        if job == nil {
+            do {
+                job = try await authService.supabaseClient
+                    .from("processing_jobs")
+                    .select()
+                    .eq("id", value: jobId.uuidString)
+                    .single()
+                    .execute()
+                    .value
+            } catch {
+                errorMessage = "Couldn't load this recording."
+                return
+            }
+        }
+        guard let job else { return }
+
+        isLoading = true
+        errorMessage = nil
+        url = nil
+        defer { isLoading = false }
+        do {
+            switch segment {
+            case .processed:
+                url = try await signedProcessedVideoURL(for: job, supabase: authService.supabaseClient)
+            case .original:
+                url = try await signedRawVideoURL(for: job, supabase: authService.supabaseClient)
+            }
+        } catch {
+            errorMessage = (segment == .processed)
+                ? "Processed video isn't ready yet."
+                : "Original video unavailable."
+        }
+    }
+}
+
 // MARK: - Shared fetch helper
 //
 // Two round-trips against `processing_jobs`:

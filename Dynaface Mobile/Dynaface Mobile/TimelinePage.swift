@@ -22,10 +22,8 @@ struct TimelinePage: View {
     /// this flag and TimelinePage owns the actual sheet presentation.
     @Binding var showingAddSheet: Bool
     @State private var editingEvent: TimelineEvent?
-    // Phase 9: assessment-event tap-to-play state.
-    @State private var selectedAssessmentVideo: AssessmentVideoPlayback?
-    @State private var loadingAssessmentJobId: UUID?
-    @State private var assessmentPlaybackError: String?
+    // Tapping a movement opens a detail screen with Original / Processed tabs.
+    @State private var selectedAssessmentVideo: AssessmentVideoRef?
     /// Timeline filter: nil = show all; otherwise only this event type.
     @State private var selectedFilter: TimelineEventType?
 
@@ -61,11 +59,12 @@ struct TimelinePage: View {
             AddEditEventSheet(mode: .edit(event))
         }
         .sheet(item: $selectedAssessmentVideo) { video in
-            HistoryDetailView(
-                videoURL: video.playbackURL,
-                exerciseTitle: video.exerciseTitle,
-                recordingDate: video.recordingDate
+            AssessmentVideoDetailView(
+                jobId: video.id,
+                title: video.title,
+                dateText: video.dateText
             )
+            .environmentObject(authService)
         }
         .refreshable { await timelineService.loadEvents() }
         .task { await reloadIfNeeded() }
@@ -76,18 +75,6 @@ struct TimelinePage: View {
                 set: { if !$0 { timelineService.errorMessage = nil } }
             ),
             presenting: timelineService.errorMessage
-        ) { _ in
-            Button("OK", role: .cancel) {}
-        } message: { msg in
-            Text(msg)
-        }
-        .alert(
-            "Can't play video",
-            isPresented: Binding(
-                get: { assessmentPlaybackError != nil },
-                set: { if !$0 { assessmentPlaybackError = nil } }
-            ),
-            presenting: assessmentPlaybackError
         ) { _ in
             Button("OK", role: .cancel) {}
         } message: { msg in
@@ -109,8 +96,7 @@ struct TimelinePage: View {
                     TimelineAssessmentGroupRow(
                         day: day,
                         events: events,
-                        loadingJobId: loadingAssessmentJobId,
-                        onPlay: { e in Task { await openAssessmentVideo(e) } }
+                        onPlay: { e in presentAssessmentVideo(e) }
                     )
                 }
             }
@@ -207,10 +193,8 @@ struct TimelinePage: View {
     }
 
     private func handleTap(_ event: TimelineEvent) {
-        // Assessment rows always try to open the linked processed video,
-        // regardless of role (RLS gates what the user can actually load).
         if event.type == .assessment {
-            Task { await openAssessmentVideo(event) }
+            presentAssessmentVideo(event)
             return
         }
         // Manual event types: clinician can edit, patient is read-only.
@@ -218,48 +202,15 @@ struct TimelinePage: View {
         editingEvent = event
     }
 
-    @MainActor
-    private func openAssessmentVideo(_ event: TimelineEvent) async {
-        guard let jobId = event.jobId else {
-            assessmentPlaybackError = "This assessment isn't linked to a recording."
-            return
-        }
-        loadingAssessmentJobId = jobId
-        defer { loadingAssessmentJobId = nil }
-
-        do {
-            let url = try await signedAssessmentURL(for: jobId)
-            let dateText = TimelineEventRow.displayDateFormatter.string(from: event.occurredAt)
-            selectedAssessmentVideo = AssessmentVideoPlayback(
-                id: jobId,
-                playbackURL: url,
-                exerciseTitle: event.notes.isEmpty ? "Assessment" : event.notes,
-                recordingDate: dateText
-            )
-        } catch is CancellationError {
-            return
-        } catch {
-            assessmentPlaybackError = "Can't load video: \(error.localizedDescription)"
-        }
-    }
-
-    /// Resolve a playback URL the same way the working Processed-tab
-    /// playback does: look up the job's stored output path and try the
-    /// candidate variants in `results`; fall back to the raw recording in
-    /// `raw-videos` for jobs that haven't been processed yet.
-    /// Reuse the Processed tab's playback verbatim: fetch the same
-    /// PatientJobRow for this assessment's job, then call the shared
-    /// `signedProcessedVideoURL`. (The timeline only has the jobId, so the
-    /// one extra step is fetching that row.)
-    private func signedAssessmentURL(for jobId: UUID) async throws -> URL {
-        let job: PatientJobRow = try await authService.supabaseClient
-            .from("processing_jobs")
-            .select()
-            .eq("id", value: jobId.uuidString)
-            .single()
-            .execute()
-            .value
-        return try await signedProcessedVideoURL(for: job, supabase: authService.supabaseClient)
+    /// Open the per-movement video detail screen (Original / Processed
+    /// sub-tabs). The fetch + storage reads happen inside that view.
+    private func presentAssessmentVideo(_ event: TimelineEvent) {
+        guard let jobId = event.jobId else { return }
+        selectedAssessmentVideo = AssessmentVideoRef(
+            id: jobId,
+            title: event.notes.isEmpty ? "Assessment" : event.notes,
+            dateText: TimelineEventRow.displayDateFormatter.string(from: event.occurredAt)
+        )
     }
 
     private var emptyState: some View {
@@ -300,13 +251,12 @@ struct TimelinePage: View {
     }
 }
 
-// MARK: - AssessmentVideoPlayback
+// MARK: - AssessmentVideoRef
 
-private struct AssessmentVideoPlayback: Identifiable {
-    let id: UUID
-    let playbackURL: URL
-    let exerciseTitle: String
-    let recordingDate: String
+private struct AssessmentVideoRef: Identifiable {
+    let id: UUID          // jobId
+    let title: String
+    let dateText: String
 }
 
 // MARK: - TimelineItem (grouped list model)
@@ -362,7 +312,6 @@ private let timelineTimeFormatter: DateFormatter = {
 private struct TimelineAssessmentGroupRow: View {
     let day: Date
     let events: [TimelineEvent]
-    let loadingJobId: UUID?
     let onPlay: (TimelineEvent) -> Void
 
     @State private var expanded = false
@@ -424,13 +373,9 @@ private struct TimelineAssessmentGroupRow: View {
                                     Text(e.notes.isEmpty ? "Assessment" : e.notes)
                                         .font(.body).foregroundColor(.primary)
                                     Spacer()
-                                    if loadingJobId == e.jobId {
-                                        ProgressView()
-                                    } else {
-                                        Text(timelineTimeFormatter.string(from: e.createdAt))
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
+                                    Text(timelineTimeFormatter.string(from: e.createdAt))
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
                                 }
                                 .contentShape(Rectangle())
                                 .padding(.vertical, 8)
