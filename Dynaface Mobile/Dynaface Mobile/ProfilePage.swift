@@ -70,7 +70,8 @@ struct ProfilePage: View {
             let widthScale = geometry.size.width / baseWidth
             let heightScale = geometry.size.height / baseHeight
 
-            VStack(spacing: 30 * heightScale) {
+            ScrollView {
+                VStack(spacing: 30 * heightScale) {
                 // Profile header section
                 VStack(spacing: 20 * heightScale) {
                     // Profile picture with photo picker
@@ -198,10 +199,12 @@ struct ProfilePage: View {
                     }
                 }
 
-                Spacer()
             }
             .padding(.horizontal, 30 * widthScale)
             .padding(.top, 40 * heightScale)
+            .padding(.bottom, 40 * heightScale)
+            .frame(maxWidth: .infinity)
+            }
             .frame(width: geometry.size.width, height: geometry.size.height)
             .sheet(isPresented: $showingEditProfile) {
                 EditProfilePage()

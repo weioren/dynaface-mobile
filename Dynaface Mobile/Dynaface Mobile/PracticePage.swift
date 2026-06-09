@@ -10,6 +10,9 @@ struct PracticePage: View {
     }
 
     let exercises: [Exercise]
+    /// The patient this assessment is for. Clinician path: the patient
+    /// picked before recording. Patient self-record: nil (defaults to self).
+    var target: PatientRef? = nil
     @State private var index: Int = 0
     @State private var recordings: [Int: URL] = [:]
     @State private var showRecorder = false
@@ -19,14 +22,6 @@ struct PracticePage: View {
     @State private var isUploadingAll = false
     @State private var uploadErrorMessage: String?
     @State private var uploadedCount: Int = 0
-    // Phase 8: collected job IDs from the upload batch + sheet trigger
-    // for the post-upload "attribute to patient" picker. Clinician-only.
-    @State private var uploadedJobIds: [UUID] = []
-    @State private var uploadedExerciseNames: [String] = []
-    @State private var showAttributionSheet = false
-    // Phase 9: patient self-record "Add this assessment to your timeline?"
-    // confirmation alert. Fires after upload completes, before dismissing.
-    @State private var showPatientTimelineAlert = false
     @AppStorage("videoUploadsEnabled") private var videoUploadsEnabled = true
     @Environment(\.presentationMode) var presentationMode
     @EnvironmentObject private var authService: AuthenticationService
@@ -53,6 +48,12 @@ struct PracticePage: View {
     private var exercisingView: some View {
         let current = exercises[index]
         return VStack(spacing: 0) {
+            if let target {
+                Text("Recording for \(target.displayName)")
+                    .font(.caption).fontWeight(.semibold)
+                    .foregroundColor(Color(red: 0.12, green: 0.29, blue: 0.64))
+                    .padding(.top, 8)
+            }
             // Exercise title and instructions
             VStack(spacing: 6) {
                 Text(current.title)
@@ -173,6 +174,12 @@ struct PracticePage: View {
                 Text("\(recordings.count) of \(exercises.count) recorded")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
+
+                if let target {
+                    Text("For \(target.displayName)")
+                        .font(.subheadline).fontWeight(.medium)
+                        .foregroundColor(Color(red: 0.12, green: 0.29, blue: 0.64))
+                }
             }
             .padding(.bottom, 16)
 
@@ -277,6 +284,17 @@ struct PracticePage: View {
             .padding(.vertical, 12)
         }
         .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Cancel") {
+                    // Discard this assessment and return to exercise
+                    // selection so the clinician can re-pick the patient.
+                    cleanupRecordings()
+                    presentationMode.wrappedValue.dismiss()
+                }
+                .disabled(isUploadingAll)
+            }
+        }
         .onChange(of: phase) { newPhase in
             if case .rerecording = newPhase {
                 showRerecorder = true
@@ -321,37 +339,6 @@ struct PracticePage: View {
         } message: {
             Text(uploadErrorMessage ?? "Unknown error")
         }
-        .sheet(isPresented: $showAttributionSheet) {
-            AttributeRecordingsSheet(
-                jobIds: uploadedJobIds,
-                exerciseNames: uploadedExerciseNames,
-                onDone: { finishAfterAttribution() }
-            )
-            // Explicitly re-inject env objects so the sheet's view
-            // hierarchy doesn't lose them across the modal boundary.
-            .environmentObject(authService)
-            .environmentObject(patientService)
-            .environmentObject(attributionService)
-        }
-        // Phase 9: patient self-record "Add to timeline?" confirmation.
-        // Either button posts the same notifications and dismisses the
-        // PracticePage; Add additionally inserts an assessment event.
-        .alert(
-            "Add to timeline?",
-            isPresented: $showPatientTimelineAlert
-        ) {
-            Button("Add") {
-                Task {
-                    await addOwnAssessmentToTimeline()
-                    finishAfterAttribution()
-                }
-            }
-            Button("Skip", role: .cancel) {
-                finishAfterAttribution()
-            }
-        } message: {
-            Text("Log this assessment on your timeline?")
-        }
     }
 
     @MainActor
@@ -362,10 +349,8 @@ struct PracticePage: View {
             return
         }
 
-        // Phase 8: clinicians MUST upload + attribute to a patient — the
-        // post-upload AttributeRecordingsSheet requires real processing_jobs
-        // rows to attribute against. Honour the upload toggle only for
-        // patient accounts (who already have user_id-based association).
+        // Honour the upload toggle only for patient self-records. Clinicians
+        // always upload (the recordings belong to the chosen patient).
         if !videoUploadsEnabled && !isClinician {
             NotificationCenter.default.post(name: .assessmentCompleted, object: nil)
             NotificationCenter.default.post(name: .recordingAccepted, object: nil)
@@ -376,13 +361,10 @@ struct PracticePage: View {
         isUploadingAll = true
         uploadErrorMessage = nil
         uploadedCount = 0
-        uploadedJobIds = []
-        uploadedExerciseNames = []
 
         do {
             let uploader = VideoUploadService(supabase: authService.supabaseClient)
-            var collectedJobIds: [UUID] = []
-            var collectedExerciseNames: [String] = []
+            var collected: [(jobId: UUID, exerciseName: String)] = []
 
             for i in exercises.indices {
                 guard let videoURL = recordings[i] else {
@@ -397,56 +379,60 @@ struct PracticePage: View {
                     videoURL: videoURL,
                     exerciseName: exercises[i].title
                 )
-                collectedJobIds.append(job.jobId)
-                collectedExerciseNames.append(exercises[i].title)
+                collected.append((job.jobId, exercises[i].title))
                 uploadedCount += 1
             }
 
             NotificationCenter.default.post(name: .processedVideosUpdated, object: nil)
 
-            // Phase 8: clinicians get the attribute-to-patient sheet so the
-            // freshly-uploaded recordings can be linked to a specific
-            // patient roster. Patients self-recording auto-associate via
-            // processing_jobs.user_id, so they skip straight to finish.
-            if isClinician {
-                uploadedJobIds = collectedJobIds
-                uploadedExerciseNames = collectedExerciseNames
-                isUploadingAll = false
-                showAttributionSheet = true
-                return
-            }
+            // Auto-attribute to the pre-selected patient and auto-log the
+            // assessment — no post-upload sheet, no "Add to timeline?" alert.
+            await attributeAndLog(collected)
 
-            // Phase 9: patient self-record path — show the "Add to
-            // timeline?" alert before dismissing. Both Yes and No end up
-            // posting the same notifications and dismissing the page.
-            uploadedJobIds = collectedJobIds
-            uploadedExerciseNames = collectedExerciseNames
-            isUploadingAll = false
-            showPatientTimelineAlert = true
-            return
+            finishAfterAttribution()
         } catch {
             uploadErrorMessage = error.localizedDescription
+            isUploadingAll = false
         }
-
-        isUploadingAll = false
     }
 
-    /// Inserts an `assessment` event on the signed-in patient's timeline
-    /// using the just-uploaded jobs. Called from the patient-side "Add
-    /// to timeline?" alert's confirmation button.
+    /// Attributes every uploaded job to the assessment's patient and writes
+    /// one `assessment` timeline event PER exercise (so the timeline can
+    /// stack them by day and replay each action individually).
+    ///   - clinician: patient = the pre-selected `target`
+    ///   - patient self-record: patient = themselves (the uploader)
+    /// `createdBy` is ALWAYS the uploader — RLS (created_by = auth.uid())
+    /// and the annotated-video storage path both depend on it.
     @MainActor
-    private func addOwnAssessmentToTimeline() async {
+    private func attributeAndLog(_ jobs: [(jobId: UUID, exerciseName: String)]) async {
         guard
             case .signedIn(let profile) = authService.authState,
-            let uuid = UUID(uuidString: profile.id)
+            let uploaderId = UUID(uuidString: profile.id)
         else { return }
-        let service = TimelineService(patientId: uuid)
-        _ = await service.addAssessmentEvent(
-            jobId: uploadedJobIds.first,
-            occurredAt: Date(),
-            exerciseNames: uploadedExerciseNames,
-            createdBy: uuid
-        )
+
+        let patientId = target?.id ?? uploaderId
+
+        // Clinician path: link each job to the chosen patient. A patient
+        // self-record already associates via processing_jobs.user_id.
+        if let target, target.id != uploaderId {
+            for job in jobs {
+                _ = await attributionService.attribute(
+                    jobId: job.jobId,
+                    patientId: target.id,
+                    attributedBy: uploaderId
+                )
+            }
+        }
+
+        let timeline = TimelineService(patientId: patientId)
+        for job in jobs {
+            _ = await timeline.addAssessmentEvent(
+                jobId: job.jobId,
+                occurredAt: Date(),
+                exerciseNames: [job.exerciseName],
+                createdBy: uploaderId
+            )
+        }
     }
 
 
@@ -455,6 +441,12 @@ struct PracticePage: View {
             return profile.accountType == .clinician
         }
         return false
+    }
+
+    private func cleanupRecordings() {
+        for url in recordings.values {
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     private func finishAfterAttribution() {

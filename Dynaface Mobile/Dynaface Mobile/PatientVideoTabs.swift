@@ -39,6 +39,8 @@ struct PatientHistoryTab: View {
     @State private var jobs: [PatientJobRow] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var selectedVideo: PatientProcessedPlayback?
+    @State private var activeDownloadJobId: UUID?
 
     private var cloudDisabledForSelf: Bool {
         isOwnDetail(patientId, authService: authService) && !videoUploadsEnabled
@@ -53,7 +55,18 @@ struct PatientHistoryTab: View {
                 emptyState
             } else {
                 List(jobs) { job in
-                    PatientJobListRow(job: job)
+                    Button {
+                        Task { await openOriginalVideo(job) }
+                    } label: {
+                        HStack {
+                            PatientJobListRow(job: job)
+                            if activeDownloadJobId == job.id {
+                                ProgressView()
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
                 .listStyle(.plain)
             }
@@ -71,6 +84,13 @@ struct PatientHistoryTab: View {
             Button("OK", role: .cancel) {}
         } message: { msg in
             Text(msg)
+        }
+        .sheet(item: $selectedVideo) { video in
+            HistoryDetailView(
+                videoURL: video.playbackURL,
+                exerciseTitle: video.exerciseTitle,
+                recordingDate: video.recordingDate
+            )
         }
     }
 
@@ -142,6 +162,94 @@ struct PatientHistoryTab: View {
             return
         } catch {
             errorMessage = "Couldn't load recordings: \(error.localizedDescription)"
+        }
+    }
+
+    @MainActor
+    private func openOriginalVideo(_ job: PatientJobRow) async {
+        activeDownloadJobId = job.id
+        defer { activeDownloadJobId = nil }
+        do {
+            let url = try await signedRawVideoURL(for: job, supabase: authService.supabaseClient)
+            selectedVideo = PatientProcessedPlayback(
+                id: job.id,
+                playbackURL: url,
+                exerciseTitle: (job.exercise_name?.isEmpty == false) ? job.exercise_name! : "Recording",
+                recordingDate: displayDate(for: job)
+            )
+        } catch is CancellationError {
+            return
+        } catch {
+            errorMessage = "Couldn't load this recording: \(error.localizedDescription)"
+        }
+    }
+
+    private func displayDate(for job: PatientJobRow) -> String {
+        guard let raw = job.created_at,
+              let parsed = ISO8601DateFormatter.flexible.date(from: raw) else {
+            return "Unknown date"
+        }
+        let f = DateFormatter()
+        f.dateFormat = "MMM d, yyyy 'at' h:mm a"
+        return f.string(from: parsed)
+    }
+}
+
+// MARK: - PatientVideosTab
+//
+// Patient Dashboard "Videos" tab — merges the old History + Processed tabs
+// into one, flippable between Original (raw recordings) and Analyzed
+// (DynaFace-processed results) for the signed-in patient.
+
+struct PatientVideosTab: View {
+    @EnvironmentObject private var authService: AuthenticationService
+    @State private var segment: Segment = .original
+
+    enum Segment: String, CaseIterable, Identifiable {
+        case original = "Original"
+        case analyzed = "Analyzed"
+        var id: String { rawValue }
+    }
+
+    private var selfId: UUID? {
+        if case .signedIn(let profile) = authService.authState {
+            return UUID(uuidString: profile.id)
+        }
+        return nil
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Videos")
+                    .font(.largeTitle).fontWeight(.bold)
+                Spacer()
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+
+            Picker("Videos", selection: $segment) {
+                ForEach(Segment.allCases) { seg in
+                    Text(seg.rawValue).tag(seg)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+
+            if let selfId {
+                switch segment {
+                case .original:
+                    PatientHistoryTab(patientId: selfId)
+                case .analyzed:
+                    PatientProcessedTab(patientId: selfId)
+                }
+            } else {
+                Spacer()
+                Text("Sign in to view your videos.")
+                    .foregroundColor(.secondary)
+                Spacer()
+            }
         }
     }
 }
@@ -318,74 +426,7 @@ struct PatientProcessedTab: View {
     }
 
     private func signedPlayableURL(for job: PatientJobRow) async throws -> URL {
-        let rawPath = job.output_video_path ?? job.output_csv_path ?? ""
-        let candidates = resultPathCandidates(from: rawPath, userId: job.user_id, jobId: job.id)
-        var lastError: Error?
-
-        for path in candidates {
-            do {
-                let signedURL = try await authService.supabaseClient.storage
-                    .from(resultsBucket)
-                    .createSignedURL(path: path, expiresIn: 3600)
-                return signedURL
-            } catch {
-                lastError = error
-                continue
-            }
-        }
-
-        throw lastError ?? NSError(
-            domain: "PatientProcessedTab",
-            code: 404,
-            userInfo: [NSLocalizedDescriptionKey: "Processed video object not found in storage."]
-        )
-    }
-
-    private func normalizeResultObjectPath(_ path: String) -> String {
-        let prefix = "\(resultsBucket)/"
-        if path.hasPrefix(prefix) {
-            return String(path.dropFirst(prefix.count))
-        }
-        return path
-    }
-
-    private func resultPathCandidates(from rawPath: String, userId: UUID?, jobId: UUID) -> [String] {
-        let normalized = normalizeResultObjectPath(rawPath)
-        var candidates: [String] = [normalized]
-
-        if normalized.hasSuffix(".mov") {
-            candidates.append(String(normalized.dropLast(4)) + ".mp4")
-        } else if normalized.hasSuffix(".mp4") {
-            candidates.append(String(normalized.dropLast(4)) + ".mov")
-        } else if normalized.hasSuffix(".csv") {
-            let base = String(normalized.dropLast(4))
-            candidates.append(base + ".mp4")
-            candidates.append(base + ".mov")
-        }
-
-        // Common worker output convention fallback: <user>/<job>/annotated.mp4
-        let directory = (normalized as NSString).deletingLastPathComponent
-        if !directory.isEmpty {
-            candidates.append("\(directory)/annotated.mp4")
-            candidates.append("\(directory)/annotated.mov")
-        }
-
-        // Canonical worker fallback path
-        if let userId {
-            candidates.append("\(userId.uuidString)/\(jobId.uuidString)/annotated.mp4")
-            candidates.append("\(userId.uuidString)/\(jobId.uuidString)/annotated.mov")
-        }
-
-        // De-duplicate while preserving order
-        var seen = Set<String>()
-        var deduped: [String] = []
-        for c in candidates where !c.isEmpty {
-            if !seen.contains(c) {
-                seen.insert(c)
-                deduped.append(c)
-            }
-        }
-        return deduped
+        try await signedProcessedVideoURL(for: job, supabase: authService.supabaseClient)
     }
 
     private func isCancellationLike(_ error: Error) -> Bool {
@@ -415,6 +456,242 @@ private struct PatientProcessedPlayback: Identifiable {
     let playbackURL: URL
     let exerciseTitle: String
     let recordingDate: String
+}
+
+// MARK: - Shared processed-video path resolution
+//
+// Single source of truth for turning a job's stored output path into the
+// candidate object paths in the `results` bucket. Used by BOTH the
+// Processed tab and TimelinePage so playback resolves identically.
+
+func processedVideoPathCandidates(
+    outputVideoPath: String?,
+    outputCsvPath: String?,
+    userId: UUID?,
+    jobId: UUID,
+    resultsBucket: String = "results"
+) -> [String] {
+    func normalize(_ path: String) -> String {
+        let prefix = "\(resultsBucket)/"
+        return path.hasPrefix(prefix) ? String(path.dropFirst(prefix.count)) : path
+    }
+
+    let normalized = normalize(outputVideoPath ?? outputCsvPath ?? "")
+    var candidates: [String] = [normalized]
+
+    if normalized.hasSuffix(".mov") {
+        candidates.append(String(normalized.dropLast(4)) + ".mp4")
+    } else if normalized.hasSuffix(".mp4") {
+        candidates.append(String(normalized.dropLast(4)) + ".mov")
+    } else if normalized.hasSuffix(".csv") {
+        let base = String(normalized.dropLast(4))
+        candidates.append(base + ".mp4")
+        candidates.append(base + ".mov")
+    }
+
+    let directory = (normalized as NSString).deletingLastPathComponent
+    if !directory.isEmpty {
+        candidates.append("\(directory)/annotated.mp4")
+        candidates.append("\(directory)/annotated.mov")
+    }
+
+    if let userId {
+        candidates.append("\(userId.uuidString)/\(jobId.uuidString)/annotated.mp4")
+        candidates.append("\(userId.uuidString)/\(jobId.uuidString)/annotated.mov")
+    }
+
+    var seen = Set<String>()
+    var deduped: [String] = []
+    for c in candidates where !c.isEmpty {
+        if !seen.contains(c) {
+            seen.insert(c)
+            deduped.append(c)
+        }
+    }
+    return deduped
+}
+
+/// The one and only "play this job's processed video" resolver. Called by
+/// both the Processed tab and the timeline so playback is identical.
+func signedProcessedVideoURL(
+    for job: PatientJobRow,
+    supabase: SupabaseClient,
+    resultsBucket: String = "results"
+) async throws -> URL {
+    let candidates = processedVideoPathCandidates(
+        outputVideoPath: job.output_video_path,
+        outputCsvPath: job.output_csv_path,
+        userId: job.user_id,
+        jobId: job.id
+    )
+    var lastError: Error?
+    for path in candidates {
+        do {
+            return try await supabase.storage
+                .from(resultsBucket)
+                .createSignedURL(path: path, expiresIn: 3600)
+        } catch {
+            lastError = error
+            continue
+        }
+    }
+    throw lastError ?? NSError(
+        domain: "PatientProcessedTab",
+        code: 404,
+        userInfo: [NSLocalizedDescriptionKey: "Processed video object not found in storage."]
+    )
+}
+
+/// "Original" (raw) recording URL: `{user_id}/{job_id}/video.{mov|mp4}` in
+/// the raw-videos bucket. Used by the patient Videos "Original" segment.
+func signedRawVideoURL(
+    for job: PatientJobRow,
+    supabase: SupabaseClient,
+    rawVideosBucket: String = "raw-videos"
+) async throws -> URL {
+    var candidates: [String] = []
+    // Prefer the exact stored upload path (mirrors how Analyzed uses
+    // output_video_path), then fall back to the canonical convention.
+    if let input = job.input_video_path, !input.isEmpty {
+        let prefix = "\(rawVideosBucket)/"
+        candidates.append(input.hasPrefix(prefix) ? String(input.dropFirst(prefix.count)) : input)
+    }
+    if let userId = job.user_id {
+        candidates.append("\(userId.uuidString)/\(job.id.uuidString)/video.mov")
+        candidates.append("\(userId.uuidString)/\(job.id.uuidString)/video.mp4")
+    }
+    var seen = Set<String>()
+    var deduped: [String] = []
+    for c in candidates where !c.isEmpty {
+        if seen.insert(c).inserted { deduped.append(c) }
+    }
+
+    var lastError: Error?
+    for path in deduped {
+        do {
+            return try await supabase.storage
+                .from(rawVideosBucket)
+                .createSignedURL(path: path, expiresIn: 3600)
+        } catch {
+            lastError = error
+            continue
+        }
+    }
+    throw lastError ?? NSError(domain: "PatientOriginal", code: 404,
+                              userInfo: [NSLocalizedDescriptionKey: "Original recording not found in storage."])
+}
+
+// MARK: - AssessmentVideoDetailView
+//
+// Opened from a timeline movement. Flips between the Original (raw) and
+// Processed (annotated) version of that one recording. Works for clinicians
+// (any patient, registered or not) and the patient themselves — storage RLS
+// gates what each can actually read.
+
+struct AssessmentVideoDetailView: View {
+    let jobId: UUID
+    let title: String
+    let dateText: String
+
+    @EnvironmentObject private var authService: AuthenticationService
+    @Environment(\.dismiss) private var dismiss
+
+    enum Segment: String, CaseIterable, Identifiable {
+        case original = "Original"
+        case processed = "Processed"
+        var id: String { rawValue }
+    }
+
+    @State private var segment: Segment = .original
+    @State private var job: PatientJobRow?
+    @State private var url: URL?
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                Picker("Version", selection: $segment) {
+                    ForEach(Segment.allCases) { seg in
+                        Text(seg.rawValue).tag(seg)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding()
+
+                ZStack {
+                    if let url {
+                        PlainAVPlayerControllerView(url: url)
+                            .id(url)
+                    } else if isLoading {
+                        ProgressView()
+                    } else {
+                        VStack(spacing: 8) {
+                            Image(systemName: "video.slash")
+                                .font(.system(size: 40))
+                                .foregroundColor(.gray.opacity(0.5))
+                            Text(errorMessage ?? "Video unavailable.")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 32)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if !dateText.isEmpty {
+                    Text(dateText)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.bottom, 8)
+                }
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .task(id: segment) { await resolve() }
+        }
+    }
+
+    private func resolve() async {
+        if job == nil {
+            do {
+                job = try await authService.supabaseClient
+                    .from("processing_jobs")
+                    .select()
+                    .eq("id", value: jobId.uuidString)
+                    .single()
+                    .execute()
+                    .value
+            } catch {
+                errorMessage = "Couldn't load this recording."
+                return
+            }
+        }
+        guard let job else { return }
+
+        isLoading = true
+        errorMessage = nil
+        url = nil
+        defer { isLoading = false }
+        do {
+            switch segment {
+            case .processed:
+                url = try await signedProcessedVideoURL(for: job, supabase: authService.supabaseClient)
+            case .original:
+                url = try await signedRawVideoURL(for: job, supabase: authService.supabaseClient)
+            }
+        } catch {
+            errorMessage = (segment == .processed)
+                ? "Processed video isn't ready yet."
+                : "Original video unavailable."
+        }
+    }
 }
 
 // MARK: - Shared fetch helper
@@ -501,6 +778,7 @@ struct PatientJobRow: Identifiable, Decodable, Hashable {
     let created_at: String?
     let output_video_path: String?
     let output_csv_path: String?
+    let input_video_path: String?
     let user_id: UUID?
 }
 

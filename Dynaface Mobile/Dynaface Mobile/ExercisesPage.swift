@@ -85,10 +85,13 @@ struct ExercisesPage: View {
     @State private var selectedIDs: Set<UUID> = []
     @State private var navigateToPractice = false
     @State private var showPermissionAlert = false
+    @State private var pendingSelection: PatientRef?
+    @State private var showPatientPicker = false
 
     var body: some View {
         GeometryReader { geometry in
-            let widthScale = geometry.size.width / baseWidth
+            let widthScale =
+            geometry.size.width / baseWidth
             let heightScale = geometry.size.height / baseHeight
 
             ScrollView {
@@ -104,7 +107,7 @@ struct ExercisesPage: View {
                             Button(action: {
                                 selectedOrder = module.exercises
                                 selectedIDs = Set(module.exercises.map { $0.id })
-                                checkCameraPermissionAndNavigate()
+                                proceedToRecording()
                             }) {
                                 HStack {
                                     Image(systemName: module.icon)
@@ -165,7 +168,7 @@ struct ExercisesPage: View {
 
                     // SECTION 3: Practice Selected button
                     Button(action: {
-                        checkCameraPermissionAndNavigate()
+                        proceedToRecording()
                     }) {
                         Text(selectedOrder.isEmpty ? "Practice Selected" : "Practice Selected (\(selectedOrder.count))")
                             .font(.system(size: 16 * widthScale, weight: .semibold))
@@ -195,7 +198,7 @@ struct ExercisesPage: View {
             }
             .background(
                 NavigationLink(
-                    destination: PracticePage(exercises: selectedOrder)
+                    destination: PracticePage(exercises: selectedOrder, target: pendingSelection)
                         .environmentObject(authService)
                         .environmentObject(patientService)
                         .environmentObject(attributionService),
@@ -208,7 +211,41 @@ struct ExercisesPage: View {
             .onReceive(NotificationCenter.default.publisher(for: .assessmentCompleted)) { _ in
                 selectedOrder = []
                 selectedIDs = []
+                pendingSelection = nil
+                showPatientPicker = false
             }
+            .sheet(isPresented: $showPatientPicker, onDismiss: {
+                // Navigate into recording only if a patient was chosen
+                // (not when the picker was cancelled).
+                if pendingSelection != nil {
+                    checkCameraPermissionAndNavigate()
+                }
+            }) {
+                RecordingPatientPickerSheet(onSelect: { ref in
+                    pendingSelection = ref
+                })
+                .environmentObject(authService)
+                .environmentObject(patientService)
+                .environmentObject(attributionService)
+            }
+        }
+    }
+
+    private var isClinician: Bool {
+        if case .signedIn(let profile) = authService.authState {
+            return profile.accountType == .clinician
+        }
+        return false
+    }
+
+    /// Clinicians pick a patient first (via the picker sheet); patients
+    /// record for themselves and go straight to the camera-permission check.
+    private func proceedToRecording() {
+        pendingSelection = nil
+        if isClinician {
+            showPatientPicker = true
+        } else {
+            checkCameraPermissionAndNavigate()
         }
     }
 

@@ -17,6 +17,10 @@ struct AddPatientSheet: View {
     @State private var candidates: [PatientCandidate] = []
     @State private var isSearching = false
     @State private var addingId: UUID? = nil
+    @State private var firstName = ""
+    @State private var lastName = ""
+    @State private var isCreating = false
+    @FocusState private var nameFieldFocused: Bool
 
     private var alreadyClaimedIds: Set<UUID> {
         Set(patientService.patients.compactMap { $0.claimedUserId })
@@ -43,6 +47,10 @@ struct AddPatientSheet: View {
                         Button("Cancel") { dismiss() }
                             .disabled(addingId != nil)
                     }
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("Done") { nameFieldFocused = false }
+                    }
                 }
         }
         .interactiveDismissDisabled(addingId != nil)
@@ -54,7 +62,7 @@ struct AddPatientSheet: View {
     @ViewBuilder
     private var content: some View {
         if trimmedQuery.isEmpty {
-            promptView
+            createForm
         } else if isSearching && candidates.isEmpty {
             ProgressView("Searching…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -65,19 +73,56 @@ struct AddPatientSheet: View {
         }
     }
 
-    private var promptView: some View {
-        VStack(spacing: 12) {
-            Spacer()
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 50))
-                .foregroundColor(.gray.opacity(0.5))
-            Text("Search for a patient by name or email.")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-            Spacer()
+    private var createForm: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("New patient")
+                    .font(.headline)
+                Text("Add a patient who doesn't have an account yet.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+
+                TextField("First name", text: $firstName)
+                    .textContentType(.givenName)
+                    .focused($nameFieldFocused)
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(10)
+                TextField("Last name", text: $lastName)
+                    .textContentType(.familyName)
+                    .focused($nameFieldFocused)
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(10)
+
+                Button {
+                    Task { await createUnregistered() }
+                } label: {
+                    HStack {
+                        if isCreating { ProgressView().tint(.white) }
+                        Text("Add patient")
+                    }
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(canCreate ? Color(red: 0.12, green: 0.29, blue: 0.64) : Color.gray)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                }
+                .disabled(!canCreate || isCreating)
+
+                Text("Or search above to link a patient who already has an account.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 4)
+            }
+            .padding()
         }
+    }
+
+    private var canCreate: Bool {
+        !firstName.trimmingCharacters(in: .whitespaces).isEmpty
+            && !lastName.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     private var noMatchesView: some View {
@@ -142,6 +187,25 @@ struct AddPatientSheet: View {
         addingId = candidate.id
         await patientService.addPatientFromProfile(candidate, clinicianId: clinicianId)
         addingId = nil
+
+        if patientService.errorMessage == nil {
+            dismiss()
+        }
+    }
+
+    private func createUnregistered() async {
+        guard
+            case .signedIn(let profile) = authService.authState,
+            let clinicianId = UUID(uuidString: profile.id)
+        else { return }
+
+        let first = firstName.trimmingCharacters(in: .whitespaces)
+        let last  = lastName.trimmingCharacters(in: .whitespaces)
+        patientService.errorMessage = nil
+        isCreating = true
+        nameFieldFocused = false
+        await patientService.addPatient(name: "\(first) \(last)", clinicianId: clinicianId)
+        isCreating = false
 
         if patientService.errorMessage == nil {
             dismiss()
