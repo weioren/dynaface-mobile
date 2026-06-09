@@ -19,9 +19,21 @@ struct PracticePage: View {
     @State private var isUploadingAll = false
     @State private var uploadErrorMessage: String?
     @State private var uploadedCount: Int = 0
+    // Phase 8: collected job IDs from the upload batch + sheet trigger
+    // for the post-upload "attribute to patient" picker. Clinician-only.
+    @State private var uploadedJobIds: [UUID] = []
+    @State private var uploadedExerciseNames: [String] = []
+    @State private var showAttributionSheet = false
+    // Phase 9: patient self-record "Add this assessment to your timeline?"
+    // confirmation alert. Fires after upload completes, before dismissing.
+    @State private var showPatientTimelineAlert = false
     @AppStorage("videoUploadsEnabled") private var videoUploadsEnabled = true
     @Environment(\.presentationMode) var presentationMode
     @EnvironmentObject private var authService: AuthenticationService
+    // Phase 8: needed so the attribution sheet inherits these via explicit
+    // .environmentObject() — sheets sometimes lose env chain on push.
+    @EnvironmentObject private var patientService: PatientService
+    @EnvironmentObject private var attributionService: JobAttributionService
 
     var body: some View {
         if exercises.isEmpty {
@@ -250,7 +262,9 @@ struct PracticePage: View {
                     await uploadAllRecordingsAndFinish()
                 }
             } label: {
-                Text(isUploadingAll ? "Uploading..." : (videoUploadsEnabled ? "Upload All & Finish" : "Finish Assessment"))
+                Text(isUploadingAll
+                     ? "Uploading..."
+                     : ((videoUploadsEnabled || isClinician) ? "Upload All & Finish" : "Finish Assessment"))
                     .foregroundColor(.white)
                     .font(.headline)
                     .frame(maxWidth: .infinity)
@@ -307,6 +321,37 @@ struct PracticePage: View {
         } message: {
             Text(uploadErrorMessage ?? "Unknown error")
         }
+        .sheet(isPresented: $showAttributionSheet) {
+            AttributeRecordingsSheet(
+                jobIds: uploadedJobIds,
+                exerciseNames: uploadedExerciseNames,
+                onDone: { finishAfterAttribution() }
+            )
+            // Explicitly re-inject env objects so the sheet's view
+            // hierarchy doesn't lose them across the modal boundary.
+            .environmentObject(authService)
+            .environmentObject(patientService)
+            .environmentObject(attributionService)
+        }
+        // Phase 9: patient self-record "Add to timeline?" confirmation.
+        // Either button posts the same notifications and dismisses the
+        // PracticePage; Add additionally inserts an assessment event.
+        .alert(
+            "Add to timeline?",
+            isPresented: $showPatientTimelineAlert
+        ) {
+            Button("Add") {
+                Task {
+                    await addOwnAssessmentToTimeline()
+                    finishAfterAttribution()
+                }
+            }
+            Button("Skip", role: .cancel) {
+                finishAfterAttribution()
+            }
+        } message: {
+            Text("Log this assessment on your timeline?")
+        }
     }
 
     @MainActor
@@ -317,7 +362,11 @@ struct PracticePage: View {
             return
         }
 
-        if !videoUploadsEnabled {
+        // Phase 8: clinicians MUST upload + attribute to a patient — the
+        // post-upload AttributeRecordingsSheet requires real processing_jobs
+        // rows to attribute against. Honour the upload toggle only for
+        // patient accounts (who already have user_id-based association).
+        if !videoUploadsEnabled && !isClinician {
             NotificationCenter.default.post(name: .assessmentCompleted, object: nil)
             NotificationCenter.default.post(name: .recordingAccepted, object: nil)
             presentationMode.wrappedValue.dismiss()
@@ -327,9 +376,13 @@ struct PracticePage: View {
         isUploadingAll = true
         uploadErrorMessage = nil
         uploadedCount = 0
+        uploadedJobIds = []
+        uploadedExerciseNames = []
 
         do {
             let uploader = VideoUploadService(supabase: authService.supabaseClient)
+            var collectedJobIds: [UUID] = []
+            var collectedExerciseNames: [String] = []
 
             for i in exercises.indices {
                 guard let videoURL = recordings[i] else {
@@ -340,22 +393,74 @@ struct PracticePage: View {
                     )
                 }
 
-                _ = try await uploader.uploadVideoAndCreateJobForCurrentUser(
+                let job = try await uploader.uploadVideoAndCreateJobForCurrentUser(
                     videoURL: videoURL,
                     exerciseName: exercises[i].title
                 )
+                collectedJobIds.append(job.jobId)
+                collectedExerciseNames.append(exercises[i].title)
                 uploadedCount += 1
             }
 
             NotificationCenter.default.post(name: .processedVideosUpdated, object: nil)
-            NotificationCenter.default.post(name: .assessmentCompleted, object: nil)
-            NotificationCenter.default.post(name: .recordingAccepted, object: nil)
-            presentationMode.wrappedValue.dismiss()
+
+            // Phase 8: clinicians get the attribute-to-patient sheet so the
+            // freshly-uploaded recordings can be linked to a specific
+            // patient roster. Patients self-recording auto-associate via
+            // processing_jobs.user_id, so they skip straight to finish.
+            if isClinician {
+                uploadedJobIds = collectedJobIds
+                uploadedExerciseNames = collectedExerciseNames
+                isUploadingAll = false
+                showAttributionSheet = true
+                return
+            }
+
+            // Phase 9: patient self-record path — show the "Add to
+            // timeline?" alert before dismissing. Both Yes and No end up
+            // posting the same notifications and dismissing the page.
+            uploadedJobIds = collectedJobIds
+            uploadedExerciseNames = collectedExerciseNames
+            isUploadingAll = false
+            showPatientTimelineAlert = true
+            return
         } catch {
             uploadErrorMessage = error.localizedDescription
         }
 
         isUploadingAll = false
+    }
+
+    /// Inserts an `assessment` event on the signed-in patient's timeline
+    /// using the just-uploaded jobs. Called from the patient-side "Add
+    /// to timeline?" alert's confirmation button.
+    @MainActor
+    private func addOwnAssessmentToTimeline() async {
+        guard
+            case .signedIn(let profile) = authService.authState,
+            let uuid = UUID(uuidString: profile.id)
+        else { return }
+        let service = TimelineService(patientId: uuid)
+        _ = await service.addAssessmentEvent(
+            jobId: uploadedJobIds.first,
+            occurredAt: Date(),
+            exerciseNames: uploadedExerciseNames,
+            createdBy: uuid
+        )
+    }
+
+
+    private var isClinician: Bool {
+        if case .signedIn(let profile) = authService.authState {
+            return profile.accountType == .clinician
+        }
+        return false
+    }
+
+    private func finishAfterAttribution() {
+        NotificationCenter.default.post(name: .assessmentCompleted, object: nil)
+        NotificationCenter.default.post(name: .recordingAccepted, object: nil)
+        presentationMode.wrappedValue.dismiss()
     }
 }
 

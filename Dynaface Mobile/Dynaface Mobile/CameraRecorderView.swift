@@ -141,6 +141,16 @@ class FaceGuideOverlayView: UIView {
         isDismissed = true
         isHidden = true
     }
+
+    /// Re-activate after a previous dismiss (e.g. camera flip after recording).
+    func reset() {
+        isDismissed = false
+        isHidden = false
+        isFaceAligned = false
+        lightingMessage = nil
+        updateOvalAppearance(aligned: false)
+        setNeedsLayout()
+    }
 }
 
 // MARK: - Camera Recorder
@@ -299,8 +309,8 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
 
     // MARK: - Recording readiness helpers
 
-    /// Combined gate. Skipped while the gate phase is over (recording started
-    /// or back camera in use — `faceGuideCompleted` covers both).
+    /// Combined gate. Skipped once recording has started
+    /// (`faceGuideCompleted` is set to `true` in `toggleRecording`).
     private func updateRecordingReadiness() {
         guard !faceGuideCompleted else { return }
         let ready = isFaceAligned && (lightingState == .ok)
@@ -644,23 +654,13 @@ class CameraRecorderViewController: UIViewController, AVCaptureFileOutputRecordi
 
         session.commitConfiguration()
 
-        // Show/hide face guide based on camera
-        if newPosition == .front {
-            faceGuideOverlay?.isHidden = false
-            faceGuideOverlay?.updateFaceAlignment(faceInOval: false) // Reset visual state
-            faceGuideOverlay?.updateLighting(message: nil)            // Clear stale lighting hint
-            isFaceAligned = false
-            lightingState = .ok                                       // First front-camera frame will overwrite
-            faceGuideCompleted = false
-            recordButton.isEnabled = false
-            recordButton.backgroundColor = UIColor.gray
-        } else {
-            // Back camera: hide face guide, enable record button
-            faceGuideOverlay?.isHidden = true
-            faceGuideCompleted = true
-            recordButton.isEnabled = true
-            recordButton.backgroundColor = UIColor(red: 0.12, green: 0.29, blue: 0.64, alpha: 1.0)
-        }
+        // Reset face guide and require checks for both cameras.
+        faceGuideOverlay?.reset()
+        isFaceAligned = false
+        lightingState = .ok
+        faceGuideCompleted = false
+        recordButton.isEnabled = false
+        recordButton.backgroundColor = UIColor.gray
     }
 
     // MARK: - Recording

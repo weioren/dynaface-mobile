@@ -14,6 +14,10 @@ import SwiftUI
 struct PatientListPage: View {
     @EnvironmentObject var patientService: PatientService
     @EnvironmentObject var authService: AuthenticationService
+    // Held only so we can forward it into PatientDetailView's pushed
+    // destination — NavigationLink targets don't inherit env objects
+    // that were attached at TabView scope.
+    @EnvironmentObject var attributionService: JobAttributionService
 
     @State private var searchText = ""
 
@@ -90,10 +94,14 @@ struct PatientListPage: View {
     private var list: some View {
         List {
             ForEach(filtered) { candidate in
-                // Push the placeholder — once Alex's PatientDetailView(profileId:)
-                // lands, swap this one destination line; the row UI stays the same.
+                // Push PatientDetailView — V1 contains the Timeline section
+                // only; future iterations attach Alex's annotated-video and
+                // analysis sections alongside the existing init.
                 NavigationLink {
-                    PatientDetailPlaceholder(displayName: candidate.username)
+                    PatientDetailView(patient: candidate)
+                        .environmentObject(authService)
+                        .environmentObject(patientService)
+                        .environmentObject(attributionService)
                 } label: {
                     PatientRow(candidate: candidate)
                 }

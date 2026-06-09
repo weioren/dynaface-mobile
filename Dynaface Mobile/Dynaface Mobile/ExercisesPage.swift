@@ -74,6 +74,13 @@ struct ExercisesPage: View {
     let baseWidth: CGFloat = 390
     let baseHeight: CGFloat = 844
 
+    // Forwarded into PracticePage's pushed destination so the post-upload
+    // attribution sheet has the services it needs. NavigationLink targets
+    // don't inherit env objects attached at TabView scope.
+    @EnvironmentObject var authService: AuthenticationService
+    @EnvironmentObject var patientService: PatientService
+    @EnvironmentObject var attributionService: JobAttributionService
+
     @State private var selectedOrder: [Exercise] = []
     @State private var selectedIDs: Set<UUID> = []
     @State private var navigateToPractice = false
@@ -188,7 +195,10 @@ struct ExercisesPage: View {
             }
             .background(
                 NavigationLink(
-                    destination: PracticePage(exercises: selectedOrder),
+                    destination: PracticePage(exercises: selectedOrder)
+                        .environmentObject(authService)
+                        .environmentObject(patientService)
+                        .environmentObject(attributionService),
                     isActive: $navigateToPractice
                 ) {
                     EmptyView()
