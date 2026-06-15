@@ -19,6 +19,10 @@
 		B7F1A0022F00000100000001 /* VideoUploadService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7F1A0012F00000100000001 /* VideoUploadService.swift */; };
 		D3BDB109E2EE46BE8D76D955 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AB0331B0EBB4451A6E59399 /* Models.swift */; };
 		D601DACF9B464EC88C305ECD /* PatientService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8DD3DF87F5C4BCCBC4F8848 /* PatientService.swift */; };
+		AA0100000000000000000001 /* AnalysisContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0100000000000000000002 /* AnalysisContract.swift */; };
+		AA0100000000000000000003 /* AnalysisPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0100000000000000000004 /* AnalysisPresentation.swift */; };
+		AA0100000000000000000005 /* MetricsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0100000000000000000006 /* MetricsProvider.swift */; };
+		AA0100000000000000000007 /* AnalysisViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0100000000000000000008 /* AnalysisViews.swift */; };
 		DB0564A52E39C8C400BEB570 /* PastExerciseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0564A42E39C8A900BEB570 /* PastExerciseView.swift */; };
 		DB0564A82E39F04E00BEB570 /* AuthSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0564A72E39F04E00BEB570 /* AuthSelector.swift */; };
 		DB2159BE2C90E7D100DD84DD /* Authentication.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB2159BD2C90E7D100DD84DD /* Authentication.swift */; };
@@ -89,6 +93,10 @@
 		A1D7E2752E4849EA0030ABFA /* PracticePage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticePage.swift; sourceTree = "<group>"; };
 		A1D7E2772E4857100030ABFA /* Players.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Players.swift; sourceTree = "<group>"; };
 		A8DD3DF87F5C4BCCBC4F8848 /* PatientService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientService.swift; sourceTree = "<group>"; };
+		AA0100000000000000000002 /* AnalysisContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisContract.swift; sourceTree = "<group>"; };
+		AA0100000000000000000004 /* AnalysisPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisPresentation.swift; sourceTree = "<group>"; };
+		AA0100000000000000000006 /* MetricsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricsProvider.swift; sourceTree = "<group>"; };
+		AA0100000000000000000008 /* AnalysisViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisViews.swift; sourceTree = "<group>"; };
 		AC4853EEE04540BB9715424C /* TimelineService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineService.swift; sourceTree = "<group>"; };
 		B7F1A0012F00000100000001 /* VideoUploadService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoUploadService.swift; sourceTree = "<group>"; };
 		DB0564A42E39C8A900BEB570 /* PastExerciseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PastExerciseView.swift; sourceTree = "<group>"; };
@@ -218,6 +226,10 @@
 				7724C311C54B4404BC726EDC /* RecordingFiles.swift */,
 				3AB0331B0EBB4451A6E59399 /* Models.swift */,
 				A8DD3DF87F5C4BCCBC4F8848 /* PatientService.swift */,
+				AA0100000000000000000002 /* AnalysisContract.swift */,
+				AA0100000000000000000004 /* AnalysisPresentation.swift */,
+				AA0100000000000000000006 /* MetricsProvider.swift */,
+				AA0100000000000000000008 /* AnalysisViews.swift */,
 				5F59DFA32B2C49969A524943 /* PatientListPage.swift */,
 				EC78D6AF103040E88488CA78 /* AddPatientSheet.swift */,
 				EF906CDDC4694FEC974913AC /* PatientDetailPlaceholder.swift */,
@@ -424,6 +436,10 @@
 				DBDCD0B12FCB484E00C5D367 /* PatientVideoTabs.swift in Sources */,
 				D3BDB109E2EE46BE8D76D955 /* Models.swift in Sources */,
 				D601DACF9B464EC88C305ECD /* PatientService.swift in Sources */,
+				AA0100000000000000000001 /* AnalysisContract.swift in Sources */,
+				AA0100000000000000000003 /* AnalysisPresentation.swift in Sources */,
+				AA0100000000000000000005 /* MetricsProvider.swift in Sources */,
+				AA0100000000000000000007 /* AnalysisViews.swift in Sources */,
 				299DC057DA4C400285DE2619 /* PatientListPage.swift in Sources */,
 				7FB9E64E53D94A958063B2F2 /* AddPatientSheet.swift in Sources */,
 				2206C651352944068103DEEF /* PatientDetailPlaceholder.swift in Sources */,
