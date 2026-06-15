@@ -3,74 +3,45 @@ import Foundation
 // MARK: - Metrics data source (front/back separation seam)
 //
 // The Analysis UI depends only on this protocol, never on Supabase/GCP. v1
-// runs on MockMetricsProvider (fixtures shaped exactly like Alex's contract).
-// When the GCP pipeline is ready, implement GCPMetricsProvider (fetch
-// results/{uid}/{job_id}/metrics.json) and swap the injected instance — the
-// contract, mapper, and views don't change.
+// runs on MockMetricsProvider, which decodes a REAL backend results.json
+// bundled as a sample resource — so the UI runs on real data shape + values
+// and the decode path is validated end to end. When the live provider is
+// ready, fetch results/{user_id}/{job_id}/results.json and decode it the same
+// way; the contract, mapper, and views don't change.
 
 protocol MetricsProviding {
     func report(forJob jobId: UUID) async throws -> FacialMetricsReport
     func latestReport(forPatient patientId: UUID) async throws -> FacialMetricsReport
 }
 
-// MARK: - Mock provider (v1)
+// MARK: - Mock provider (v1) — decodes a bundled real results.json
 
 struct MockMetricsProvider: MetricsProviding {
     func report(forJob jobId: UUID) async throws -> FacialMetricsReport { Self.sample }
     func latestReport(forPatient patientId: UUID) async throws -> FacialMetricsReport { Self.sample }
 
-    /// Fixture whose values mirror the Oren prototype (affected = left eye).
-    static let sample: FacialMetricsReport = FacialMetricsReport(
-        meta: MetricsMeta(
-            jobId: "mock-job",
-            userId: "mock-user",
-            assessmentDate: Date(),
-            exerciseName: "Blinking",
-            nReference: 142.7,
-            affectedSide: "left",
-            schemaVersion: "1.0",
-            mirrored: false
-        ),
-        perFrame: sampleFrames(),
-        summary: MetricsSummary(
-            eye: EyeSummary(
-                maxApertureL: 0.181, maxApertureR: 0.184,
-                minApertureL: 0.034, minApertureR: 0.000,
-                eyeClosureCompletenessL: 0.81, eyeClosureCompletenessR: 1.00,
-                meanEyeRatio: 0.82,
-                meanUpperRatioL: 0.68, meanUpperRatioR: 0.71,
-                peakCloseVelocityL: -1.8, peakCloseVelocityR: -2.1
-            ),
-            synkinesis: SynkinesisSummary(
-                meanSynkScore: 0.56, maxSynkScore: 0.63,
-                meanSynkUpperEyelid: 0.82, meanSynkLowerEyelid: 0.71,
-                meanSynkMouthEye: 0.56, meanBrowEyeCoupling: 0.43
-            ),
-            global: GlobalSummary(current: 72, baseline: 64, mean: 68, max: 74, min: 60)
-        )
-    )
-
-    private static func sampleFrames() -> [FrameMetrics] {
-        (0..<16).map { i in
-            let t = Double(i) * 0.1
-            let progress = min(1.0, Double(i) / 8.0) // closure ramps over first 8 frames
-            return FrameMetrics(
-                frame: i,
-                timeSec: t,
-                eyeClosureCompletenessR: progress * 1.00, // right = normal
-                eyeClosureCompletenessL: progress * 0.81, // left = affected
-                synkScore: progress * 0.56
-            )
+    static let sample: FacialMetricsReport = {
+        if let url = Bundle.main.url(forResource: "sample_results", withExtension: "json"),
+           let data = try? Data(contentsOf: url),
+           let report = try? JSONDecoder().decode(FacialMetricsReport.self, from: data) {
+            return report
         }
-    }
+        // Safe empty fallback if the sample resource is missing.
+        return FacialMetricsReport(
+            jobId: nil, userId: nil, inputObjectName: nil,
+            annotatedVideoPath: nil, resultsJsonPath: nil, generatedAt: nil,
+            summary: MetricsSummary(eye: nil, synkinesis: nil, global: nil),
+            perFrame: []
+        )
+    }()
 }
 
-// MARK: - GCP provider (stub, not used in v1)
+// MARK: - GCP / live provider (stub, not used in v1)
 
 struct GCPMetricsProvider: MetricsProviding {
-    // TODO: fetch results/{uid}/{job_id}/metrics.json (Supabase signed URL now,
-    // GCS by userID+jobNumber after migration). Reuse the signed-URL resolver
-    // pattern from PatientVideoTabs.swift. Decode into FacialMetricsReport.
+    // TODO: fetch results/{user_id}/{job_id}/results.json (Supabase signed URL
+    // now, GCS by userID+jobNumber after migration) and decode into
+    // FacialMetricsReport. Reuse the signed-URL resolver from PatientVideoTabs.
     enum NotReady: Error { case backendPending }
     func report(forJob jobId: UUID) async throws -> FacialMetricsReport { throw NotReady.backendPending }
     func latestReport(forPatient patientId: UUID) async throws -> FacialMetricsReport { throw NotReady.backendPending }
@@ -85,15 +56,17 @@ final class AnalysisService: ObservableObject {
     @Published var errorMessage: String?
 
     let patientId: UUID
+    /// Clinical affected side — injected from the patient profile
+    /// (results.json carries no clinical side). Defaults to unknown until
+    /// wired from profiles.symptoms_location.
+    let affectedSide: AffectedSide
     private let provider: MetricsProviding
 
-    /// Affected side comes from the loaded report's meta (backend or
-    /// iOS-injected from the patient profile); defaults to unknown.
-    var affectedSide: AffectedSide { AffectedSide(report?.meta.affectedSide) }
-
     init(patientId: UUID,
+         affectedSide: AffectedSide = .unknown,
          provider: MetricsProviding = MockMetricsProvider()) {
         self.patientId = patientId
+        self.affectedSide = affectedSide
         self.provider = provider
     }
 

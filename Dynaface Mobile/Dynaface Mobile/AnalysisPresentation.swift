@@ -133,10 +133,9 @@ enum AnalysisPresentation {
 
     // MARK: Home
 
-    static func homeModel(_ report: FacialMetricsReport) -> AnalysisHomeModel {
+    static func homeModel(_ report: FacialMetricsReport, affected: AffectedSide) -> AnalysisHomeModel {
         let eye = report.summary.eye
         let synk = report.summary.synkinesis
-        let affected = AffectedSide(report.meta.affectedSide)
 
         let eyePct = eyeScore(eye: eye, synk: synk, affected: affected)
         let synkVal = synk?.meanSynkScore ?? 0

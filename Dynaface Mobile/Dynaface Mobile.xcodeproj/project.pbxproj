@@ -46,6 +46,7 @@
 		DBAB9FC12B59B8EF007B2B80 /* DynafaceMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FC02B59B8EF007B2B80 /* DynafaceMobileApp.swift */; };
 		DBAB9FC32B59B8EF007B2B80 /* SignUp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FC22B59B8EF007B2B80 /* SignUp.swift */; };
 		DBAB9FC52B59B8F1007B2B80 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DBAB9FC42B59B8F1007B2B80 /* Assets.xcassets */; };
+		AA0100000000000000000009 /* sample_results.json in Resources */ = {isa = PBXBuildFile; fileRef = AA010000000000000000000A /* sample_results.json */; };
 		DBAB9FC82B59B8F2007B2B80 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DBAB9FC72B59B8F2007B2B80 /* Preview Assets.xcassets */; };
 		DBAB9FD22B59B8F2007B2B80 /* DynafaceMobileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FD12B59B8F2007B2B80 /* DynafaceMobileTests.swift */; };
 		DBAB9FDC2B59B8F2007B2B80 /* DynafaceMobileUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FDB2B59B8F2007B2B80 /* DynafaceMobileUITests.swift */; };
@@ -118,6 +119,7 @@
 		DBAB9FC02B59B8EF007B2B80 /* DynafaceMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynafaceMobileApp.swift; sourceTree = "<group>"; };
 		DBAB9FC22B59B8EF007B2B80 /* SignUp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignUp.swift; sourceTree = "<group>"; };
 		DBAB9FC42B59B8F1007B2B80 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AA010000000000000000000A /* sample_results.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = sample_results.json; sourceTree = "<group>"; };
 		DBAB9FC72B59B8F2007B2B80 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		DBAB9FCD2B59B8F2007B2B80 /* Dynaface MobileTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Dynaface MobileTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		DBAB9FD12B59B8F2007B2B80 /* DynafaceMobileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynafaceMobileTests.swift; sourceTree = "<group>"; };
@@ -250,6 +252,7 @@
 				DB6334662B7C914200601964 /* Dashboard.swift */,
 				A1D7E2772E4857100030ABFA /* Players.swift */,
 				DBAB9FC42B59B8F1007B2B80 /* Assets.xcassets */,
+				AA010000000000000000000A /* sample_results.json */,
 				DBAB9FC62B59B8F2007B2B80 /* Preview Content */,
 			);
 			path = "Dynaface Mobile";
@@ -400,6 +403,7 @@
 				DBAD9B322EA76049005F0C67 /* NoseWrinkle.mp4 in Resources */,
 				DBAD9B332EA76049005F0C67 /* StrongEyeClosure.mp4 in Resources */,
 				DBAB9FC52B59B8F1007B2B80 /* Assets.xcassets in Resources */,
+				AA0100000000000000000009 /* sample_results.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

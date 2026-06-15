@@ -49,7 +49,7 @@ struct AnalysisHomeView: View {
 
     @ViewBuilder
     private func content(_ report: FacialMetricsReport) -> some View {
-        let home = AnalysisPresentation.homeModel(report)
+        let home = AnalysisPresentation.homeModel(report, affected: service.affectedSide)
         ScrollView {
             VStack(spacing: 20) {
                 ScoreGauge(score: home.globalScore, label: home.globalLabel)

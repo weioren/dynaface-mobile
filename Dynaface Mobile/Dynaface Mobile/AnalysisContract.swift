@@ -1,71 +1,39 @@
 import Foundation
 
-// MARK: - Analysis raw metrics contract
+// MARK: - Analysis metrics contract
 //
-// This is the "seam" between the iOS Analysis UI and the backend (Alex's
-// pipeline, migrating Supabase -> GCP). It mirrors the field names in Alex's
-// "Metric Calculations" document EXACTLY (snake_case), so the JSON the GCP
-// Cloud Run job writes to results/{uid}/{job_id}/metrics.json decodes here
-// with no remapping. The UI never touches these types directly — the
-// presentation mapper (AnalysisPresentation.swift) turns them into view models.
+// Mirrors the REAL `results.json` the backend writes to
+// results/{user_id}/{job_id}/results.json (verified against a live GCP file).
+// Field names are the backend's snake_case originals so the JSON decodes with
+// no remapping. The UI never touches these types directly — the presentation
+// mapper (AnalysisPresentation.swift) turns them into view models.
 //
-// v1 only consumes the Eye + Synkinesis slices (+ global). Other modules'
-// fields are intentionally omitted from these structs; decoding ignores
-// unknown keys, so adding them later is non-breaking.
+// The file carries far more than v1 needs (smile/brow/midface/temporal
+// modules, 50+ per-frame fields). We only declare what Eye + Synkinesis use;
+// unknown keys are ignored on decode, so adding modules later is non-breaking.
+//
+// NOTE: the JSON has NO clinical "affected side" — that is patient context,
+// injected app-side (from profiles.symptoms_location) via AnalysisService.
 
 struct FacialMetricsReport: Codable {
-    let meta: MetricsMeta
-    let perFrame: [FrameMetrics]
-    let summary: MetricsSummary
-
-    enum CodingKeys: String, CodingKey {
-        case meta
-        case perFrame = "per_frame"
-        case summary
-    }
-}
-
-struct MetricsMeta: Codable {
-    let jobId: String
+    let jobId: String?
     let userId: String?
-    let assessmentDate: Date?
-    let exerciseName: String?
-    let nReference: Double?
-    /// May be absent from the backend payload — the iOS layer injects the
-    /// clinical side from the patient profile (symptoms_location).
-    let affectedSide: String?
-    /// Optional future-proofing (per expert rec): contract version, and a
-    /// capture-mirroring flag so a front-camera mirror fix is a config flip.
-    let schemaVersion: String?
-    let mirrored: Bool?
+    let inputObjectName: String?
+    let annotatedVideoPath: String?
+    let resultsJsonPath: String?
+    let generatedAt: Double?            // epoch seconds
+    let summary: MetricsSummary
+    let perFrame: [FrameMetrics]
 
     enum CodingKeys: String, CodingKey {
         case jobId = "job_id"
         case userId = "user_id"
-        case assessmentDate = "assessment_date"
-        case exerciseName = "exercise_name"
-        case nReference = "n_reference"
-        case affectedSide = "affected_side"
-        case schemaVersion = "schema_version"
-        case mirrored
-    }
-}
-
-// Per-frame slice — only the fields v1 charts need. The real file carries all
-// 36 metrics per frame; extra keys are ignored on decode.
-struct FrameMetrics: Codable {
-    let frame: Int?
-    let timeSec: Double?
-    let eyeClosureCompletenessR: Double?
-    let eyeClosureCompletenessL: Double?
-    let synkScore: Double?
-
-    enum CodingKeys: String, CodingKey {
-        case frame
-        case timeSec = "time_sec"
-        case eyeClosureCompletenessR = "eye_closure_completeness_r"
-        case eyeClosureCompletenessL = "eye_closure_completeness_l"
-        case synkScore = "synk_score"
+        case inputObjectName = "input_object_name"
+        case annotatedVideoPath = "annotated_video_path"
+        case resultsJsonPath = "results_json_path"
+        case generatedAt = "generated_at"
+        case summary
+        case perFrame = "per_frame"
     }
 }
 
@@ -73,13 +41,23 @@ struct MetricsSummary: Codable {
     let eye: EyeSummary?
     let synkinesis: SynkinesisSummary?
     let global: GlobalSummary?
+    // smile_module / brow_module / midface_module / temporal_dynamics exist in
+    // the file but aren't decoded in v1 (Eye + Synkinesis only).
+
+    enum CodingKeys: String, CodingKey {
+        case eye = "eye_module"
+        case synkinesis
+        case global = "global_score"
+    }
 }
 
 struct EyeSummary: Codable {
     let maxApertureL, maxApertureR: Double?
     let minApertureL, minApertureR: Double?
     let eyeClosureCompletenessL, eyeClosureCompletenessR: Double?
+    let meanEyeAreaL, meanEyeAreaR: Double?
     let meanEyeRatio: Double?
+    let meanEyeDiff: Double?
     let meanUpperRatioL, meanUpperRatioR: Double?
     let peakCloseVelocityL, peakCloseVelocityR: Double?
 
@@ -90,7 +68,10 @@ struct EyeSummary: Codable {
         case minApertureR = "min_aperture_r"
         case eyeClosureCompletenessL = "eye_closure_completeness_l"
         case eyeClosureCompletenessR = "eye_closure_completeness_r"
+        case meanEyeAreaL = "mean_eye_area_l"
+        case meanEyeAreaR = "mean_eye_area_r"
         case meanEyeRatio = "mean_eye_ratio"
+        case meanEyeDiff = "mean_eye_diff"
         case meanUpperRatioL = "mean_upper_ratio_l"
         case meanUpperRatioR = "mean_upper_ratio_r"
         case peakCloseVelocityL = "peak_close_velocity_l"
@@ -115,4 +96,22 @@ struct SynkinesisSummary: Codable {
 
 struct GlobalSummary: Codable {
     let current, baseline, mean, max, min: Double?
+}
+
+// Per-frame slice — only the fields v1 charts need. The file has 50+ per frame;
+// extra keys are ignored. `frame` is a JSON float (1.0), so decode as Double.
+struct FrameMetrics: Codable {
+    let frame: Double?
+    let timeSec: Double?
+    let eyeClosureCompletenessR: Double?
+    let eyeClosureCompletenessL: Double?
+    let synkScore: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case frame
+        case timeSec = "time_sec"
+        case eyeClosureCompletenessR = "eye_closure_completeness_r"
+        case eyeClosureCompletenessL = "eye_closure_completeness_l"
+        case synkScore = "synk_score"
+    }
 }
