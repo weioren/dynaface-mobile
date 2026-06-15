@@ -12,6 +12,8 @@ private let brandBlue = Color(red: 0.12, green: 0.29, blue: 0.64)
 
 struct AnalysisHomeView: View {
     @ObservedObject var service: AnalysisService
+    @EnvironmentObject private var authService: AuthenticationService
+    @EnvironmentObject private var attributionService: JobAttributionService
 
     var body: some View {
         Group {
@@ -24,7 +26,12 @@ struct AnalysisHomeView: View {
                 emptyState
             }
         }
-        .task { await service.loadIfNeeded() }
+        .task {
+            // Switch to the live Supabase source (env objects available here),
+            // then load. Falls back to whatever provider was injected.
+            service.useSupabase(authService.supabaseClient, attribution: attributionService)
+            await service.loadIfNeeded()
+        }
         .alert(
             "Couldn't load analysis",
             isPresented: Binding(

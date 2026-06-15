@@ -18,7 +18,8 @@ import Foundation
 struct FacialMetricsReport: Codable {
     let jobId: String?
     let userId: String?
-    let inputObjectName: String?
+    let inputObjectName: String?    // GCP file uses this key
+    let videoPath: String?          // Supabase file uses this key (same meaning)
     let annotatedVideoPath: String?
     let resultsJsonPath: String?
     let generatedAt: Double?            // epoch seconds
@@ -29,6 +30,7 @@ struct FacialMetricsReport: Codable {
         case jobId = "job_id"
         case userId = "user_id"
         case inputObjectName = "input_object_name"
+        case videoPath = "video_path"
         case annotatedVideoPath = "annotated_video_path"
         case resultsJsonPath = "results_json_path"
         case generatedAt = "generated_at"
