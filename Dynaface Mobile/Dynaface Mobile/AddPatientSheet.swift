@@ -2,196 +2,84 @@ import SwiftUI
 
 // MARK: - AddPatientSheet
 //
-// Search-and-claim flow: clinician searches existing patient-role
-// profiles by username/email, taps a result, and the app inserts a
-// `patients` row linked to that profile via `claimed_user_id`.
-// Already-claimed candidates show greyed out and aren't tappable.
-// There is no free-text fallback — a profile must exist first.
+// Clinician "My Patients" → add a new patient. Per the 6/14 meeting the
+// search-and-claim flow was removed from this sheet (search now lives only
+// on the pre-recording patient picker, RecordingPatientPickerSheet). This
+// sheet simply creates a new clinician-owned patient row.
 
 struct AddPatientSheet: View {
     @EnvironmentObject var patientService: PatientService
     @EnvironmentObject var authService: AuthenticationService
     @Environment(\.dismiss) private var dismiss
 
-    @State private var searchText = ""
-    @State private var candidates: [PatientCandidate] = []
-    @State private var isSearching = false
-    @State private var addingId: UUID? = nil
     @State private var firstName = ""
     @State private var lastName = ""
     @State private var isCreating = false
     @FocusState private var nameFieldFocused: Bool
-
-    private var alreadyClaimedIds: Set<UUID> {
-        Set(patientService.patients.compactMap { $0.claimedUserId })
-    }
-
-    private var trimmedQuery: String {
-        searchText.trimmingCharacters(in: .whitespaces)
-    }
-
-    var body: some View {
-        NavigationStack {
-            content
-                .navigationTitle("Add patient")
-                .navigationBarTitleDisplayMode(.inline)
-                .searchable(
-                    text: $searchText,
-                    placement: .navigationBarDrawer(displayMode: .always),
-                    prompt: "Search by name or email"
-                )
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }
-                            .disabled(addingId != nil)
-                    }
-                    ToolbarItemGroup(placement: .keyboard) {
-                        Spacer()
-                        Button("Done") { nameFieldFocused = false }
-                    }
-                }
-        }
-        .interactiveDismissDisabled(addingId != nil)
-        .task(id: searchText) { await searchAfterDebounce() }
-    }
-
-    // MARK: - Subviews
-
-    @ViewBuilder
-    private var content: some View {
-        if trimmedQuery.isEmpty {
-            createForm
-        } else if isSearching && candidates.isEmpty {
-            ProgressView("Searching…")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if candidates.isEmpty {
-            noMatchesView
-        } else {
-            resultsList
-        }
-    }
-
-    private var createForm: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("New patient")
-                    .font(.headline)
-                Text("Add a patient who doesn't have an account yet.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-
-                TextField("First name", text: $firstName)
-                    .textContentType(.givenName)
-                    .focused($nameFieldFocused)
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
-                TextField("Last name", text: $lastName)
-                    .textContentType(.familyName)
-                    .focused($nameFieldFocused)
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
-
-                Button {
-                    Task { await createUnregistered() }
-                } label: {
-                    HStack {
-                        if isCreating { ProgressView().tint(.white) }
-                        Text("Add patient")
-                    }
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(canCreate ? Color(red: 0.12, green: 0.29, blue: 0.64) : Color.gray)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                }
-                .disabled(!canCreate || isCreating)
-
-                Text("Or search above to link a patient who already has an account.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.top, 4)
-            }
-            .padding()
-        }
-    }
 
     private var canCreate: Bool {
         !firstName.trimmingCharacters(in: .whitespaces).isEmpty
             && !lastName.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    private var noMatchesView: some View {
-        VStack(spacing: 8) {
-            Spacer()
-            Image(systemName: "person.crop.circle.badge.questionmark")
-                .font(.system(size: 50))
-                .foregroundColor(.gray.opacity(0.5))
-            Text("No patients match \"\(trimmedQuery)\"")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-            Spacer()
-        }
-    }
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("New patient")
+                        .font(.headline)
+                    Text("Add a patient to your roster.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
 
-    private var resultsList: some View {
-        List {
-            ForEach(candidates) { candidate in
-                let alreadyAdded = alreadyClaimedIds.contains(candidate.id)
-                CandidateRow(
-                    candidate: candidate,
-                    isAlreadyAdded: alreadyAdded,
-                    isAdding: addingId == candidate.id
-                )
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    guard !alreadyAdded, addingId == nil else { return }
-                    Task { await add(candidate) }
+                    TextField("First name", text: $firstName)
+                        .textContentType(.givenName)
+                        .focused($nameFieldFocused)
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(10)
+                    TextField("Last name", text: $lastName)
+                        .textContentType(.familyName)
+                        .focused($nameFieldFocused)
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(10)
+
+                    Button {
+                        Task { await createUnregistered() }
+                    } label: {
+                        HStack {
+                            if isCreating { ProgressView().tint(.white) }
+                            Text("Add patient")
+                        }
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(canCreate ? Color(red: 0.12, green: 0.29, blue: 0.64) : Color.gray)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                    }
+                    .disabled(!canCreate || isCreating)
+                }
+                .padding()
+            }
+            .navigationTitle("Add patient")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .disabled(isCreating)
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { nameFieldFocused = false }
                 }
             }
+            .interactiveDismissDisabled(isCreating)
         }
-        .listStyle(.plain)
     }
 
     // MARK: - Actions
-
-    private func searchAfterDebounce() async {
-        let q = trimmedQuery
-        guard !q.isEmpty else {
-            candidates = []
-            isSearching = false
-            return
-        }
-        do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
-        guard !Task.isCancelled else { return }
-        isSearching = true
-        let result = await patientService.searchPatientProfiles(matching: q)
-        guard !Task.isCancelled else { return }
-        candidates = result
-        isSearching = false
-    }
-
-    private func add(_ candidate: PatientCandidate) async {
-        guard
-            case .signedIn(let profile) = authService.authState,
-            let clinicianId = UUID(uuidString: profile.id)
-        else { return }
-
-        patientService.errorMessage = nil
-        addingId = candidate.id
-        await patientService.addPatientFromProfile(candidate, clinicianId: clinicianId)
-        addingId = nil
-
-        if patientService.errorMessage == nil {
-            dismiss()
-        }
-    }
 
     private func createUnregistered() async {
         guard
@@ -210,51 +98,5 @@ struct AddPatientSheet: View {
         if patientService.errorMessage == nil {
             dismiss()
         }
-    }
-}
-
-// MARK: - CandidateRow
-
-private struct CandidateRow: View {
-    let candidate: PatientCandidate
-    let isAlreadyAdded: Bool
-    let isAdding: Bool
-
-    private var initials: String {
-        let parts = candidate.username.split(separator: " ")
-        let first = parts.first?.first.map(String.init) ?? "?"
-        let last  = parts.dropFirst().first?.first.map(String.init) ?? ""
-        return (first + last).uppercased()
-    }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(Color(red: 0.12, green: 0.29, blue: 0.64).opacity(0.18))
-                    .frame(width: 40, height: 40)
-                Text(initials)
-                    .font(.caption2).fontWeight(.semibold)
-                    .foregroundColor(Color(red: 0.12, green: 0.29, blue: 0.64))
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(candidate.username)
-                    .font(.body).fontWeight(.medium)
-                    .foregroundColor(.primary)
-                Text(candidate.email)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            Spacer()
-            if isAdding {
-                ProgressView()
-            } else if isAlreadyAdded {
-                Text("Already added")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-        }
-        .padding(.vertical, 4)
-        .opacity(isAlreadyAdded ? 0.5 : 1.0)
     }
 }

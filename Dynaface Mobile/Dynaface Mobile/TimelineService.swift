@@ -195,6 +195,29 @@ final class TimelineService: ObservableObject {
         }
     }
 
+    /// Delete a non-assessment event. Assessment rows are system-managed
+    /// (linked to a processing_jobs row) and never deletable — guarded
+    /// here client-side and by RLS (2026-06-15 migration). On success the
+    /// local copy is removed.
+    @discardableResult
+    func deleteEvent(_ event: TimelineEvent) async -> Bool {
+        guard event.type != .assessment else { return false }
+
+        do {
+            try await supabase
+                .from("timeline_events")
+                .delete()
+                .eq("id", value: event.id.uuidString)
+                .execute()
+            events.removeAll { $0.id == event.id }
+            return true
+        } catch {
+            print("TimelineService.deleteEvent failed: \(error)")
+            errorMessage = "Couldn't delete event: \(error.localizedDescription)"
+            return false
+        }
+    }
+
     // MARK: - Helpers
 
     /// Postgres `date` column wants `YYYY-MM-DD`, no time component.

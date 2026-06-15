@@ -26,6 +26,8 @@ struct TimelinePage: View {
     @State private var selectedAssessmentVideo: AssessmentVideoRef?
     /// Timeline filter: nil = show all; otherwise only this event type.
     @State private var selectedFilter: TimelineEventType?
+    /// Manual (non-assessment) event awaiting delete confirmation.
+    @State private var eventPendingDelete: TimelineEvent?
 
     private var isClinician: Bool {
         if case .signedIn(let profile) = authService.authState {
@@ -92,6 +94,13 @@ struct TimelinePage: View {
                     TimelineEventRow(event: event)
                         .contentShape(Rectangle())
                         .onTapGesture { handleTap(event) }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                eventPendingDelete = event
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
                 case .assessmentGroup(let day, let events):
                     TimelineAssessmentGroupRow(
                         day: day,
@@ -102,6 +111,22 @@ struct TimelinePage: View {
             }
         }
         .listStyle(.plain)
+        .alert(
+            "Delete event?",
+            isPresented: Binding(
+                get: { eventPendingDelete != nil },
+                set: { if !$0 { eventPendingDelete = nil } }
+            ),
+            presenting: eventPendingDelete
+        ) { event in
+            Button("Delete", role: .destructive) {
+                Task { await timelineService.deleteEvent(event) }
+                eventPendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { eventPendingDelete = nil }
+        } message: { event in
+            Text("This permanently deletes this \(event.type.displayName.lowercased()). This can't be undone.")
+        }
     }
 
     /// Eastern calendar so assessments group by the US Eastern day they were

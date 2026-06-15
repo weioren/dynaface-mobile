@@ -22,8 +22,8 @@ let allExercises: [Exercise] = [
              instructions: "Squeeze eyelids shut with full lid contact.",
              videoFileName: "StrongEyeClosure"),
     
-    Exercise(title: "Weak Eye Closure",
-             instructions: "Close eyes gently with full lid contact.",
+    Exercise(title: "Blinking",
+             instructions: "Blink your eyes naturally and repeatedly.",
              videoFileName: "WeakEyeClosure"),
     
     Exercise(title: "Nose Wrinkle",
@@ -62,7 +62,7 @@ struct ExerciseModule: Identifiable {
 let exerciseModules: [ExerciseModule] = [
     ExerciseModule(name: "Full Assessment", icon: "list.clipboard", exercises: allExercises),
     ExerciseModule(name: "Eye Movements", icon: "eye", exercises: allExercises.filter {
-        ["Eyebrow Raise", "Brow Furrow", "Strong Eye Closure", "Weak Eye Closure"].contains($0.title)
+        ["Eyebrow Raise", "Brow Furrow", "Strong Eye Closure", "Blinking"].contains($0.title)
     }),
     ExerciseModule(name: "Smile Movements", icon: "face.smiling", exercises: allExercises.filter {
         ["Full Smile", "Half Smile", "Lip Pucker", "Lip Purse"].contains($0.title)
