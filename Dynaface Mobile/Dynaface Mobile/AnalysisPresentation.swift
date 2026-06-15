@@ -136,8 +136,9 @@ enum AnalysisPresentation {
     static func homeModel(_ report: FacialMetricsReport) -> AnalysisHomeModel {
         let eye = report.summary.eye
         let synk = report.summary.synkinesis
+        let affected = AffectedSide(report.meta.affectedSide)
 
-        let eyePct = eyeScore(eye: eye, synk: synk)
+        let eyePct = eyeScore(eye: eye, synk: synk, affected: affected)
         let synkVal = synk?.meanSynkScore ?? 0
         let synkPct = Int((synkVal * 100).rounded())
 
@@ -176,7 +177,7 @@ enum AnalysisPresentation {
         let rawRatio = eye?.meanEyeRatio ?? 1
         let affectedRatio = affectedIsLeft ? rawRatio : (rawRatio == 0 ? 0 : 1 / rawRatio)
 
-        let score = eyeScore(eye: eye, synk: synk)
+        let score = eyeScore(eye: eye, synk: synk, affected: affected)
         let sev = functionSeverity(score)
 
         let affLabel = affected.hasAffectedFraming
@@ -247,18 +248,33 @@ enum AnalysisPresentation {
 
     // MARK: - Scores & thresholds (v1-provisional; clinically uncalibrated)
 
-    /// Eye composite 0-100, derived only from Alex's eye + eyelid-synk fields,
-    /// in the spirit of his global_score (symmetry + movement - synk penalty).
-    static func eyeScore(eye: EyeSummary?, synk: SynkinesisSummary?) -> Int {
+    /// Eye composite 0-100. Per expert recommendation, ANCHORED ON THE
+    /// AFFECTED side (not a two-eye average, so a weak affected eye isn't
+    /// masked by a healthy one): closure_affected + closure_symmetry +
+    /// area_symmetry − eyelid-synkinesis penalty. v1-provisional weights.
+    static func eyeScore(eye: EyeSummary?, synk: SynkinesisSummary?, affected: AffectedSide) -> Int {
         let ratio = eye?.meanEyeRatio ?? 1
         let ccl = eye?.eyeClosureCompletenessL ?? 0
         let ccr = eye?.eyeClosureCompletenessR ?? 0
         let su = synk?.meanSynkUpperEyelid ?? 0
         let sl = synk?.meanSynkLowerEyelid ?? 0
-        let symmetry = 1 - min(abs(ratio - 1), 1)
-        let movement = 0.5 * ccl + 0.5 * ccr
-        let penalty = 0.5 * su + 0.5 * sl
-        let raw = 0.40 * symmetry + 0.60 * movement - 0.15 * penalty
+
+        // Affected-side closure is the clinically dominant term;
+        // both/unknown -> the worse (lower) side.
+        let closureAffected: Double
+        switch affected {
+        case .left:  closureAffected = ccl
+        case .right: closureAffected = ccr
+        default:     closureAffected = min(ccl, ccr)
+        }
+        let closureSymmetry = 1 - min(abs(ccl - ccr), 1)
+        let areaSymmetry = 1 - min(abs(ratio - 1), 1)
+        let eyelidSynk = 0.5 * su + 0.5 * sl
+
+        let raw = 0.55 * closureAffected
+                + 0.25 * closureSymmetry
+                + 0.20 * areaSymmetry
+                - 0.15 * eyelidSynk
         return Int((max(0, min(1, raw)) * 100).rounded())
     }
 

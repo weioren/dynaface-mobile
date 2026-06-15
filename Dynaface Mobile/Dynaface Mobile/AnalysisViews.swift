@@ -75,6 +75,12 @@ struct AnalysisHomeView: View {
                 .padding()
                 .background(Color.gray.opacity(0.06))
                 .cornerRadius(16)
+
+                Text("Preliminary — derived metrics for clinical review, not a validated score.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
             }
             .padding()
         }

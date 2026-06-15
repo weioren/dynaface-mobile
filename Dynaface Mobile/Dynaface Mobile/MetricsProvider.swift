@@ -27,7 +27,9 @@ struct MockMetricsProvider: MetricsProviding {
             assessmentDate: Date(),
             exerciseName: "Blinking",
             nReference: 142.7,
-            affectedSide: "left"
+            affectedSide: "left",
+            schemaVersion: "1.0",
+            mirrored: false
         ),
         perFrame: sampleFrames(),
         summary: MetricsSummary(

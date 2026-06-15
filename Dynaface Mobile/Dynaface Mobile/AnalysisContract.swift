@@ -34,6 +34,10 @@ struct MetricsMeta: Codable {
     /// May be absent from the backend payload — the iOS layer injects the
     /// clinical side from the patient profile (symptoms_location).
     let affectedSide: String?
+    /// Optional future-proofing (per expert rec): contract version, and a
+    /// capture-mirroring flag so a front-camera mirror fix is a config flip.
+    let schemaVersion: String?
+    let mirrored: Bool?
 
     enum CodingKeys: String, CodingKey {
         case jobId = "job_id"
@@ -42,6 +46,8 @@ struct MetricsMeta: Codable {
         case exerciseName = "exercise_name"
         case nReference = "n_reference"
         case affectedSide = "affected_side"
+        case schemaVersion = "schema_version"
+        case mirrored
     }
 }
 
