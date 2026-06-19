@@ -7,16 +7,10 @@ struct ProfilePage: View {
     let baseHeight: CGFloat = 844
 
     @EnvironmentObject var authService: AuthenticationService
-    // Forwarded into PatientDetailView's pushed destination — NavigationLink
-    // doesn't propagate env objects scoped to TabView, so we hold them here
-    // and re-inject at the destination.
-    @EnvironmentObject var patientService: PatientService
-    @EnvironmentObject var attributionService: JobAttributionService
     @AppStorage("videoUploadsEnabled") private var videoUploadsEnabled = true
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var profileImage: UIImage?
     @State private var showingEditProfile = false
-    @State private var navigateToMyCare = false
 
     // MARK: - Menu data model
     //
@@ -40,14 +34,6 @@ struct ProfilePage: View {
         case .patient:
             return [
                 edit,
-                // "My care" pushes the patient's own PatientDetailView
-                // (timeline section in V1). The actual navigation is wired
-                // through a hidden NavigationLink below the menu VStack —
-                // we just flip the flag here.
-                MenuRow(text: "My care") { navigateToMyCare = true },
-                MenuRow(text: "My progress")         { /* TODO */ },
-                MenuRow(text: "My past evaluations") { /* TODO */ },
-                upcoming,
                 faq,
             ]
         case .clinician:
@@ -70,7 +56,8 @@ struct ProfilePage: View {
             let widthScale = geometry.size.width / baseWidth
             let heightScale = geometry.size.height / baseHeight
 
-            VStack(spacing: 30 * heightScale) {
+            ScrollView {
+                VStack(spacing: 30 * heightScale) {
                 // Profile header section
                 VStack(spacing: 20 * heightScale) {
                     // Profile picture with photo picker
@@ -153,28 +140,6 @@ struct ProfilePage: View {
                                 action: item.action
                             )
                         }
-
-                        // Hidden NavigationLink: triggered when patient taps
-                        // "My care" (which sets navigateToMyCare = true).
-                        // Pushes the patient's own PatientDetailView so they
-                        // see their own timeline. Clinicians never reach this
-                        // path (no "My care" row in their menu).
-                        if profile.accountType == .patient,
-                           let myUUID = UUID(uuidString: profile.id) {
-                            NavigationLink(isActive: $navigateToMyCare) {
-                                PatientDetailView(
-                                    displayName: profile.username,
-                                    patientId: myUUID
-                                )
-                                .environmentObject(authService)
-                                .environmentObject(patientService)
-                                .environmentObject(attributionService)
-                            } label: {
-                                EmptyView()
-                            }
-                            .hidden()
-                            .frame(width: 0, height: 0)
-                        }
                     }
 
                     // Sign out button
@@ -198,10 +163,12 @@ struct ProfilePage: View {
                     }
                 }
 
-                Spacer()
             }
             .padding(.horizontal, 30 * widthScale)
             .padding(.top, 40 * heightScale)
+            .padding(.bottom, 40 * heightScale)
+            .frame(maxWidth: .infinity)
+            }
             .frame(width: geometry.size.width, height: geometry.size.height)
             .sheet(isPresented: $showingEditProfile) {
                 EditProfilePage()

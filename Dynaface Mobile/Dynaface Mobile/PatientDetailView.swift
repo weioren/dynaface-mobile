@@ -2,12 +2,12 @@ import SwiftUI
 
 // MARK: - PatientDetailView
 //
-// Host view for a single patient's detail screen. Hosts three
-// sub-tabs at the top of the page:
+// Host view for a single patient's detail screen. Hosts two sub-tabs:
 //
-//   1. Timeline   — clinical events log (surgery, injection, etc.)
-//   2. History    — every recording uploaded for this patient
-//   3. Processed  — annotated/completed videos for this patient
+//   1. Timeline   — clinical events + assessments (tap to replay)
+//   2. Processed  — annotated/completed videos for this patient
+//
+// History was folded into the Timeline (it already shows assessments).
 //
 // Two entry points:
 //   - Clinician taps a row in PatientListPage → push with that
@@ -23,12 +23,11 @@ import SwiftUI
 
 struct PatientDetailView: View {
     enum SubTab: Int, Hashable, CaseIterable {
-        case timeline, history, processed
+        case timeline, processed
 
         var title: String {
             switch self {
             case .timeline:  return "Timeline"
-            case .history:   return "History"
             case .processed: return "Processed"
             }
         }
@@ -86,8 +85,6 @@ struct PatientDetailView: View {
                 case .timeline:
                     TimelinePage(showingAddSheet: $showingAddEvent)
                         .environmentObject(timelineService)
-                case .history:
-                    PatientHistoryTab(patientId: patientId)
                 case .processed:
                     PatientProcessedTab(patientId: patientId)
                 }
@@ -99,5 +96,43 @@ struct PatientDetailView: View {
         // NavigationView. Force the bar visible here so the
         // NavigationLink back chevron renders correctly.
         .toolbar(.visible, for: .navigationBar)
+    }
+}
+
+// MARK: - PatientTimelineTab
+//
+// The patient's own Timeline as a bottom Dashboard tab — the same
+// TimelinePage the clinician sees, scoped to the patient's own id.
+// Standalone (no Timeline/Processed sub-tabs); the patient's videos live
+// in the separate "Videos" tab.
+
+struct PatientTimelineTab: View {
+    @StateObject private var timelineService: TimelineService
+    @State private var showingAddEvent = false
+
+    init(patientId: UUID) {
+        _timelineService = StateObject(wrappedValue: TimelineService(patientId: patientId))
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Timeline")
+                    .font(.largeTitle).fontWeight(.bold)
+                Spacer()
+                Button { showingAddEvent = true } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(Color(red: 0.12, green: 0.29, blue: 0.64))
+                }
+                .accessibilityLabel("Add event")
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
+
+            TimelinePage(showingAddSheet: $showingAddEvent)
+                .environmentObject(timelineService)
+        }
     }
 }
