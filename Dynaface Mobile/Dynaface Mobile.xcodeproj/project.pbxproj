@@ -23,6 +23,8 @@
 		AA0100000000000000000003 /* AnalysisPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0100000000000000000004 /* AnalysisPresentation.swift */; };
 		AA0100000000000000000005 /* MetricsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0100000000000000000006 /* MetricsProvider.swift */; };
 		AA0100000000000000000007 /* AnalysisViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0100000000000000000008 /* AnalysisViews.swift */; };
+		AA0200000000000000000001 /* CompareAssessmentSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000002 /* CompareAssessmentSetupView.swift */; };
+		AA0200000000000000000003 /* CompareAssessmentResultsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000004 /* CompareAssessmentResultsView.swift */; };
 		DB0564A52E39C8C400BEB570 /* PastExerciseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0564A42E39C8A900BEB570 /* PastExerciseView.swift */; };
 		DB0564A82E39F04E00BEB570 /* AuthSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0564A72E39F04E00BEB570 /* AuthSelector.swift */; };
 		DB2159BE2C90E7D100DD84DD /* Authentication.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB2159BD2C90E7D100DD84DD /* Authentication.swift */; };
@@ -98,6 +100,8 @@
 		AA0100000000000000000004 /* AnalysisPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisPresentation.swift; sourceTree = "<group>"; };
 		AA0100000000000000000006 /* MetricsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricsProvider.swift; sourceTree = "<group>"; };
 		AA0100000000000000000008 /* AnalysisViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisViews.swift; sourceTree = "<group>"; };
+		AA0200000000000000000002 /* CompareAssessmentSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompareAssessmentSetupView.swift; sourceTree = "<group>"; };
+		AA0200000000000000000004 /* CompareAssessmentResultsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompareAssessmentResultsView.swift; sourceTree = "<group>"; };
 		AC4853EEE04540BB9715424C /* TimelineService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineService.swift; sourceTree = "<group>"; };
 		B7F1A0012F00000100000001 /* VideoUploadService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoUploadService.swift; sourceTree = "<group>"; };
 		DB0564A42E39C8A900BEB570 /* PastExerciseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PastExerciseView.swift; sourceTree = "<group>"; };
@@ -232,6 +236,8 @@
 				AA0100000000000000000004 /* AnalysisPresentation.swift */,
 				AA0100000000000000000006 /* MetricsProvider.swift */,
 				AA0100000000000000000008 /* AnalysisViews.swift */,
+				AA0200000000000000000002 /* CompareAssessmentSetupView.swift */,
+				AA0200000000000000000004 /* CompareAssessmentResultsView.swift */,
 				5F59DFA32B2C49969A524943 /* PatientListPage.swift */,
 				EC78D6AF103040E88488CA78 /* AddPatientSheet.swift */,
 				EF906CDDC4694FEC974913AC /* PatientDetailPlaceholder.swift */,
@@ -444,6 +450,8 @@
 				AA0100000000000000000003 /* AnalysisPresentation.swift in Sources */,
 				AA0100000000000000000005 /* MetricsProvider.swift in Sources */,
 				AA0100000000000000000007 /* AnalysisViews.swift in Sources */,
+				AA0200000000000000000001 /* CompareAssessmentSetupView.swift in Sources */,
+				AA0200000000000000000003 /* CompareAssessmentResultsView.swift in Sources */,
 				299DC057DA4C400285DE2619 /* PatientListPage.swift in Sources */,
 				7FB9E64E53D94A958063B2F2 /* AddPatientSheet.swift in Sources */,
 				2206C651352944068103DEEF /* PatientDetailPlaceholder.swift in Sources */,
