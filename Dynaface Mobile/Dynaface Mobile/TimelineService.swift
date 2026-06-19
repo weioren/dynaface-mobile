@@ -1,18 +1,20 @@
 import Foundation
-import Supabase
+import FirebaseFirestore
 
 // MARK: - TimelineService
 //
-// Loads / inserts / updates rows on `timeline_events` for a single
-// patient. One instance per `PatientDetailView` invocation — the
-// service is scoped to a specific `patientId` so we don't have to
-// pass it on every call.
+// Loads / inserts / updates documents in `timeline_events` for a single
+// patient. One instance per `PatientDetailView` invocation — the service
+// is scoped to a specific `patientId` so we don't have to pass it on
+// every call. Document IDs are client-generated UUIDs (not Firestore
+// auto-IDs — see PatientService for why), matching the old Supabase PK.
 //
-// RLS contract (2026-05-08 migration):
-//   - SELECT: clinicians see all; patient sees own
-//   - INSERT: clinicians for any patient; patient for self only;
-//             `created_by` must equal `auth.uid()`
-//   - UPDATE: clinicians only (regardless of original creator)
+// Access contract (mirrors the old Supabase RLS, enforced by
+// firestore.rules using request.auth.token.app_uid + a role lookup):
+//   - read:  clinicians see all; patient sees own
+//   - write: clinicians for any patient; patient for self only;
+//            `created_by` must equal the caller's app_uid
+//   - update: clinicians only (regardless of original creator)
 //
 // View hierarchy: PatientDetailView creates the service via
 // @StateObject; TimelinePage and AddEditEventSheet read it via
@@ -27,10 +29,8 @@ final class TimelineService: ObservableObject {
 
     let patientId: UUID
 
-    private let supabase = SupabaseClient(
-        supabaseURL: URL(string: SupabaseConfig.projectURL)!,
-        supabaseKey:  SupabaseConfig.anonKey
-    )
+    private let db = Firestore.firestore()
+    private let collectionName = "timeline_events"
 
     init(patientId: UUID) {
         self.patientId = patientId
@@ -44,14 +44,11 @@ final class TimelineService: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let rows: [TimelineEvent] = try await supabase
-                .from("timeline_events")
-                .select()
-                .eq("patient_id", value: patientId.uuidString)
-                .order("occurred_at", ascending: false)
-                .execute()
-                .value
-            self.events = rows
+            let snapshot = try await db.collection(collectionName)
+                .whereField("patient_id", isEqualTo: patientId.uuidString)
+                .order(by: "occurred_at", descending: true)
+                .get()
+            self.events = snapshot.documents.compactMap { decode(id: $0.documentID, data: $0.data()) }
         } catch {
             errorMessage = "Couldn't load timeline: \(error.localizedDescription)"
         }
@@ -59,9 +56,9 @@ final class TimelineService: ObservableObject {
 
     // MARK: - Write
 
-    /// Insert a new event. `createdBy` is the signed-in user's
-    /// profile id; RLS rejects mismatches so we forward whatever the
-    /// caller passes (no client-side spoofing).
+    /// Insert a new event. `createdBy` is the signed-in user's profile
+    /// id; rules reject mismatches so we forward whatever the caller
+    /// passes (no client-side spoofing).
     func addEvent(
         type: TimelineEventType,
         occurredAt: Date,
@@ -71,30 +68,32 @@ final class TimelineService: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        struct EventInsert: Encodable {
-            let patient_id: String
-            let type: String
-            let occurred_at: String   // YYYY-MM-DD per Postgres `date` column
-            let notes: String
-            let created_by: String
-        }
-
-        let payload = EventInsert(
-            patient_id:  patientId.uuidString,
-            type:        type.rawValue,
-            occurred_at: Self.dateFormatter.string(from: occurredAt),
-            notes:       notes,
-            created_by:  createdBy.uuidString
-        )
+        let newId = UUID()
+        let now = Date()
+        let normalizedDate = dateOnly(occurredAt)
+        let data: [String: Any] = [
+            "patient_id": patientId.uuidString,
+            "type": type.rawValue,
+            "occurred_at": Timestamp(date: normalizedDate),
+            "notes": notes,
+            "created_by": createdBy.uuidString,
+            "created_at": FieldValue.serverTimestamp(),
+            "updated_at": FieldValue.serverTimestamp(),
+        ]
 
         do {
-            let inserted: TimelineEvent = try await supabase
-                .from("timeline_events")
-                .insert(payload)
-                .select()
-                .single()
-                .execute()
-                .value
+            try await db.collection(collectionName).document(newId.uuidString).set(data)
+            let inserted = TimelineEvent(
+                id: newId,
+                patientId: patientId,
+                type: type,
+                occurredAt: normalizedDate,
+                notes: notes,
+                createdBy: createdBy,
+                createdAt: now,
+                updatedAt: now,
+                jobId: nil
+            )
             // Insert at top — newest occurrence usually beats existing.
             // A subsequent loadEvents() reorders cleanly.
             events.insert(inserted, at: 0)
@@ -106,7 +105,7 @@ final class TimelineService: ObservableObject {
     }
 
     /// Insert an `assessment`-type event that links back to a
-    /// processing_jobs row (so the row's tap-target can play the
+    /// processing_jobs document (so the row's tap-target can play the
     /// processed video). Called after an upload completes if the user
     /// opts in via the "Add to timeline?" confirmation alert.
     /// `exerciseNames` are comma-joined into the event's notes field.
@@ -117,32 +116,37 @@ final class TimelineService: ObservableObject {
         exerciseNames: [String],
         createdBy: UUID
     ) async -> Bool {
-        struct EventInsert: Encodable {
-            let patient_id: String
-            let type: String
-            let occurred_at: String
-            let notes: String
-            let created_by: String
-            let job_id: String?
+        let newId = UUID()
+        let now = Date()
+        let normalizedDate = dateOnly(occurredAt)
+        let notes = exerciseNames.joined(separator: ", ")
+
+        var data: [String: Any] = [
+            "patient_id": patientId.uuidString,
+            "type": TimelineEventType.assessment.rawValue,
+            "occurred_at": Timestamp(date: normalizedDate),
+            "notes": notes,
+            "created_by": createdBy.uuidString,
+            "created_at": FieldValue.serverTimestamp(),
+            "updated_at": FieldValue.serverTimestamp(),
+        ]
+        if let jobId {
+            data["job_id"] = jobId.uuidString
         }
 
-        let payload = EventInsert(
-            patient_id:  patientId.uuidString,
-            type:        TimelineEventType.assessment.rawValue,
-            occurred_at: Self.dateFormatter.string(from: occurredAt),
-            notes:       exerciseNames.joined(separator: ", "),
-            created_by:  createdBy.uuidString,
-            job_id:      jobId?.uuidString
-        )
-
         do {
-            let inserted: TimelineEvent = try await supabase
-                .from("timeline_events")
-                .insert(payload)
-                .select()
-                .single()
-                .execute()
-                .value
+            try await db.collection(collectionName).document(newId.uuidString).set(data)
+            let inserted = TimelineEvent(
+                id: newId,
+                patientId: patientId,
+                type: .assessment,
+                occurredAt: normalizedDate,
+                notes: notes,
+                createdBy: createdBy,
+                createdAt: now,
+                updatedAt: now,
+                jobId: jobId
+            )
             events.insert(inserted, at: 0)
             events.sort { $0.occurredAt > $1.occurredAt }
             return true
@@ -153,7 +157,7 @@ final class TimelineService: ObservableObject {
         }
     }
 
-    /// Patch an existing event. Only clinicians will succeed (RLS).
+    /// Patch an existing event. Only clinicians will succeed (rules).
     /// On success, the local copy is updated in place.
     func updateEvent(
         _ event: TimelineEvent,
@@ -164,28 +168,22 @@ final class TimelineService: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        struct EventPatch: Encodable {
-            let type: String
-            let occurred_at: String
-            let notes: String
-        }
-
-        let patch = EventPatch(
-            type:        type.rawValue,
-            occurred_at: Self.dateFormatter.string(from: occurredAt),
-            notes:       notes
-        )
+        let normalizedDate = dateOnly(occurredAt)
+        let data: [String: Any] = [
+            "type": type.rawValue,
+            "occurred_at": Timestamp(date: normalizedDate),
+            "notes": notes,
+            "updated_at": FieldValue.serverTimestamp(),
+        ]
 
         do {
-            let updated: TimelineEvent = try await supabase
-                .from("timeline_events")
-                .update(patch)
-                .eq("id", value: event.id.uuidString)
-                .select()
-                .single()
-                .execute()
-                .value
+            try await db.collection(collectionName).document(event.id.uuidString).updateData(data)
             if let idx = events.firstIndex(where: { $0.id == event.id }) {
+                var updated = event
+                updated.type = type
+                updated.occurredAt = normalizedDate
+                updated.notes = notes
+                updated.updatedAt = Date()
                 events[idx] = updated
             }
             events.sort { $0.occurredAt > $1.occurredAt }
@@ -197,13 +195,44 @@ final class TimelineService: ObservableObject {
 
     // MARK: - Helpers
 
-    /// Postgres `date` column wants `YYYY-MM-DD`, no time component.
-    private static let dateFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.calendar = Calendar(identifier: .iso8601)
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = TimeZone(secondsFromGMT: 0)
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
+    /// Old Postgres `occurred_at` was a `date` column (no time-of-day).
+    /// Normalize to midnight UTC so behavior matches now that it's a
+    /// Firestore Timestamp.
+    private func dateOnly(_ date: Date) -> Date {
+        var calendar = Calendar(identifier: .iso8601)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return calendar.date(from: components) ?? date
+    }
+
+    private func decode(id: String, data: [String: Any]) -> TimelineEvent? {
+        guard
+            let uuid = UUID(uuidString: id),
+            let patientIdString = data["patient_id"] as? String,
+            let patientId = UUID(uuidString: patientIdString),
+            let typeRaw = data["type"] as? String,
+            let type = TimelineEventType(rawValue: typeRaw),
+            let notes = data["notes"] as? String,
+            let createdByString = data["created_by"] as? String,
+            let createdBy = UUID(uuidString: createdByString),
+            let occurredAtTimestamp = data["occurred_at"] as? Timestamp
+        else {
+            return nil
+        }
+        let createdAt = (data["created_at"] as? Timestamp)?.dateValue() ?? Date()
+        let updatedAt = (data["updated_at"] as? Timestamp)?.dateValue() ?? createdAt
+        let jobId = (data["job_id"] as? String).flatMap(UUID.init(uuidString:))
+
+        return TimelineEvent(
+            id: uuid,
+            patientId: patientId,
+            type: type,
+            occurredAt: occurredAtTimestamp.dateValue(),
+            notes: notes,
+            createdBy: createdBy,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            jobId: jobId
+        )
+    }
 }

@@ -189,6 +189,33 @@ struct TimelineEvent: Identifiable, Hashable, Codable {
         case jobId      = "job_id"
     }
 
+    /// Plain memberwise initializer. Needed because the custom
+    /// `init(from decoder:)` below (for the old Supabase date-only
+    /// decoding) suppresses Swift's auto-synthesized memberwise init.
+    /// Used by TimelineService when building a `TimelineEvent` from a
+    /// Firestore document.
+    init(
+        id: UUID,
+        patientId: UUID,
+        type: TimelineEventType,
+        occurredAt: Date,
+        notes: String,
+        createdBy: UUID,
+        createdAt: Date,
+        updatedAt: Date,
+        jobId: UUID?
+    ) {
+        self.id = id
+        self.patientId = patientId
+        self.type = type
+        self.occurredAt = occurredAt
+        self.notes = notes
+        self.createdBy = createdBy
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.jobId = jobId
+    }
+
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id        = try c.decode(UUID.self, forKey: .id)

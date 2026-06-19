@@ -1,55 +1,49 @@
 import Foundation
-import Supabase
+import FirebaseFirestore
 
 // MARK: - JobAttributionService
 //
-// Owns the `job_patient_attributions` junction table. The table maps
-// a `processing_jobs.id` (an uploaded recording) to a patient profile,
-// independent of who actually uploaded the video. This is how we
-// attribute a clinician-recorded video to the patient it concerns
-// without touching Alex's upload pipeline or the worker.
+// Owns the `job_patient_attributions` Firestore collection. Maps a
+// `processing_jobs` document id (an uploaded recording) to a patient
+// profile, independent of who actually uploaded the video. This is how we
+// attribute a clinician-recorded video to the patient it concerns without
+// touching the upload pipeline or the worker.
 //
-// RLS contract (2026-05-11 migration):
-//   - SELECT: clinicians see all; patients see only own
-//   - INSERT: clinicians for any patient; patients for self only;
-//             attributed_by must match auth.uid()
-//   - UPDATE: clinicians only
-//   - DELETE: clinicians only ("un-attribute" = leave row out)
+// Doc ID = job id (mirrors the old Postgres table's `job_id` primary key),
+// so `.set()` is naturally an upsert — re-attributing is idempotent.
 //
-// View hierarchy: injected at app root as an @EnvironmentObject so
-// any screen that creates / inspects attributions (PatientDetailView's
-// History+Processed tabs, the post-upload "attribute to patient"
-// sheet on PracticePage) shares one instance.
+// Access contract (mirrors the old Supabase RLS, enforced now by
+// firestore.rules using request.auth.token.app_uid + a role lookup on
+// profiles/{app_uid}):
+//   - read:  clinicians see all; patients see only their own
+//   - write: clinicians for any patient; patients for themselves only;
+//            attributed_by must match the caller's app_uid
+//   - delete: clinicians only
+//
+// View hierarchy: injected at app root as an @EnvironmentObject so any
+// screen that creates / inspects attributions shares one instance.
 
 @MainActor
 final class JobAttributionService: ObservableObject {
 
     @Published var errorMessage: String?
 
-    private let supabase = SupabaseClient(
-        supabaseURL: URL(string: SupabaseConfig.projectURL)!,
-        supabaseKey:  SupabaseConfig.anonKey
-    )
+    private let db = Firestore.firestore()
+    private let collectionName = "job_patient_attributions"
 
     // MARK: - Read
 
-    /// Returns the set of `processing_jobs.id` values explicitly
-    /// attributed to a given patient via the junction table.
-    /// Self-recorded jobs (where `processing_jobs.user_id` already
-    /// equals the patient's profile id) are NOT included — callers
-    /// handle that side of the union themselves.
+    /// Returns the set of `processing_jobs` ids explicitly attributed to a
+    /// given patient via the junction collection. Self-recorded jobs (where
+    /// `processing_jobs.user_id` already equals the patient's profile id)
+    /// are NOT included — callers handle that side of the union themselves.
     func loadAttributedJobIds(forPatient patientId: UUID) async -> Set<UUID> {
         do {
-            let rows: [JobPatientAttribution] = try await supabase
-                .from("job_patient_attributions")
-                .select("*")
-                .eq("patient_id", value: patientId.uuidString)
-                .execute()
-                .value
-            return Set(rows.map(\.jobId))
+            let snapshot = try await db.collection(collectionName)
+                .whereField("patient_id", isEqualTo: patientId.uuidString)
+                .get()
+            return Set(snapshot.documents.compactMap { UUID(uuidString: $0.documentID) })
         } catch is CancellationError {
-            return []
-        } catch let urlError as URLError where urlError.code == .cancelled {
             return []
         } catch {
             errorMessage = "Couldn't load attributions: \(error.localizedDescription)"
@@ -57,21 +51,14 @@ final class JobAttributionService: ObservableObject {
         }
     }
 
-    /// Fetch the single attribution row for a job, if one exists.
-    /// Used to power "attributed to: <name>" badges in lists.
+    /// Fetch the single attribution row for a job, if one exists. Used to
+    /// power "attributed to: <name>" badges in lists.
     func loadAttribution(forJob jobId: UUID) async -> JobPatientAttribution? {
         do {
-            let rows: [JobPatientAttribution] = try await supabase
-                .from("job_patient_attributions")
-                .select("*")
-                .eq("job_id", value: jobId.uuidString)
-                .limit(1)
-                .execute()
-                .value
-            return rows.first
+            let snapshot = try await db.collection(collectionName).document(jobId.uuidString).get()
+            guard let data = snapshot.data() else { return nil }
+            return decode(jobId: jobId, data: data)
         } catch is CancellationError {
-            return nil
-        } catch let urlError as URLError where urlError.code == .cancelled {
             return nil
         } catch {
             print("JobAttributionService.loadAttribution failed: \(error)")
@@ -82,36 +69,24 @@ final class JobAttributionService: ObservableObject {
     // MARK: - Write
 
     /// Attribute a job to a patient. `attributedBy` is the signed-in
-    /// user's profile id — RLS rejects mismatches so we forward
-    /// whatever the caller passes (no client-side spoofing).
-    /// Upsert semantics so re-attributing is idempotent (PK = job_id).
+    /// user's profile id — rules reject mismatches so we forward whatever
+    /// the caller passes (no client-side spoofing). Doc ID = job_id, so
+    /// this is naturally idempotent ("upsert").
     @discardableResult
     func attribute(
         jobId: UUID,
         patientId: UUID,
         attributedBy: UUID
     ) async -> Bool {
-        struct AttributionInsert: Encodable {
-            let job_id: String
-            let patient_id: String
-            let attributed_by: String
-        }
-
-        let payload = AttributionInsert(
-            job_id:        jobId.uuidString,
-            patient_id:    patientId.uuidString,
-            attributed_by: attributedBy.uuidString
-        )
-
+        let data: [String: Any] = [
+            "patient_id": patientId.uuidString,
+            "attributed_by": attributedBy.uuidString,
+            "attributed_at": FieldValue.serverTimestamp(),
+        ]
         do {
-            _ = try await supabase
-                .from("job_patient_attributions")
-                .upsert(payload, onConflict: "job_id")
-                .execute()
+            try await db.collection(collectionName).document(jobId.uuidString).set(data)
             return true
         } catch is CancellationError {
-            return false
-        } catch let urlError as URLError where urlError.code == .cancelled {
             return false
         } catch {
             print("JobAttributionService.attribute failed: \(error)")
@@ -121,24 +96,38 @@ final class JobAttributionService: ObservableObject {
     }
 
     /// Remove a job's attribution (effectively "unattributed").
-    /// Clinician-only at the RLS level.
+    /// Clinician-only at the rules level.
     @discardableResult
     func removeAttribution(jobId: UUID) async -> Bool {
         do {
-            _ = try await supabase
-                .from("job_patient_attributions")
-                .delete()
-                .eq("job_id", value: jobId.uuidString)
-                .execute()
+            try await db.collection(collectionName).document(jobId.uuidString).delete()
             return true
         } catch is CancellationError {
-            return false
-        } catch let urlError as URLError where urlError.code == .cancelled {
             return false
         } catch {
             print("JobAttributionService.removeAttribution failed: \(error)")
             errorMessage = "Couldn't remove attribution: \(error.localizedDescription)"
             return false
         }
+    }
+
+    // MARK: - Decode
+
+    private func decode(jobId: UUID, data: [String: Any]) -> JobPatientAttribution? {
+        guard
+            let patientIdString = data["patient_id"] as? String,
+            let patientId = UUID(uuidString: patientIdString),
+            let attributedByString = data["attributed_by"] as? String,
+            let attributedBy = UUID(uuidString: attributedByString)
+        else {
+            return nil
+        }
+        let attributedAt = (data["attributed_at"] as? Timestamp)?.dateValue() ?? Date()
+        return JobPatientAttribution(
+            jobId: jobId,
+            patientId: patientId,
+            attributedBy: attributedBy,
+            attributedAt: attributedAt
+        )
     }
 }

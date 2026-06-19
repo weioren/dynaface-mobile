@@ -1,12 +1,15 @@
 import Foundation
-import Supabase
+import FirebaseFirestore
 
 // MARK: - PatientService
 //
-// Owns the clinician's patient list. Reads from / writes to the Supabase
-// `patients` table created by the 2026-04-28 migration. RLS guarantees a
-// clinician only sees rows they created — `clinician_id` is still passed
-// explicitly on writes so the policy passes.
+// Owns the clinician's patient list. Reads from / writes to the
+// `patients` Firestore collection. Document IDs are client-generated
+// UUIDs (NOT Firestore auto-IDs — auto-IDs aren't UUID-formatted, which
+// would break every `Patient.id: UUID` consumer downstream), mirroring
+// the old Supabase primary key. Rules guarantee a clinician only sees
+// rows they created — `clinician_id` is still passed explicitly on
+// writes so the rule has something to check against.
 //
 // View hierarchy: ClinicianRootView creates one instance with @StateObject;
 // children reach it via @EnvironmentObject.
@@ -20,33 +23,27 @@ final class PatientService: ObservableObject {
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
 
-    private let supabase = SupabaseClient(
-        supabaseURL: URL(string: SupabaseConfig.projectURL)!,
-        supabaseKey:  SupabaseConfig.anonKey
-    )
+    private let db = Firestore.firestore()
 
     // MARK: - Patient profiles (drives PatientListPage)
 
     /// Pulls every patient-role profile, newest first. Visibility relies
-    /// on the 2026-04-29 RLS policy that lets any clinician read profiles
-    /// where account_type='patient'.
+    /// on the firestore.rules policy that lets any clinician read profiles
+    /// where account_type == "patient".
     func loadAllPatientProfiles() async {
         isLoading = true
         defer { isLoading = false }
 
         do {
-            let rows: [PatientCandidate] = try await supabase
-                .from("profiles")
-                .select("id,username,email,created_at")
-                .eq("account_type", value: "patient")
-                .order("created_at", ascending: false)
-                .execute()
-                .value
-            self.patientProfiles = rows
+            let snapshot = try await db.collection("profiles")
+                .whereField("account_type", isEqualTo: "patient")
+                .order(by: "created_at", descending: true)
+                .get()
+            self.patientProfiles = snapshot.documents.compactMap {
+                decodeCandidate(id: $0.documentID, data: $0.data())
+            }
             rebuildRoster()
         } catch is CancellationError {
-            return
-        } catch let urlError as URLError where urlError.code == .cancelled {
             return
         } catch {
             print("PatientService.loadAllPatientProfiles failed: \(error)")
@@ -96,26 +93,22 @@ final class PatientService: ObservableObject {
     // MARK: - Read
 
     /// Pulls every (non-archived) patient visible to the signed-in
-    /// clinician, newest first. After the
-    /// `20260428_open_patients_read_to_all_clinicians` migration, any
-    /// clinician account sees the full shared roster — RLS still blocks
-    /// non-clinician (patient) accounts from reading the table at all.
+    /// clinician, newest first. Any clinician account sees the full
+    /// shared roster — rules still block non-clinician (patient) accounts
+    /// from reading the collection at all.
     func loadAllPatients() async {
         isLoading = true
         defer { isLoading = false }
 
         do {
-            let rows: [Patient] = try await supabase
-                .from("patients")
-                .select()
-                .order("created_at", ascending: false)
-                .execute()
-                .value
-            self.patients = rows
+            let snapshot = try await db.collection("patients")
+                .order(by: "created_at", descending: true)
+                .get()
+            self.patients = snapshot.documents.compactMap {
+                decodePatient(id: $0.documentID, data: $0.data())
+            }
             rebuildRoster()
         } catch is CancellationError {
-            return
-        } catch let urlError as URLError where urlError.code == .cancelled {
             return
         } catch {
             print("PatientService.loadAllPatients failed: \(error)")
@@ -134,22 +127,26 @@ final class PatientService: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        struct PatientInsert: Encodable {
-            let clinician_id: String
-            let name: String
-        }
+        let newId = UUID()
+        let now = Date()
+        let data: [String: Any] = [
+            "clinician_id": clinicianId.uuidString,
+            "name": name,
+            "created_at": FieldValue.serverTimestamp(),
+            "updated_at": FieldValue.serverTimestamp(),
+        ]
 
         do {
-            let inserted: Patient = try await supabase
-                .from("patients")
-                .insert(PatientInsert(
-                    clinician_id: clinicianId.uuidString,
-                    name: name
-                ))
-                .select()
-                .single()
-                .execute()
-                .value
+            try await db.collection("patients").document(newId.uuidString).set(data)
+            let inserted = Patient(
+                id: newId,
+                name: name,
+                clinicianId: clinicianId,
+                claimedUserId: nil,
+                archivedAt: nil,
+                createdAt: now,
+                updatedAt: now
+            )
             patients.insert(inserted, at: 0)
             rebuildRoster()
             return inserted
@@ -175,27 +172,28 @@ final class PatientService: ObservableObject {
 
     // MARK: - Search patient profiles (server-side)
 
-    /// Looks up patient-role profiles matching the query (ILIKE on
-    /// username OR email). Drives the AddPatientSheet search UI.
-    /// Visibility relies on the 2026-04-29 RLS policy that lets any
-    /// clinician read profiles where account_type='patient'.
-    /// Returns [] on empty input or any error (errors are logged, not
-    /// surfaced — empty-result UX handles both cases).
+    /// Looks up patient-role profiles matching the query (case-insensitive
+    /// substring on username OR email). Drives the AddPatientSheet search
+    /// UI, which may be presented without `loadAllPatientProfiles` having
+    /// run first — so this always does its own fresh fetch rather than
+    /// filtering `patientProfiles`, then filters client-side since
+    /// Firestore has no ILIKE/full-text search. Returns [] on empty input
+    /// or any error (errors are logged, not surfaced — empty-result UX
+    /// handles both cases).
     func searchPatientProfiles(matching query: String) async -> [PatientCandidate] {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return [] }
 
-        let pattern = "*\(trimmed)*"
         do {
-            let rows: [PatientCandidate] = try await supabase
-                .from("profiles")
-                .select("id,username,email")
-                .eq("account_type", value: "patient")
-                .or("username.ilike.\(pattern),email.ilike.\(pattern)")
-                .limit(50)
-                .execute()
-                .value
-            return rows
+            let snapshot = try await db.collection("profiles")
+                .whereField("account_type", isEqualTo: "patient")
+                .limit(to: 200)
+                .get()
+            let all = snapshot.documents.compactMap { decodeCandidate(id: $0.documentID, data: $0.data()) }
+            return all.filter {
+                $0.username.localizedCaseInsensitiveContains(trimmed)
+                    || $0.email.localizedCaseInsensitiveContains(trimmed)
+            }
         } catch {
             print("PatientService.searchPatientProfiles failed: \(error)")
             return []
@@ -204,36 +202,75 @@ final class PatientService: ObservableObject {
 
     /// Inserts a new patient row linked to an existing patient-role
     /// profile via `claimed_user_id`. The displayed name is taken from
-    /// the candidate's username. Errors surface via `errorMessage`
-    /// (e.g. unique-index violation if this profile is already on
-    /// someone's roster).
+    /// the candidate's username. Errors surface via `errorMessage`.
     func addPatientFromProfile(_ candidate: PatientCandidate, clinicianId: UUID) async {
         isLoading = true
         defer { isLoading = false }
 
-        struct PatientInsert: Encodable {
-            let clinician_id: String
-            let claimed_user_id: String
-            let name: String
-        }
+        let newId = UUID()
+        let now = Date()
+        let data: [String: Any] = [
+            "clinician_id": clinicianId.uuidString,
+            "claimed_user_id": candidate.id.uuidString,
+            "name": candidate.username,
+            "created_at": FieldValue.serverTimestamp(),
+            "updated_at": FieldValue.serverTimestamp(),
+        ]
 
         do {
-            let inserted: Patient = try await supabase
-                .from("patients")
-                .insert(PatientInsert(
-                    clinician_id:    clinicianId.uuidString,
-                    claimed_user_id: candidate.id.uuidString,
-                    name:            candidate.username
-                ))
-                .select()
-                .single()
-                .execute()
-                .value
+            try await db.collection("patients").document(newId.uuidString).set(data)
+            let inserted = Patient(
+                id: newId,
+                name: candidate.username,
+                clinicianId: clinicianId,
+                claimedUserId: candidate.id,
+                archivedAt: nil,
+                createdAt: now,
+                updatedAt: now
+            )
             patients.insert(inserted, at: 0)
             rebuildRoster()
         } catch {
             print("PatientService.addPatientFromProfile failed: \(error)")
             errorMessage = "Couldn't add patient: \(error.localizedDescription)"
         }
+    }
+
+    // MARK: - Decode helpers
+
+    private func decodePatient(id: String, data: [String: Any]) -> Patient? {
+        guard
+            let uuid = UUID(uuidString: id),
+            let name = data["name"] as? String,
+            let clinicianIdString = data["clinician_id"] as? String,
+            let clinicianId = UUID(uuidString: clinicianIdString)
+        else {
+            return nil
+        }
+        let claimedUserId = (data["claimed_user_id"] as? String).flatMap(UUID.init(uuidString:))
+        let archivedAt = (data["archived_at"] as? Timestamp)?.dateValue()
+        let createdAt = (data["created_at"] as? Timestamp)?.dateValue() ?? Date()
+        let updatedAt = (data["updated_at"] as? Timestamp)?.dateValue() ?? Date()
+        return Patient(
+            id: uuid,
+            name: name,
+            clinicianId: clinicianId,
+            claimedUserId: claimedUserId,
+            archivedAt: archivedAt,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
+
+    private func decodeCandidate(id: String, data: [String: Any]) -> PatientCandidate? {
+        guard
+            let uuid = UUID(uuidString: id),
+            let username = data["username"] as? String,
+            let email = data["email"] as? String
+        else {
+            return nil
+        }
+        let createdAt = (data["created_at"] as? Timestamp)?.dateValue() ?? Date()
+        return PatientCandidate(id: uuid, username: username, email: email, createdAt: createdAt)
     }
 }

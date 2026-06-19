@@ -1,6 +1,6 @@
 import SwiftUI
 import AVKit
-import Supabase
+import FirebaseFirestore
 
 // MARK: - ExerciseHistoryPage (sortable/grouped; collapsible sections)
 struct ExerciseHistoryPage: View {
@@ -368,11 +368,8 @@ struct HistoryDetailView: View {
     }
 }
 
-// MARK: - Processed Videos (Supabase results)
+// MARK: - Processed Videos (Firestore + Cloud Storage results)
 struct ProcessedVideosPage: View {
-    private let resultsBucket = "results"
-
-    @EnvironmentObject private var authService: AuthenticationService
     @State private var jobs: [ProcessedJob] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
@@ -496,25 +493,22 @@ struct ProcessedVideosPage: View {
         defer { isLoading = false }
 
         do {
-            let rows: [ProcessingJobRow] = try await authService.supabaseClient
-                .from("processing_jobs")
-                .select("*")
-                .eq("status", value: "completed")
-                .execute()
-                .value
+            // No explicit user_id filter — same as the old Supabase query.
+            // Visibility (patient sees own, clinician sees all) is enforced
+            // by firestore.rules per-document, not by this query.
+            let snapshot = try await Firestore.firestore()
+                .collection("processing_jobs")
+                .whereField("status", isEqualTo: "completed")
+                .get()
 
-            jobs = rows.compactMap { row in
+            jobs = snapshot.documents.compactMap { doc -> ProcessedJob? in
+                guard let row = decodeJobRow(id: doc.documentID, data: doc.data()) else { return nil }
                 let outputPath = row.output_video_path ?? row.output_csv_path
-                guard let outputPath, !outputPath.isEmpty else {
-                    return nil
-                }
-                let created = parseISODate(row.created_at) ?? .distantPast
+                guard let outputPath, !outputPath.isEmpty else { return nil }
                 return ProcessedJob(
-                    id: row.id,
+                    row: row,
                     exerciseName: row.exercise_name?.isEmpty == false ? row.exercise_name! : "Unknown Exercise",
-                    outputPath: outputPath,
-                    userId: row.user_id,
-                    createdAt: created
+                    createdAt: row.created_at ?? .distantPast
                 )
             }
             .sorted { $0.createdAt > $1.createdAt }
@@ -534,7 +528,9 @@ struct ProcessedVideosPage: View {
         defer { activeDownloadJobId = nil }
 
         do {
-            let playbackURL = try await signedPlayableURL(for: job)
+            // Shared resolver (see PatientVideoTabs.swift) — same candidate-path
+            // fallback logic used by the patient Processed tab.
+            let playbackURL = try await signedProcessedVideoURL(for: job.row)
             selectedVideo = ProcessedVideoPlayback(
                 id: job.id,
                 playbackURL: playbackURL,
@@ -551,76 +547,6 @@ struct ProcessedVideosPage: View {
         }
     }
 
-    private func signedPlayableURL(for job: ProcessedJob) async throws -> URL {
-        let candidates = resultPathCandidates(from: job.outputPath, userId: job.userId, jobId: job.id)
-        var lastError: Error?
-
-        for path in candidates {
-            do {
-                let signedURL = try await authService.supabaseClient.storage
-                    .from(resultsBucket)
-                    .createSignedURL(path: path, expiresIn: 3600)
-                return signedURL
-            } catch {
-                lastError = error
-                continue
-            }
-        }
-
-        throw lastError ?? NSError(
-            domain: "ProcessedVideos",
-            code: 404,
-            userInfo: [NSLocalizedDescriptionKey: "Processed video object not found in storage."]
-        )
-    }
-
-    private func normalizeResultObjectPath(_ path: String) -> String {
-        let prefix = "\(resultsBucket)/"
-        if path.hasPrefix(prefix) {
-            return String(path.dropFirst(prefix.count))
-        }
-        return path
-    }
-
-    private func resultPathCandidates(from rawPath: String, userId: UUID?, jobId: UUID) -> [String] {
-        let normalized = normalizeResultObjectPath(rawPath)
-        var candidates: [String] = [normalized]
-
-        if normalized.hasSuffix(".mov") {
-            candidates.append(String(normalized.dropLast(4)) + ".mp4")
-        } else if normalized.hasSuffix(".mp4") {
-            candidates.append(String(normalized.dropLast(4)) + ".mov")
-        } else if normalized.hasSuffix(".csv") {
-            let base = String(normalized.dropLast(4))
-            candidates.append(base + ".mp4")
-            candidates.append(base + ".mov")
-        }
-
-        // Common worker output convention fallback: <user>/<job>/annotated.mp4
-        let directory = (normalized as NSString).deletingLastPathComponent
-        if !directory.isEmpty {
-            candidates.append("\(directory)/annotated.mp4")
-            candidates.append("\(directory)/annotated.mov")
-        }
-
-        // Canonical worker fallback path
-        if let userId {
-            candidates.append("\(userId.uuidString)/\(jobId.uuidString)/annotated.mp4")
-            candidates.append("\(userId.uuidString)/\(jobId.uuidString)/annotated.mov")
-        }
-
-        // De-duplicate while preserving order
-        var seen = Set<String>()
-        var deduped: [String] = []
-        for c in candidates where !c.isEmpty {
-            if !seen.contains(c) {
-                seen.insert(c)
-                deduped.append(c)
-            }
-        }
-        return deduped
-    }
-
     private func isCancellationLike(_ error: Error) -> Bool {
         let nsError = error as NSError
         if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled {
@@ -629,17 +555,6 @@ struct ProcessedVideosPage: View {
 
         let text = error.localizedDescription.lowercased()
         return text.contains("cancelled") || text.contains("canceled")
-    }
-
-    private func parseISODate(_ raw: String?) -> Date? {
-        guard let raw else { return nil }
-        let withFractional = ISO8601DateFormatter()
-        withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-        if let d = withFractional.date(from: raw) {
-            return d
-        }
-        return ISO8601DateFormatter().date(from: raw)
     }
 }
 
@@ -655,25 +570,16 @@ private struct ProcessedVideoPlayback: Identifiable {
     let recordingDate: String
 }
 
-private struct ProcessingJobRow: Decodable {
-    let id: UUID
-    let user_id: UUID?
-    let exercise_name: String?
-    let output_video_path: String?
-    let output_csv_path: String?
-    let created_at: String?
-    let status: String?
-}
-
 private struct ProcessedJob: Identifiable {
-    let id: UUID
+    let row: PatientJobRow
     let exerciseName: String
-    let outputPath: String
-    let userId: UUID?
     let createdAt: Date
 
+    var id: UUID { row.id }
+
     var fileName: String {
-        URL(fileURLWithPath: outputPath).lastPathComponent
+        let path = row.output_video_path ?? row.output_csv_path ?? ""
+        return URL(fileURLWithPath: path).lastPathComponent
     }
 
     var displayDate: String {

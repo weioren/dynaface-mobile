@@ -1,8 +1,13 @@
 import SwiftUI
+import FirebaseCore
 
 @main
 struct DynafaceMobileApp: App {
     @StateObject private var authService = AuthenticationService()
+
+    init() {
+        FirebaseApp.configure()
+    }
 
     var body: some Scene {
         WindowGroup {

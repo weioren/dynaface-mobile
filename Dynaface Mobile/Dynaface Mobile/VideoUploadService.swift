@@ -1,5 +1,7 @@
 import Foundation
-import Supabase
+import FirebaseAuth
+import FirebaseFirestore
+import FirebaseStorage
 
 struct QueuedProcessingJob {
     let jobId: UUID
@@ -23,20 +25,22 @@ enum VideoUploadServiceError: LocalizedError {
 }
 
 struct VideoUploadService {
-    private let supabase: SupabaseClient
-    private let rawVideosBucket: String
-    private let processingJobsTable: String
+    private let rawVideosBucketURL: String
+    private let processingJobsCollection: String
 
     init(
-        supabase: SupabaseClient,
-        rawVideosBucket: String = "raw-videos",
-        processingJobsTable: String = "processing_jobs"
+        rawVideosBucketURL: String = FirebaseConfig.rawVideosBucketURL,
+        processingJobsCollection: String = "processing_jobs"
     ) {
-        self.supabase = supabase
-        self.rawVideosBucket = rawVideosBucket
-        self.processingJobsTable = processingJobsTable
+        self.rawVideosBucketURL = rawVideosBucketURL
+        self.processingJobsCollection = processingJobsCollection
     }
 
+    /// Uploads to `uploads/{userId}/{jobId}/video.{ext}` in the raw videos
+    /// bucket (the "uploads/" prefix matters — that's what
+    /// google_remote_dynaface_worker.py / firestore_function.py look for to
+    /// recognize a freshly-uploaded recording), then writes the
+    /// `processing_jobs/{jobId}` Firestore document that triggers processing.
     func uploadVideoAndCreateJob(
         videoURL: URL,
         userId: UUID,
@@ -49,52 +53,45 @@ struct VideoUploadService {
 
         let jobId = UUID()
         let fileExt = videoURL.pathExtension.isEmpty ? "mov" : videoURL.pathExtension.lowercased()
-        let inputVideoPath = "\(userId.uuidString)/\(jobId.uuidString)/video.\(fileExt)"
+        let inputVideoPath = "uploads/\(userId.uuidString)/\(jobId.uuidString)/video.\(fileExt)"
 
         let videoData = try Data(contentsOf: videoURL)
         print("[VideoUploadService] Video loaded: \(videoData.count) bytes")
         print("[VideoUploadService] Uploading to path: \(inputVideoPath)")
 
+        let metadata = StorageMetadata()
+        metadata.contentType = contentType(for: fileExt)
+
+        let storage = Storage.storage(url: rawVideosBucketURL)
         do {
-            try await supabase.storage
-                .from(rawVideosBucket)
-                .upload(
-                    path: inputVideoPath,
-                    file: videoData,
-                    options: FileOptions(contentType: contentType(for: fileExt))
-                )
+            _ = try await storage.reference(withPath: inputVideoPath).putDataAsync(videoData, metadata: metadata)
             print("[VideoUploadService] Storage upload SUCCESS")
         } catch {
             print("[VideoUploadService] Storage upload FAILED: \(error)")
             throw error
         }
 
-        struct ProcessingJobInsert: Encodable {
-            let id: UUID
-            let user_id: UUID
-            let exercise_name: String
-            let input_video_path: String
-            let status: String
-        }
+        let now = FieldValue.serverTimestamp()
+        let jobData: [String: Any] = [
+            "id": jobId.uuidString,
+            "user_id": userId.uuidString,
+            "exercise_name": exerciseName,
+            "input_video_path": inputVideoPath,
+            "status": status,
+            "created_at": now,
+            "updated_at": now,
+        ]
 
-        let row = ProcessingJobInsert(
-            id: jobId,
-            user_id: userId,
-            exercise_name: exerciseName,
-            input_video_path: inputVideoPath,
-            status: status
-        )
-
-        print("[VideoUploadService] Inserting job: id=\(jobId.uuidString), user_id=\(userId.uuidString), status=\(status)")
+        print("[VideoUploadService] Creating job doc: id=\(jobId.uuidString), user_id=\(userId.uuidString), status=\(status)")
 
         do {
-            try await supabase
-                .from(processingJobsTable)
-                .insert(row)
-                .execute()
-            print("[VideoUploadService] Database insert SUCCESS")
+            try await Firestore.firestore()
+                .collection(processingJobsCollection)
+                .document(jobId.uuidString)
+                .set(jobData)
+            print("[VideoUploadService] Firestore job doc SUCCESS")
         } catch {
-            print("[VideoUploadService] Database insert FAILED: \(error)")
+            print("[VideoUploadService] Firestore job doc FAILED: \(error)")
             throw error
         }
 
@@ -111,14 +108,23 @@ struct VideoUploadService {
         exerciseName: String,
         status: String = "queued"
     ) async throws -> QueuedProcessingJob {
-        let session = try await supabase.auth.session
-        print("[VideoUploadService] Current user ID: \(session.user.id.uuidString)")
-        print("[VideoUploadService] Auth token exists: \(!session.accessToken.isEmpty)")
-        
+        guard let user = Auth.auth().currentUser else {
+            throw VideoUploadServiceError.notSignedIn
+        }
+        let tokenResult = try await user.getIDTokenResult()
+        guard
+            let appUidString = tokenResult.claims["app_uid"] as? String,
+            let userId = UUID(uuidString: appUidString)
+        else {
+            throw VideoUploadServiceError.notSignedIn
+        }
+
+        print("[VideoUploadService] Current user app_uid: \(userId.uuidString)")
+
         do {
             let result = try await uploadVideoAndCreateJob(
                 videoURL: videoURL,
-                userId: session.user.id,
+                userId: userId,
                 exerciseName: exerciseName,
                 status: status
             )
