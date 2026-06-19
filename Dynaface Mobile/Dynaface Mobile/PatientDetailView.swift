@@ -23,12 +23,13 @@ import SwiftUI
 
 struct PatientDetailView: View {
     enum SubTab: Int, Hashable, CaseIterable {
-        case timeline, processed
+        case timeline, processed, analysis
 
         var title: String {
             switch self {
             case .timeline:  return "Timeline"
             case .processed: return "Processed"
+            case .analysis:  return "Analysis"
             }
         }
     }
@@ -37,6 +38,7 @@ struct PatientDetailView: View {
     let patientId: UUID
 
     @StateObject private var timelineService: TimelineService
+    @StateObject private var analysisService: AnalysisService
     @State private var selectedTab: SubTab = .timeline
     @State private var showingAddEvent = false
 
@@ -44,6 +46,7 @@ struct PatientDetailView: View {
         self.displayName = displayName
         self.patientId   = patientId
         _timelineService = StateObject(wrappedValue: TimelineService(patientId: patientId))
+        _analysisService = StateObject(wrappedValue: AnalysisService(patientId: patientId))
     }
 
     /// Convenience for the clinician path — pushed from
@@ -87,6 +90,8 @@ struct PatientDetailView: View {
                         .environmentObject(timelineService)
                 case .processed:
                     PatientProcessedTab(patientId: patientId)
+                case .analysis:
+                    AnalysisHomeView(service: analysisService)
                 }
             }
         }
