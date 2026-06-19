@@ -16,6 +16,11 @@ struct TimelinePage: View {
     @EnvironmentObject var authService: AuthenticationService
     @EnvironmentObject var timelineService: TimelineService
 
+    /// Patient name shown on the compare-setup screen header. Threaded
+    /// down from PatientDetailView (clinician path) or PatientTimelineTab
+    /// (patient path, sourced from their own auth profile).
+    let patientDisplayName: String
+
     /// "Add event" trigger lives on PatientDetailView's toolbar so the
     /// navigation back button doesn't get clobbered by nested toolbars.
     /// PatientDetailView passes a binding so the toolbar button flips
@@ -28,6 +33,17 @@ struct TimelinePage: View {
     @State private var selectedFilter: TimelineEventType?
     /// Manual (non-assessment) event awaiting delete confirmation.
     @State private var eventPendingDelete: TimelineEvent?
+
+    // MARK: - Compare-assessments mode
+    //
+    // Floating bottom bar lets the user enter a selection mode and pick
+    // two Clinical Assessment day-groups to compare. Selection is by
+    // day-group (`Date` keyed on America/New_York start-of-day, same as
+    // `items` grouping). Order preserved so the setup screen can show
+    // earlier date first; FIFO eviction when a third group is tapped.
+    @State private var isComparing: Bool = false
+    @State private var selectedAssessmentDays: [Date] = []
+    @State private var presentingCompareSetup: CompareSelection?
 
     private var isClinician: Bool {
         if case .signedIn(let profile) = authService.authState {
@@ -68,6 +84,19 @@ struct TimelinePage: View {
             )
             .environmentObject(authService)
         }
+        .sheet(item: $presentingCompareSetup) { selection in
+            CompareAssessmentSetupView(
+                patientName: selection.patientName,
+                firstDay: selection.firstDay,
+                firstEvents: selection.firstEvents,
+                secondDay: selection.secondDay,
+                secondEvents: selection.secondEvents
+            )
+            .environmentObject(authService)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            compareFloatingBar
+        }
         .refreshable { await timelineService.loadEvents() }
         .task { await reloadIfNeeded() }
         .alert(
@@ -91,21 +120,16 @@ struct TimelinePage: View {
             ForEach(items) { item in
                 switch item {
                 case .manual(let event):
-                    TimelineEventRow(event: event)
-                        .contentShape(Rectangle())
-                        .onTapGesture { handleTap(event) }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
-                                eventPendingDelete = event
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
+                    manualRow(event)
                 case .assessmentGroup(let day, let events):
                     TimelineAssessmentGroupRow(
                         day: day,
                         events: events,
-                        onPlay: { e in presentAssessmentVideo(e) }
+                        isCompareMode: isComparing,
+                        isSelected: selectedAssessmentDays.contains(day),
+                        statusByJobId: timelineService.jobStatusByJobId,
+                        onPlay: { e in presentAssessmentVideo(e) },
+                        onToggleSelection: { toggleAssessmentDaySelection(day) }
                     )
                 }
             }
@@ -267,6 +291,144 @@ struct TimelinePage: View {
         }
     }
 
+    // MARK: - Manual row (gated by compare mode)
+
+    /// Manual events have no checkbox during compare mode (only Clinical
+    /// Assessment groups are selectable). Tap-to-edit and swipe-to-delete
+    /// are suppressed so the user can't accidentally mutate a row while
+    /// they're picking comparison targets.
+    @ViewBuilder
+    private func manualRow(_ event: TimelineEvent) -> some View {
+        let row = TimelineEventRow(event: event).contentShape(Rectangle())
+        if isComparing {
+            row.opacity(0.55)
+        } else {
+            row
+                .onTapGesture { handleTap(event) }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(role: .destructive) {
+                        eventPendingDelete = event
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+        }
+    }
+
+    // MARK: - Compare-mode helpers
+
+    /// Toggle selection of an assessment day-group. FIFO eviction when a
+    /// third group is tapped — keeps the most recent two so the user can
+    /// swap a target without having to manually un-check first.
+    private func toggleAssessmentDaySelection(_ day: Date) {
+        if let idx = selectedAssessmentDays.firstIndex(of: day) {
+            selectedAssessmentDays.remove(at: idx)
+            return
+        }
+        if selectedAssessmentDays.count >= 2 {
+            selectedAssessmentDays.removeFirst()
+        }
+        selectedAssessmentDays.append(day)
+    }
+
+    private func exitCompareMode() {
+        isComparing = false
+        selectedAssessmentDays = []
+    }
+
+    /// Resolve the two selected day-groups back to their event lists and
+    /// hand them to the setup sheet in chronological order so the header
+    /// reads "earliest and latest" naturally.
+    private func launchCompareSetup() {
+        guard selectedAssessmentDays.count == 2 else { return }
+        var byDay: [Date: [TimelineEvent]] = [:]
+        for ev in timelineService.events where ev.type == .assessment {
+            let d = Self.easternCalendar.startOfDay(for: ev.createdAt)
+            byDay[d, default: []].append(ev)
+        }
+        let dayA = selectedAssessmentDays[0]
+        let dayB = selectedAssessmentDays[1]
+        guard let evA = byDay[dayA], let evB = byDay[dayB] else { return }
+        let chronological = dayA < dayB
+        presentingCompareSetup = CompareSelection(
+            patientName: patientDisplayName,
+            firstDay:    chronological ? dayA : dayB,
+            firstEvents: chronological ? evA : evB,
+            secondDay:   chronological ? dayB : dayA,
+            secondEvents: chronological ? evB : evA
+        )
+    }
+
+    // MARK: - Floating bottom bar
+    //
+    // Three visual states:
+    //   1. Default: "Compare assessments" enters compare mode.
+    //   2. Compare mode, 0–1 selected: instruction line + Cancel.
+    //   3. Compare mode, 2 selected: Compare (primary) + Cancel.
+    //
+    // Background is .regularMaterial so list rows scrolling underneath
+    // get a subtle frosted band rather than vanishing under a flat fill.
+    private var compareFloatingBar: some View {
+        let navy = Color(red: 0.12, green: 0.29, blue: 0.64)
+        return VStack(spacing: 10) {
+            if !isComparing {
+                Button {
+                    isComparing = true
+                    selectedAssessmentDays = []
+                } label: {
+                    Text("Compare assessments")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .background(navy)
+                        .cornerRadius(12)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            } else {
+                if selectedAssessmentDays.count == 2 {
+                    Button {
+                        launchCompareSetup()
+                    } label: {
+                        Text("Compare")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity, minHeight: 48)
+                            .background(navy)
+                            .cornerRadius(12)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Text("Select 2 assessments to compare")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .background(Color.gray.opacity(0.15))
+                        .cornerRadius(12)
+                }
+                Button {
+                    exitCompareMode()
+                } label: {
+                    Text("Cancel")
+                        .font(.headline)
+                        .foregroundColor(navy)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(navy, lineWidth: 1.5)
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
+        .background(.regularMaterial)
+    }
+
     // MARK: - Actions
 
     private func reloadIfNeeded() async {
@@ -274,6 +436,21 @@ struct TimelinePage: View {
             await timelineService.loadEvents()
         }
     }
+}
+
+// MARK: - CompareSelection
+//
+// Snapshot of the two day-groups handed to the setup sheet. Created on
+// the main thread when the user taps Compare; the sheet keeps its own
+// copy and is decoupled from further TimelineService mutations.
+
+private struct CompareSelection: Identifiable {
+    let id = UUID()
+    let patientName: String
+    let firstDay: Date
+    let firstEvents: [TimelineEvent]
+    let secondDay: Date
+    let secondEvents: [TimelineEvent]
 }
 
 // MARK: - AssessmentVideoRef
@@ -334,13 +511,110 @@ private let timelineTimeFormatter: DateFormatter = {
 // Tap to expand a dropdown of the individual movements; tap a movement to
 // replay its video (per-exercise jobId).
 
+// MARK: - JobStatusBadge
+//
+// Three-state badge for assessment processing. Folds in what was the
+// per-patient "Processed" sub-tab — a clinician now sees a job's status
+// inline on the timeline. Mapping:
+//   - completed   → .processed   (green)
+//   - failed      → .failed      (red)
+//   - anything else (processing, queued, null, missing-from-map)
+//                 → .processing  (orange)
+//
+// "Anything else" covers in-flight rows plus the brief window between
+// adding an assessment event and the next `loadJobStatuses` pass — in
+// both cases "Processing" is the safe, accurate label.
+
+enum JobStatusBadge {
+    case processed
+    case processing
+    case failed
+
+    init(rawStatus: String?) {
+        switch rawStatus ?? "" {
+        case "completed": self = .processed
+        case "failed":    self = .failed
+        default:          self = .processing
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .processed:  return "Processed"
+        case .processing: return "Processing"
+        case .failed:     return "Failed"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .processed:  return Color(red: 0.18, green: 0.59, blue: 0.31)
+        case .processing: return .orange
+        case .failed:     return Color.red.opacity(0.85)
+        }
+    }
+
+    /// Worst-case roll-up used for the collapsed group badge: any
+    /// failure dominates, then any in-flight job, otherwise all green.
+    static func aggregate(_ badges: [JobStatusBadge]) -> JobStatusBadge {
+        if badges.contains(.failed) { return .failed }
+        if badges.contains(.processing) { return .processing }
+        return .processed
+    }
+}
+
+private struct StatusPill: View {
+    let badge: JobStatusBadge
+
+    var body: some View {
+        Text(badge.label)
+            .font(.caption2).fontWeight(.semibold)
+            .foregroundColor(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(badge.color)
+            .cornerRadius(6)
+    }
+}
+
+/// Compact dot variant used per-exercise in the expanded group list,
+/// where the text pill would crowd the row. Same color mapping as
+/// `StatusPill` so the collapsed badge and the dots stay in sync.
+private struct StatusDot: View {
+    let badge: JobStatusBadge
+
+    var body: some View {
+        Circle()
+            .fill(badge.color)
+            .frame(width: 8, height: 8)
+            .accessibilityLabel(badge.label)
+    }
+}
+
 private struct TimelineAssessmentGroupRow: View {
     let day: Date
     let events: [TimelineEvent]
+    /// When true the row swaps its expand/play behavior for a single
+    /// tap-to-select gesture and shows a leading checkbox.
+    let isCompareMode: Bool
+    let isSelected: Bool
+    /// Snapshot of `processing_jobs.status` keyed by job_id, from
+    /// TimelineService. Missing keys collapse to "Processing" via
+    /// `JobStatusBadge.init(rawStatus:)`.
+    let statusByJobId: [UUID: String]
     let onPlay: (TimelineEvent) -> Void
+    let onToggleSelection: () -> Void
 
     @State private var expanded = false
     private let accent = Color(red: 0.12, green: 0.29, blue: 0.64)
+
+    private func badge(for event: TimelineEvent) -> JobStatusBadge {
+        JobStatusBadge(rawStatus: event.jobId.flatMap { statusByJobId[$0] })
+    }
+
+    private var aggregatedBadge: JobStatusBadge {
+        JobStatusBadge.aggregate(events.map { badge(for: $0) })
+    }
 
     /// If the day's movements exactly match a preset module, show its name
     /// (e.g. "Full Assessment"); otherwise "Clinical Assessment" and the
@@ -355,6 +629,13 @@ private struct TimelineAssessmentGroupRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
+            if isCompareMode {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundColor(isSelected ? accent : Color.gray.opacity(0.6))
+                    .frame(width: 24)
+                    .padding(.top, 2)
+            }
             VStack(alignment: .trailing, spacing: 2) {
                 Text(timelineDateFormatter.string(from: day))
                     .font(.caption).fontWeight(.medium)
@@ -370,7 +651,11 @@ private struct TimelineAssessmentGroupRow: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+                    if isCompareMode {
+                        onToggleSelection()
+                    } else {
+                        withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+                    }
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "video.fill")
@@ -381,14 +666,18 @@ private struct TimelineAssessmentGroupRow: View {
                         Spacer()
                         Text("\(events.count) \(events.count == 1 ? "movement" : "movements")")
                             .font(.caption).foregroundColor(.secondary)
-                        Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                            .font(.caption2).foregroundColor(.secondary)
+                        if !isCompareMode {
+                            Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                                .font(.caption2).foregroundColor(.secondary)
+                        }
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
 
-                if expanded {
+                StatusPill(badge: aggregatedBadge)
+
+                if expanded && !isCompareMode {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(events) { e in
                             Button { onPlay(e) } label: {
@@ -398,6 +687,7 @@ private struct TimelineAssessmentGroupRow: View {
                                     Text(e.notes.isEmpty ? "Assessment" : e.notes)
                                         .font(.body).foregroundColor(.primary)
                                     Spacer()
+                                    StatusDot(badge: badge(for: e))
                                     Text(timelineTimeFormatter.string(from: e.createdAt))
                                         .font(.caption)
                                         .foregroundColor(.secondary)
@@ -417,6 +707,13 @@ private struct TimelineAssessmentGroupRow: View {
             Spacer()
         }
         .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            // In compare mode, taps anywhere on the row toggle selection
+            // (not just the checkbox). The inner Button above handles the
+            // same path so VoiceOver hit-targets stay intact.
+            if isCompareMode { onToggleSelection() }
+        }
     }
 }
 
