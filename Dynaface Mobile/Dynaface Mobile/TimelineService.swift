@@ -25,6 +25,14 @@ final class TimelineService: ObservableObject {
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
 
+    /// Raw `processing_jobs.status` keyed by job_id, populated by
+    /// `loadJobStatuses` after every `loadEvents()`. Lets the timeline
+    /// render per-exercise + per-group processed/processing badges
+    /// without each row issuing its own fetch. Missing keys are
+    /// rendered as "Processing" client-side (default for in-flight jobs
+    /// not yet present in the snapshot).
+    @Published private(set) var jobStatusByJobId: [UUID: String] = [:]
+
     let patientId: UUID
 
     private let supabase = SupabaseClient(
@@ -39,6 +47,10 @@ final class TimelineService: ObservableObject {
     // MARK: - Read
 
     /// Pull every event for this patient, newest occurrence first.
+    /// Follows up with `loadJobStatuses` so the timeline can render
+    /// processed/processing badges in the same UI tick — both run on
+    /// every pull-to-refresh, so a clinician watching a queued job
+    /// can refresh to flip it to Processed.
     func loadEvents() async {
         isLoading = true
         defer { isLoading = false }
@@ -54,6 +66,36 @@ final class TimelineService: ObservableObject {
             self.events = rows
         } catch {
             errorMessage = "Couldn't load timeline: \(error.localizedDescription)"
+            return
+        }
+        await loadJobStatuses()
+    }
+
+    /// Batched fetch of `processing_jobs.status` for every assessment
+    /// event with a `jobId`. Failures are swallowed — the timeline
+    /// still renders without badges and clinicians can pull-to-refresh.
+    private func loadJobStatuses() async {
+        let ids = events.compactMap(\.jobId)
+        guard !ids.isEmpty else {
+            jobStatusByJobId = [:]
+            return
+        }
+        struct StatusRow: Decodable {
+            let id: UUID
+            let status: String?
+        }
+        do {
+            let rows: [StatusRow] = try await supabase
+                .from("processing_jobs")
+                .select("id, status")
+                .in("id", values: ids.map(\.uuidString))
+                .execute()
+                .value
+            var map: [UUID: String] = [:]
+            for r in rows { map[r.id] = r.status }
+            jobStatusByJobId = map
+        } catch {
+            print("TimelineService.loadJobStatuses failed: \(error)")
         }
     }
 

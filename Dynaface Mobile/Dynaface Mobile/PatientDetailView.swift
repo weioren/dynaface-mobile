@@ -4,10 +4,11 @@ import SwiftUI
 //
 // Host view for a single patient's detail screen. Hosts two sub-tabs:
 //
-//   1. Timeline   — clinical events + assessments (tap to replay)
-//   2. Processed  — annotated/completed videos for this patient
-//
-// History was folded into the Timeline (it already shows assessments).
+//   1. Timeline   — clinical events + assessments, with per-event and
+//                   per-group processed/processing badges (previously
+//                   shown on a separate "Processed" sub-tab, now folded
+//                   in — see TimelineAssessmentGroupRow + StatusPill).
+//   2. Analysis   — per-patient metric trends.
 //
 // Two entry points:
 //   - Clinician taps a row in PatientListPage → push with that
@@ -23,12 +24,12 @@ import SwiftUI
 
 struct PatientDetailView: View {
     enum SubTab: Int, Hashable, CaseIterable {
-        case timeline, processed
+        case timeline, analysis
 
         var title: String {
             switch self {
             case .timeline:  return "Timeline"
-            case .processed: return "Processed"
+            case .analysis:  return "Analysis"
             }
         }
     }
@@ -37,6 +38,7 @@ struct PatientDetailView: View {
     let patientId: UUID
 
     @StateObject private var timelineService: TimelineService
+    @StateObject private var analysisService: AnalysisService
     @State private var selectedTab: SubTab = .timeline
     @State private var showingAddEvent = false
 
@@ -44,6 +46,7 @@ struct PatientDetailView: View {
         self.displayName = displayName
         self.patientId   = patientId
         _timelineService = StateObject(wrappedValue: TimelineService(patientId: patientId))
+        _analysisService = StateObject(wrappedValue: AnalysisService(patientId: patientId))
     }
 
     /// Convenience for the clinician path — pushed from
@@ -83,10 +86,13 @@ struct PatientDetailView: View {
             Group {
                 switch selectedTab {
                 case .timeline:
-                    TimelinePage(showingAddSheet: $showingAddEvent)
-                        .environmentObject(timelineService)
-                case .processed:
-                    PatientProcessedTab(patientId: patientId)
+                    TimelinePage(
+                        patientDisplayName: displayName,
+                        showingAddSheet: $showingAddEvent
+                    )
+                    .environmentObject(timelineService)
+                case .analysis:
+                    AnalysisHomeView(service: analysisService)
                 }
             }
         }
@@ -107,11 +113,23 @@ struct PatientDetailView: View {
 // in the separate "Videos" tab.
 
 struct PatientTimelineTab: View {
+    @EnvironmentObject var authService: AuthenticationService
     @StateObject private var timelineService: TimelineService
     @State private var showingAddEvent = false
 
     init(patientId: UUID) {
         _timelineService = StateObject(wrappedValue: TimelineService(patientId: patientId))
+    }
+
+    /// The patient's own username, sourced from their signed-in profile —
+    /// they're viewing their own timeline so their auth profile is the
+    /// authoritative display name. Empty fallback if the auth state isn't
+    /// loaded yet (the compare-setup sheet just shows no header name).
+    private var displayName: String {
+        if case .signedIn(let profile) = authService.authState {
+            return profile.username
+        }
+        return ""
     }
 
     var body: some View {
@@ -131,8 +149,11 @@ struct PatientTimelineTab: View {
             .padding(.top, 8)
             .padding(.bottom, 4)
 
-            TimelinePage(showingAddSheet: $showingAddEvent)
-                .environmentObject(timelineService)
+            TimelinePage(
+                patientDisplayName: displayName,
+                showingAddSheet: $showingAddEvent
+            )
+            .environmentObject(timelineService)
         }
     }
 }

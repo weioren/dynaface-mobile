@@ -702,7 +702,7 @@ struct AssessmentVideoDetailView: View {
 // Then merge + dedupe + sort newest first.
 
 @MainActor
-private func fetchAllJobs(
+func fetchAllJobs(
     forPatient patientId: UUID,
     supabase: SupabaseClient,
     attributionService: JobAttributionService,
