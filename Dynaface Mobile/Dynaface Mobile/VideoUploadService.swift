@@ -88,7 +88,7 @@ struct VideoUploadService {
             try await Firestore.firestore()
                 .collection(processingJobsCollection)
                 .document(jobId.uuidString)
-                .set(jobData)
+                .setData(jobData)
             print("[VideoUploadService] Firestore job doc SUCCESS")
         } catch {
             print("[VideoUploadService] Firestore job doc FAILED: \(error)")

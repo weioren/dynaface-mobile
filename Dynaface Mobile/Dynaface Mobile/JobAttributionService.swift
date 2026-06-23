@@ -41,7 +41,7 @@ final class JobAttributionService: ObservableObject {
         do {
             let snapshot = try await db.collection(collectionName)
                 .whereField("patient_id", isEqualTo: patientId.uuidString)
-                .get()
+                .getDocuments()
             return Set(snapshot.documents.compactMap { UUID(uuidString: $0.documentID) })
         } catch is CancellationError {
             return []
@@ -55,7 +55,7 @@ final class JobAttributionService: ObservableObject {
     /// power "attributed to: <name>" badges in lists.
     func loadAttribution(forJob jobId: UUID) async -> JobPatientAttribution? {
         do {
-            let snapshot = try await db.collection(collectionName).document(jobId.uuidString).get()
+            let snapshot = try await db.collection(collectionName).document(jobId.uuidString).getDocument()
             guard let data = snapshot.data() else { return nil }
             return decode(jobId: jobId, data: data)
         } catch is CancellationError {
@@ -84,7 +84,7 @@ final class JobAttributionService: ObservableObject {
             "attributed_at": FieldValue.serverTimestamp(),
         ]
         do {
-            try await db.collection(collectionName).document(jobId.uuidString).set(data)
+            try await db.collection(collectionName).document(jobId.uuidString).setData(data)
             return true
         } catch is CancellationError {
             return false

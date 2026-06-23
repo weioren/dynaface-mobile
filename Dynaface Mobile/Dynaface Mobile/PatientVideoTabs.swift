@@ -625,7 +625,7 @@ struct AssessmentVideoDetailView: View {
                 let snapshot = try await Firestore.firestore()
                     .collection("processing_jobs")
                     .document(jobId.uuidString)
-                    .get()
+                    .getDocument()
                 guard let data = snapshot.data() else {
                     errorMessage = "Couldn't load this recording."
                     return
@@ -683,7 +683,7 @@ private func fetchAllJobs(
     if onlyCompleted {
         selfQuery = selfQuery.whereField("status", isEqualTo: "completed")
     }
-    let selfSnapshot = try await selfQuery.get()
+    let selfSnapshot = try await selfQuery.getDocuments()
     let selfJobs = selfSnapshot.documents.compactMap { decodeJobRow(id: $0.documentID, data: $0.data()) }
 
     // 3. Attribution-linked jobs that aren't already in selfJobs. Firestore
@@ -698,7 +698,7 @@ private func fetchAllJobs(
         if onlyCompleted {
             attrQuery = attrQuery.whereField("status", isEqualTo: "completed")
         }
-        let snapshot = try await attrQuery.get()
+        let snapshot = try await attrQuery.getDocuments()
         attributedJobs.append(contentsOf: snapshot.documents.compactMap { decodeJobRow(id: $0.documentID, data: $0.data()) })
     }
 

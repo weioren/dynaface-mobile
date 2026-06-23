@@ -499,7 +499,7 @@ struct ProcessedVideosPage: View {
             let snapshot = try await Firestore.firestore()
                 .collection("processing_jobs")
                 .whereField("status", isEqualTo: "completed")
-                .get()
+                .getDocuments()
 
             jobs = snapshot.documents.compactMap { doc -> ProcessedJob? in
                 guard let row = decodeJobRow(id: doc.documentID, data: doc.data()) else { return nil }

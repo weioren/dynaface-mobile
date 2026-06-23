@@ -38,7 +38,7 @@ final class PatientService: ObservableObject {
             let snapshot = try await db.collection("profiles")
                 .whereField("account_type", isEqualTo: "patient")
                 .order(by: "created_at", descending: true)
-                .get()
+                .getDocuments()
             self.patientProfiles = snapshot.documents.compactMap {
                 decodeCandidate(id: $0.documentID, data: $0.data())
             }
@@ -103,7 +103,7 @@ final class PatientService: ObservableObject {
         do {
             let snapshot = try await db.collection("patients")
                 .order(by: "created_at", descending: true)
-                .get()
+                .getDocuments()
             self.patients = snapshot.documents.compactMap {
                 decodePatient(id: $0.documentID, data: $0.data())
             }
@@ -137,7 +137,7 @@ final class PatientService: ObservableObject {
         ]
 
         do {
-            try await db.collection("patients").document(newId.uuidString).set(data)
+            try await db.collection("patients").document(newId.uuidString).setData(data)
             let inserted = Patient(
                 id: newId,
                 name: name,
@@ -188,7 +188,7 @@ final class PatientService: ObservableObject {
             let snapshot = try await db.collection("profiles")
                 .whereField("account_type", isEqualTo: "patient")
                 .limit(to: 200)
-                .get()
+                .getDocuments()
             let all = snapshot.documents.compactMap { decodeCandidate(id: $0.documentID, data: $0.data()) }
             return all.filter {
                 $0.username.localizedCaseInsensitiveContains(trimmed)
@@ -218,7 +218,7 @@ final class PatientService: ObservableObject {
         ]
 
         do {
-            try await db.collection("patients").document(newId.uuidString).set(data)
+            try await db.collection("patients").document(newId.uuidString).setData(data)
             let inserted = Patient(
                 id: newId,
                 name: candidate.username,

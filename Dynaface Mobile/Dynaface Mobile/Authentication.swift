@@ -164,7 +164,7 @@ final class AuthenticationService: ObservableObject {
             let snapshot = try await db.collection("profiles")
                 .whereField("username_lower", isEqualTo: trimmed.lowercased())
                 .limit(to: 1)
-                .get()
+                .getDocuments()
             return snapshot.documents.isEmpty
         } catch {
             print("isUsernameAvailable query failed: \(error)")
@@ -173,7 +173,7 @@ final class AuthenticationService: ObservableObject {
     }
 
     private func loadProfile(for appUid: String) async throws {
-        let snapshot = try await db.collection("profiles").document(appUid).get()
+        let snapshot = try await db.collection("profiles").document(appUid).getDocument()
         guard let data = snapshot.data(), let profile = Profile(id: appUid, data: data) else {
             throw AuthError.userNotFound
         }

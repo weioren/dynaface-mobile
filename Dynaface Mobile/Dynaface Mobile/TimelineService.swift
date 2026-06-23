@@ -47,7 +47,7 @@ final class TimelineService: ObservableObject {
             let snapshot = try await db.collection(collectionName)
                 .whereField("patient_id", isEqualTo: patientId.uuidString)
                 .order(by: "occurred_at", descending: true)
-                .get()
+                .getDocuments()
             self.events = snapshot.documents.compactMap { decode(id: $0.documentID, data: $0.data()) }
         } catch {
             errorMessage = "Couldn't load timeline: \(error.localizedDescription)"
@@ -82,7 +82,7 @@ final class TimelineService: ObservableObject {
         ]
 
         do {
-            try await db.collection(collectionName).document(newId.uuidString).set(data)
+            try await db.collection(collectionName).document(newId.uuidString).setData(data)
             let inserted = TimelineEvent(
                 id: newId,
                 patientId: patientId,
@@ -135,7 +135,7 @@ final class TimelineService: ObservableObject {
         }
 
         do {
-            try await db.collection(collectionName).document(newId.uuidString).set(data)
+            try await db.collection(collectionName).document(newId.uuidString).setData(data)
             let inserted = TimelineEvent(
                 id: newId,
                 patientId: patientId,
