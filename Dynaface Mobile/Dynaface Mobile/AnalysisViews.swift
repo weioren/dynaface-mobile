@@ -12,7 +12,6 @@ private let brandBlue = Color(red: 0.12, green: 0.29, blue: 0.64)
 
 struct AnalysisHomeView: View {
     @ObservedObject var service: AnalysisService
-    @EnvironmentObject private var authService: AuthenticationService
     @EnvironmentObject private var attributionService: JobAttributionService
 
     var body: some View {
@@ -27,9 +26,8 @@ struct AnalysisHomeView: View {
             }
         }
         .task {
-            // Switch to the live Supabase source (env objects available here),
-            // then load. Falls back to whatever provider was injected.
-            service.useSupabase(authService.supabaseClient, attribution: attributionService)
+            // Switch to the live Firebase source, then load.
+            service.useFirebase(attribution: attributionService)
             await service.loadIfNeeded()
         }
         .alert(

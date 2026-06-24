@@ -25,6 +25,14 @@ service firebase.storage {
       return request.auth.token.app_uid;
     }
 
+    // Case-insensitive owner check. The iOS app builds object paths from
+    // Swift's UUID.uuidString (UPPERCASE), while the `app_uid` custom claim
+    // is a lowercase UUID (Python uuid4 in create_profile). Compare with
+    // both sides lowercased so they match regardless of case.
+    function isCaller(v) {
+      return v.lower() == callerAppUid().lower();
+    }
+
     function isClinician() {
       return hasAppUid()
         && firestore.get(/databases/(default)/documents/profiles/$(callerAppUid())).data.account_type == "clinician";
@@ -34,8 +42,8 @@ service firebase.storage {
     // Owner read/write (the upload itself); clinicians read-only so they
     // can review a patient's original recording.
     match /uploads/{userId}/{jobId}/{fileName} {
-      allow read: if hasAppUid() && (userId == callerAppUid() || isClinician());
-      allow write: if hasAppUid() && userId == callerAppUid();
+      allow read: if hasAppUid() && (isCaller(userId) || isClinician());
+      allow write: if hasAppUid() && isCaller(userId);
     }
 
     // Processed results: results/{userId}/{jobId}/{annotated.mp4,results.json,peak_frame.png}
@@ -43,7 +51,7 @@ service firebase.storage {
     // account (Admin SDK / GCS client — bypasses these rules entirely).
     // Clients only ever read.
     match /results/{userId}/{jobId}/{fileName} {
-      allow read: if hasAppUid() && (userId == callerAppUid() || isClinician());
+      allow read: if hasAppUid() && (isCaller(userId) || isClinician());
       allow write: if false;
     }
   }

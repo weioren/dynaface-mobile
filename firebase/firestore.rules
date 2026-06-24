@@ -27,6 +27,14 @@ service cloud.firestore {
       return request.auth.token.app_uid;
     }
 
+    // Case-insensitive owner check. The iOS app writes id fields from
+    // Swift's UUID.uuidString (UPPERCASE), while the `app_uid` custom claim
+    // is a lowercase UUID (Python uuid4 in create_profile). Compare with
+    // both sides lowercased so they match regardless of case.
+    function isCaller(v) {
+      return v.lower() == callerAppUid().lower();
+    }
+
     function isClinician() {
       return hasAppUid()
         && get(/databases/$(database)/documents/profiles/$(callerAppUid())).data.account_type == "clinician";
@@ -38,9 +46,9 @@ service cloud.firestore {
     // a client — `allow create: if false` is intentional.
     match /profiles/{profileId} {
       allow read: if hasAppUid()
-        && (profileId == callerAppUid() || (isClinician() && resource.data.account_type == "patient"));
+        && (isCaller(profileId) || (isClinician() && resource.data.account_type == "patient"));
       allow create: if false;
-      allow update: if hasAppUid() && profileId == callerAppUid();
+      allow update: if hasAppUid() && isCaller(profileId);
       allow delete: if false;
     }
 
@@ -49,8 +57,8 @@ service cloud.firestore {
     // clinician's unregistered roster).
     match /patients/{patientId} {
       allow read: if isClinician();
-      allow create: if isClinician() && request.resource.data.clinician_id == callerAppUid();
-      allow update: if isClinician() && resource.data.clinician_id == callerAppUid();
+      allow create: if isClinician() && isCaller(request.resource.data.clinician_id);
+      allow update: if isClinician() && isCaller(resource.data.clinician_id);
       allow delete: if false;
     }
 
@@ -58,9 +66,9 @@ service cloud.firestore {
     // VideoUploadService.swift). `status` must start at "queued"; only
     // the worker (Admin SDK) advances it from there.
     match /processing_jobs/{jobId} {
-      allow read: if hasAppUid() && (resource.data.user_id == callerAppUid() || isClinician());
+      allow read: if hasAppUid() && (isCaller(resource.data.user_id) || isClinician());
       allow create: if hasAppUid()
-        && request.resource.data.user_id == callerAppUid()
+        && isCaller(request.resource.data.user_id)
         && request.resource.data.status == "queued";
       allow update, delete: if false;
     }
@@ -68,19 +76,19 @@ service cloud.firestore {
     // job_patient_attributions/{jobId} — doc id == processing_jobs id, so
     // `set()` is naturally an upsert.
     match /job_patient_attributions/{jobId} {
-      allow read: if hasAppUid() && (isClinician() || resource.data.patient_id == callerAppUid());
+      allow read: if hasAppUid() && (isClinician() || isCaller(resource.data.patient_id));
       allow create, update: if hasAppUid()
-        && request.resource.data.attributed_by == callerAppUid()
-        && (isClinician() || request.resource.data.patient_id == callerAppUid());
+        && isCaller(request.resource.data.attributed_by)
+        && (isClinician() || isCaller(request.resource.data.patient_id));
       allow delete: if isClinician();
     }
 
     // timeline_events/{eventId}
     match /timeline_events/{eventId} {
-      allow read: if hasAppUid() && (isClinician() || resource.data.patient_id == callerAppUid());
+      allow read: if hasAppUid() && (isClinician() || isCaller(resource.data.patient_id));
       allow create: if hasAppUid()
-        && request.resource.data.created_by == callerAppUid()
-        && (isClinician() || request.resource.data.patient_id == callerAppUid());
+        && isCaller(request.resource.data.created_by)
+        && (isClinician() || isCaller(request.resource.data.patient_id));
       allow update: if isClinician();
       allow delete: if false;
     }

@@ -15,16 +15,18 @@
 		8655019BF6B04E99A99ADD9F /* RecordingFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7724C311C54B4404BC726EDC /* RecordingFiles.swift */; };
 		A1D7E2762E4849EA0030ABFA /* PracticePage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D7E2752E4849EA0030ABFA /* PracticePage.swift */; };
 		A1D7E2782E4857100030ABFA /* Players.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D7E2772E4857100030ABFA /* Players.swift */; };
-		B6E63B63B2A648FD9D987699 /* TimelineService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC4853EEE04540BB9715424C /* TimelineService.swift */; };
-		B7F1A0022F00000100000001 /* VideoUploadService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7F1A0012F00000100000001 /* VideoUploadService.swift */; };
-		D3BDB109E2EE46BE8D76D955 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AB0331B0EBB4451A6E59399 /* Models.swift */; };
-		D601DACF9B464EC88C305ECD /* PatientService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8DD3DF87F5C4BCCBC4F8848 /* PatientService.swift */; };
 		AA0100000000000000000001 /* AnalysisContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0100000000000000000002 /* AnalysisContract.swift */; };
 		AA0100000000000000000003 /* AnalysisPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0100000000000000000004 /* AnalysisPresentation.swift */; };
 		AA0100000000000000000005 /* MetricsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0100000000000000000006 /* MetricsProvider.swift */; };
 		AA0100000000000000000007 /* AnalysisViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0100000000000000000008 /* AnalysisViews.swift */; };
+		AA0100000000000000000009 /* sample_results.json in Resources */ = {isa = PBXBuildFile; fileRef = AA010000000000000000000A /* sample_results.json */; };
 		AA0200000000000000000001 /* CompareAssessmentSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000002 /* CompareAssessmentSetupView.swift */; };
 		AA0200000000000000000003 /* CompareAssessmentResultsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200000000000000000004 /* CompareAssessmentResultsView.swift */; };
+		B6E63B63B2A648FD9D987699 /* TimelineService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC4853EEE04540BB9715424C /* TimelineService.swift */; };
+		B7F1A0022F00000100000001 /* VideoUploadService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7F1A0012F00000100000001 /* VideoUploadService.swift */; };
+		C5AA4D14ACB3EFE5A619B019 /* FirebaseConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 076A4A64AF1D1C6500E82DD0 /* FirebaseConfig.swift */; };
+		D3BDB109E2EE46BE8D76D955 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AB0331B0EBB4451A6E59399 /* Models.swift */; };
+		D601DACF9B464EC88C305ECD /* PatientService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8DD3DF87F5C4BCCBC4F8848 /* PatientService.swift */; };
 		DB0564A52E39C8C400BEB570 /* PastExerciseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0564A42E39C8A900BEB570 /* PastExerciseView.swift */; };
 		DB0564A82E39F04E00BEB570 /* AuthSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0564A72E39F04E00BEB570 /* AuthSelector.swift */; };
 		DB2159BE2C90E7D100DD84DD /* Authentication.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB2159BD2C90E7D100DD84DD /* Authentication.swift */; };
@@ -48,7 +50,6 @@
 		DBAB9FC12B59B8EF007B2B80 /* DynafaceMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FC02B59B8EF007B2B80 /* DynafaceMobileApp.swift */; };
 		DBAB9FC32B59B8EF007B2B80 /* SignUp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FC22B59B8EF007B2B80 /* SignUp.swift */; };
 		DBAB9FC52B59B8F1007B2B80 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DBAB9FC42B59B8F1007B2B80 /* Assets.xcassets */; };
-		AA0100000000000000000009 /* sample_results.json in Resources */ = {isa = PBXBuildFile; fileRef = AA010000000000000000000A /* sample_results.json */; };
 		DBAB9FC82B59B8F2007B2B80 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DBAB9FC72B59B8F2007B2B80 /* Preview Assets.xcassets */; };
 		DBAB9FD22B59B8F2007B2B80 /* DynafaceMobileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FD12B59B8F2007B2B80 /* DynafaceMobileTests.swift */; };
 		DBAB9FDC2B59B8F2007B2B80 /* DynafaceMobileUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBAB9FDB2B59B8F2007B2B80 /* DynafaceMobileUITests.swift */; };
@@ -67,6 +68,7 @@
 		DBDCD0B32FCB4A6600C5D367 /* AddEditEventSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBDCD0B22FCB4A6600C5D367 /* AddEditEventSheet.swift */; };
 		E0488C76B46143CB93846C51 /* PatientDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E08E16AD1914D3C8815862F /* PatientDetailView.swift */; };
 		E42C44BC26274304A39B27DF /* UploadVideoPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FAB1D2736A94FEE8B6472A1 /* UploadVideoPage.swift */; };
+		F96C4C15A004DBF9D841BD4A /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = C48743CAA62C69D06F28D287 /* GoogleService-Info.plist */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -87,6 +89,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		076A4A64AF1D1C6500E82DD0 /* FirebaseConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FirebaseConfig.swift; path = "Dynaface Mobile/FirebaseConfig.swift"; sourceTree = SOURCE_ROOT; };
 		0FAB1D2736A94FEE8B6472A1 /* UploadVideoPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UploadVideoPage.swift; sourceTree = "<group>"; };
 		2E08E16AD1914D3C8815862F /* PatientDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatientDetailView.swift; sourceTree = "<group>"; };
 		3AB0331B0EBB4451A6E59399 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
@@ -100,10 +103,12 @@
 		AA0100000000000000000004 /* AnalysisPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisPresentation.swift; sourceTree = "<group>"; };
 		AA0100000000000000000006 /* MetricsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricsProvider.swift; sourceTree = "<group>"; };
 		AA0100000000000000000008 /* AnalysisViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisViews.swift; sourceTree = "<group>"; };
+		AA010000000000000000000A /* sample_results.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = sample_results.json; sourceTree = "<group>"; };
 		AA0200000000000000000002 /* CompareAssessmentSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompareAssessmentSetupView.swift; sourceTree = "<group>"; };
 		AA0200000000000000000004 /* CompareAssessmentResultsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompareAssessmentResultsView.swift; sourceTree = "<group>"; };
 		AC4853EEE04540BB9715424C /* TimelineService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineService.swift; sourceTree = "<group>"; };
 		B7F1A0012F00000100000001 /* VideoUploadService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoUploadService.swift; sourceTree = "<group>"; };
+		C48743CAA62C69D06F28D287 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "Dynaface Mobile/GoogleService-Info.plist"; sourceTree = SOURCE_ROOT; };
 		DB0564A42E39C8A900BEB570 /* PastExerciseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PastExerciseView.swift; sourceTree = "<group>"; };
 		DB0564A72E39F04E00BEB570 /* AuthSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSelector.swift; sourceTree = "<group>"; };
 		DB2159BD2C90E7D100DD84DD /* Authentication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Authentication.swift; sourceTree = "<group>"; };
@@ -123,7 +128,6 @@
 		DBAB9FC02B59B8EF007B2B80 /* DynafaceMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynafaceMobileApp.swift; sourceTree = "<group>"; };
 		DBAB9FC22B59B8EF007B2B80 /* SignUp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignUp.swift; sourceTree = "<group>"; };
 		DBAB9FC42B59B8F1007B2B80 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		AA010000000000000000000A /* sample_results.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = sample_results.json; sourceTree = "<group>"; };
 		DBAB9FC72B59B8F2007B2B80 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		DBAB9FCD2B59B8F2007B2B80 /* Dynaface MobileTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Dynaface MobileTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		DBAB9FD12B59B8F2007B2B80 /* DynafaceMobileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynafaceMobileTests.swift; sourceTree = "<group>"; };
@@ -193,6 +197,8 @@
 				DBAB9FDA2B59B8F2007B2B80 /* Dynaface Mobile UI Tests */,
 				DB6164932E5FAE9E008DD0B7 /* Frameworks */,
 				DBAB9FBE2B59B8EF007B2B80 /* Products */,
+				076A4A64AF1D1C6500E82DD0 /* FirebaseConfig.swift */,
+				C48743CAA62C69D06F28D287 /* GoogleService-Info.plist */,
 			);
 			sourceTree = "<group>";
 		};
@@ -410,6 +416,7 @@
 				DBAD9B332EA76049005F0C67 /* StrongEyeClosure.mp4 in Resources */,
 				DBAB9FC52B59B8F1007B2B80 /* Assets.xcassets in Resources */,
 				AA0100000000000000000009 /* sample_results.json in Resources */,
+				F96C4C15A004DBF9D841BD4A /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -472,6 +479,7 @@
 				DB2159BE2C90E7D100DD84DD /* Authentication.swift in Sources */,
 				DB533AFB2D560256003BFD1C /* CameraRecorderView.swift in Sources */,
 				DB6164A12E5FAEE4008DD0B7 /* SupabaseConfig.swift in Sources */,
+				C5AA4D14ACB3EFE5A619B019 /* FirebaseConfig.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

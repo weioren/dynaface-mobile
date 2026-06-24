@@ -27,14 +27,6 @@ final class TimelineService: ObservableObject {
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
 
-    /// Raw `processing_jobs.status` keyed by job_id, populated by
-    /// `loadJobStatuses` after every `loadEvents()`. Lets the timeline
-    /// render per-exercise + per-group processed/processing badges
-    /// without each row issuing its own fetch. Missing keys are
-    /// rendered as "Processing" client-side (default for in-flight jobs
-    /// not yet present in the snapshot).
-    @Published private(set) var jobStatusByJobId: [UUID: String] = [:]
-
     let patientId: UUID
 
     private let db = Firestore.firestore()
@@ -47,10 +39,6 @@ final class TimelineService: ObservableObject {
     // MARK: - Read
 
     /// Pull every event for this patient, newest occurrence first.
-    /// Follows up with `loadJobStatuses` so the timeline can render
-    /// processed/processing badges in the same UI tick — both run on
-    /// every pull-to-refresh, so a clinician watching a queued job
-    /// can refresh to flip it to Processed.
     func loadEvents() async {
         isLoading = true
         defer { isLoading = false }
@@ -63,36 +51,6 @@ final class TimelineService: ObservableObject {
             self.events = snapshot.documents.compactMap { decode(id: $0.documentID, data: $0.data()) }
         } catch {
             errorMessage = "Couldn't load timeline: \(error.localizedDescription)"
-            return
-        }
-        await loadJobStatuses()
-    }
-
-    /// Batched fetch of `processing_jobs.status` for every assessment
-    /// event with a `jobId`. Failures are swallowed — the timeline
-    /// still renders without badges and clinicians can pull-to-refresh.
-    private func loadJobStatuses() async {
-        let ids = events.compactMap(\.jobId)
-        guard !ids.isEmpty else {
-            jobStatusByJobId = [:]
-            return
-        }
-        struct StatusRow: Decodable {
-            let id: UUID
-            let status: String?
-        }
-        do {
-            let rows: [StatusRow] = try await supabase
-                .from("processing_jobs")
-                .select("id, status")
-                .in("id", values: ids.map(\.uuidString))
-                .execute()
-                .value
-            var map: [UUID: String] = [:]
-            for r in rows { map[r.id] = r.status }
-            jobStatusByJobId = map
-        } catch {
-            print("TimelineService.loadJobStatuses failed: \(error)")
         }
     }
 
@@ -236,19 +194,13 @@ final class TimelineService: ObservableObject {
     }
 
     /// Delete a non-assessment event. Assessment rows are system-managed
-    /// (linked to a processing_jobs row) and never deletable — guarded
-    /// here client-side and by RLS (2026-06-15 migration). On success the
-    /// local copy is removed.
+    /// (linked to a processing_jobs doc) and never deletable — guarded here
+    /// client-side and by firestore.rules. On success the local copy is removed.
     @discardableResult
     func deleteEvent(_ event: TimelineEvent) async -> Bool {
         guard event.type != .assessment else { return false }
-
         do {
-            try await supabase
-                .from("timeline_events")
-                .delete()
-                .eq("id", value: event.id.uuidString)
-                .execute()
+            try await db.collection(collectionName).document(event.id.uuidString).delete()
             events.removeAll { $0.id == event.id }
             return true
         } catch {

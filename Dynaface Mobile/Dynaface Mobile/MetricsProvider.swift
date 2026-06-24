@@ -1,18 +1,19 @@
 import Foundation
-import Supabase
+import FirebaseFirestore
+import FirebaseStorage
 
 // MARK: - Metrics data source (front/back separation seam)
 //
 // The Analysis UI depends only on this protocol, never on a specific backend.
 //   - MockMetricsProvider: decodes a bundled sample results.json (offline /
 //     preview / fallback).
-//   - SupabaseMetricsProvider: the live path — finds the patient's latest
-//     completed job, signs the results.json URL in the `results` bucket,
-//     fetches and decodes it. (The same file exists in GCS, but the app has
-//     no GCP/Firebase auth yet and the objects aren't public, so Supabase is
-//     the reachable source today. A GCS provider is a drop-in later.)
+//   - FirebaseMetricsProvider: the live path — finds the patient's latest
+//     completed job in Firestore, resolves the results.json download URL in
+//     the GCS `results` bucket, fetches and decodes it.
 //
-// The contract, mapper, and views are identical across providers.
+// The contract, mapper, and views are identical across providers — only the
+// data source differs (this file is the only Firebase-coupled piece of the
+// Analysis module; everything else is backend-agnostic).
 
 protocol MetricsProviding {
     func report(forJob jobId: UUID) async throws -> FacialMetricsReport
@@ -40,20 +41,30 @@ struct MockMetricsProvider: MetricsProviding {
     }()
 }
 
-// MARK: - Supabase provider (live)
+// MARK: - Firebase provider (live)
+//
+// Job discovery reuses the exact same Firestore union (self-recorded +
+// attributed completed jobs) the Processed tab uses (`fetchAllJobs` in
+// PatientVideoTabs.swift), then reads `results/{user_id}/{job_id}/results.json`
+// from the GCS results bucket via FirebaseStorage `downloadURL()` (gated by
+// storage.rules). Drops in behind the protocol exactly where the old Supabase
+// provider sat.
 
-struct SupabaseMetricsProvider: MetricsProviding {
-    let supabase: SupabaseClient
+struct FirebaseMetricsProvider: MetricsProviding {
     let attributionService: JobAttributionService
 
     func report(forJob jobId: UUID) async throws -> FacialMetricsReport {
-        let job: PatientJobRow = try await supabase
-            .from("processing_jobs")
-            .select()
-            .eq("id", value: jobId.uuidString)
-            .single()
-            .execute()
-            .value
+        let snapshot = try await Firestore.firestore()
+            .collection("processing_jobs")
+            .document(jobId.uuidString)
+            .getDocument()
+        guard let data = snapshot.data(),
+              let job = decodeJobRow(id: jobId.uuidString, data: data) else {
+            throw NSError(
+                domain: "FirebaseMetricsProvider", code: 404,
+                userInfo: [NSLocalizedDescriptionKey: "Job \(jobId) not found."]
+            )
+        }
         return try await fetchAndDecode(job)
     }
 
@@ -61,7 +72,6 @@ struct SupabaseMetricsProvider: MetricsProviding {
         // Newest-first union of self-recorded + attributed completed jobs.
         let jobs = try await fetchAllJobs(
             forPatient: patientId,
-            supabase: supabase,
             attributionService: attributionService,
             onlyCompleted: true
         )
@@ -71,56 +81,49 @@ struct SupabaseMetricsProvider: MetricsProviding {
             catch { lastError = error; continue }
         }
         throw lastError ?? NSError(
-            domain: "SupabaseMetricsProvider", code: 404,
+            domain: "FirebaseMetricsProvider", code: 404,
             userInfo: [NSLocalizedDescriptionKey: "No completed analysis found for this patient yet."]
         )
     }
 
     private func fetchAndDecode(_ job: PatientJobRow) async throws -> FacialMetricsReport {
-        let url = try await signedResultsJSONURL(for: job, supabase: supabase)
+        let url = try await resultsJSONDownloadURL(for: job)
         let (data, _) = try await URLSession.shared.data(from: url)
         return try JSONDecoder().decode(FacialMetricsReport.self, from: data)
     }
 }
 
-/// Resolve a signed URL for a job's `results.json` in the `results` bucket.
-/// The worker writes lowercase `{user_id}/{job_id}/results.json`, while
-/// `UUID.uuidString` is uppercase — so we try the worker's own directory
-/// (from output_video_path) and lowercase ids first, uppercase as fallback.
-func signedResultsJSONURL(
-    for job: PatientJobRow,
-    supabase: SupabaseClient,
-    resultsBucket: String = "results"
-) async throws -> URL {
+/// Resolve a download URL for a job's `results.json` in the GCS results bucket.
+/// Mirrors `signedProcessedVideoURL` (PatientVideoTabs.swift): the worker writes
+/// `results/{user_id}/{job_id}/results.json` next to `annotated.mp4`, so derive
+/// the directory from the stored output path, with a canonical fallback.
+/// `downloadURL()` returns an authenticated HTTPS URL; storage.rules gate access.
+func resultsJSONDownloadURL(for job: PatientJobRow) async throws -> URL {
     var candidates: [String] = []
     func add(_ p: String) { if !p.isEmpty && !candidates.contains(p) { candidates.append(p) } }
 
-    // 1. Sibling of the worker-written annotated path (authoritative, lowercase).
+    // 1. Sibling of the worker-written output path (authoritative — same dir).
     if let out = job.output_video_path ?? job.output_csv_path, !out.isEmpty {
-        let prefix = "\(resultsBucket)/"
-        let norm = out.hasPrefix(prefix) ? String(out.dropFirst(prefix.count)) : out
-        let dir = (norm as NSString).deletingLastPathComponent
+        let dir = (out as NSString).deletingLastPathComponent
         add("\(dir)/results.json")
     }
-    // 2. Constructed from ids (lowercase first, then uppercase).
+    // 2. Canonical convention fallback.
     if let uid = job.user_id {
-        add("\(uid.uuidString.lowercased())/\(job.id.uuidString.lowercased())/results.json")
-        add("\(uid.uuidString)/\(job.id.uuidString)/results.json")
+        add("results/\(uid.uuidString)/\(job.id.uuidString)/results.json")
     }
 
+    let storage = Storage.storage(url: FirebaseConfig.resultsBucketURL)
     var lastError: Error?
     for path in candidates {
         do {
-            return try await supabase.storage
-                .from(resultsBucket)
-                .createSignedURL(path: path, expiresIn: 3600)
+            return try await storage.reference(withPath: path).downloadURL()
         } catch {
             lastError = error
             continue
         }
     }
     throw lastError ?? NSError(
-        domain: "SupabaseMetricsProvider", code: 404,
+        domain: "FirebaseMetricsProvider", code: 404,
         userInfo: [NSLocalizedDescriptionKey: "results.json not found for job \(job.id)."]
     )
 }
@@ -148,10 +151,10 @@ final class AnalysisService: ObservableObject {
         self.provider = provider
     }
 
-    /// Switch to the live Supabase source. Called from the view once the
-    /// SupabaseClient + attribution service are available in the environment.
-    func useSupabase(_ supabase: SupabaseClient, attribution: JobAttributionService) {
-        provider = SupabaseMetricsProvider(supabase: supabase, attributionService: attribution)
+    /// Switch to the live Firebase source. Called from the view once the
+    /// attribution service is available in the environment.
+    func useFirebase(attribution: JobAttributionService) {
+        provider = FirebaseMetricsProvider(attributionService: attribution)
     }
 
     func loadIfNeeded() async {
