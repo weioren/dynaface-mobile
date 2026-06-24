@@ -499,10 +499,10 @@ def _process_job_by_id(job_id: str, object_name: str | None = None) -> dict[str,
         found = (user_id, object_name)
     else:
         found = _find_uploaded_object_for_job(job_id)
-        
+
     if not found:
         return {"ok": False, "reason": "job_not_found", "job_id": job_id}
-        
+
     user_id, object_name = found
     results_bucket = _storage_client().bucket(_results_bucket())
     result_blob = results_bucket.blob(_results_json_path(user_id, job_id))
@@ -523,7 +523,7 @@ def _process_job_by_id(job_id: str, object_name: str | None = None) -> dict[str,
 # --- 🚀 CLOUD RUN JOBS MAIN ENTRYPOINT ---
 if __name__ == "__main__":
     print(f"Initializing {APP_NAME} execution task...")
-    
+
     target_object = None
 
     if len(sys.argv) > 1:
@@ -534,7 +534,7 @@ if __name__ == "__main__":
         try:
             raw_payload = os.environ.get("PUBSUB_PAYLOAD", "")
             envelope = json.loads(raw_payload)
-            
+
             if "message" in envelope and "data" in envelope["message"]:
                 data_str = base64.b64decode(envelope["message"]["data"]).decode("utf-8")
                 payload = json.loads(data_str)
@@ -579,7 +579,7 @@ if __name__ == "__main__":
         # Run pipeline
         print(f"🎬 Launching processing pipeline for Job: {job_id}...")
         result = _process_job_by_id(job_id, object_name=target_object)
-        
+
         if result.get("ok"):
             print(f"🎉 Task run completed successfully: {result}")
             sys.exit(0)
