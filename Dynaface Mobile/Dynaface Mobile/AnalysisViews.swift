@@ -72,8 +72,21 @@ struct AnalysisHomeView: View {
                                 SynkinesisDetailView(model: AnalysisPresentation.synkDetail(report))
                             } label: { DomainBarRow(bar: bar, navigable: true) }
                             .buttonStyle(.plain)
-                        default:
-                            DomainBarRow(bar: bar, navigable: false)
+                        case .smile:
+                            NavigationLink {
+                                SmileDetailView(model: AnalysisPresentation.smileDetail(report))
+                            } label: { DomainBarRow(bar: bar, navigable: true) }
+                            .buttonStyle(.plain)
+                        case .brow:
+                            NavigationLink {
+                                BrowDetailView(model: AnalysisPresentation.browDetail(report))
+                            } label: { DomainBarRow(bar: bar, navigable: true) }
+                            .buttonStyle(.plain)
+                        case .midface:
+                            NavigationLink {
+                                MidfaceDetailView(model: AnalysisPresentation.midfaceDetail(report))
+                            } label: { DomainBarRow(bar: bar, navigable: true) }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -366,6 +379,153 @@ private struct SynkScaleBar: View {
                 Text("Low"); Spacer(); Text("Moderate"); Spacer(); Text("High")
             }
             .font(.caption2).foregroundColor(.secondary)
+        }
+    }
+}
+
+// MARK: - Smile detail
+
+struct SmileDetailView: View {
+    let model: SmileDetailModel
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Spacer()
+                    SeverityBadge(text: model.badgeText, color: model.badgeSeverity.color)
+                }
+
+                Text("Commissure Excursion")
+                    .font(.headline)
+                CompareBar(leftValue: model.commissureLeft, rightValue: model.commissureRight,
+                           leftLabel: "Left", rightLabel: "Right")
+
+                VStack(spacing: 0) {
+                    ForEach(model.rows) { row in
+                        MetricRowView(row: row)
+                        if row.id != model.rows.last?.id { Divider() }
+                    }
+                }
+            }
+            .padding()
+        }
+        .navigationTitle("Smile Function")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Brow detail
+
+struct BrowDetailView: View {
+    let model: BrowDetailModel
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Spacer()
+                    SeverityBadge(text: model.badgeText, color: model.badgeSeverity.color)
+                }
+
+                VStack(spacing: 0) {
+                    ForEach(model.rows) { row in
+                        MetricRowView(row: row)
+                        if row.id != model.rows.last?.id { Divider() }
+                    }
+                }
+
+                if !model.trend.isEmpty {
+                    Text("Brow Elevation Over Time")
+                        .font(.headline)
+                        .padding(.top, 4)
+                    TrendChart(points: model.trend)
+                        .frame(height: 180)
+                }
+
+                Text("Per-side (left/right) and medial/lateral recruitment aren't in the current results yet.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .padding()
+        }
+        .navigationTitle("Brow Function")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Midface detail
+
+struct MidfaceDetailView: View {
+    let model: MidfaceDetailModel
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Spacer()
+                    SeverityBadge(text: model.badgeText, color: model.badgeSeverity.color)
+                }
+
+                VStack(spacing: 0) {
+                    ForEach(model.rows) { row in
+                        MetricRowView(row: row)
+                        if row.id != model.rows.last?.id { Divider() }
+                    }
+                }
+
+                Text(model.contourCaption)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .padding()
+        }
+        .navigationTitle("Midface + Lip")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Shared detail components
+
+/// Two-tone left/right comparison bar (e.g. commissure excursion).
+private struct CompareBar: View {
+    let leftValue: Double
+    let rightValue: Double
+    let leftLabel: String
+    let rightLabel: String
+
+    private let leftColor = Color(red: 0.20, green: 0.70, blue: 0.45)
+    private let rightColor = Color(red: 0.95, green: 0.60, blue: 0.15)
+
+    var body: some View {
+        let total = max(leftValue + rightValue, 0.0001)
+        VStack(spacing: 6) {
+            GeometryReader { geo in
+                HStack(spacing: 2) {
+                    leftColor.frame(width: geo.size.width * CGFloat(leftValue / total))
+                    rightColor
+                }
+                .clipShape(Capsule())
+            }
+            .frame(height: 10)
+            HStack {
+                Text("\(leftLabel) \(String(format: "%.1f", leftValue))")
+                    .font(.caption).foregroundColor(leftColor)
+                Spacer()
+                Text("\(rightLabel) \(String(format: "%.1f", rightValue))")
+                    .font(.caption).foregroundColor(rightColor)
+            }
+        }
+    }
+}
+
+/// Single-series line chart with an auto y-scale (brow elevation trend).
+private struct TrendChart: View {
+    let points: [ChartPoint]
+    var body: some View {
+        Chart(points) { p in
+            LineMark(x: .value("Time", p.t), y: .value("Value", p.v))
+                .foregroundStyle(brandBlue)
         }
     }
 }

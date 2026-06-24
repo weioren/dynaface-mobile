@@ -43,13 +43,18 @@ struct MetricsSummary: Codable {
     let eye: EyeSummary?
     let synkinesis: SynkinesisSummary?
     let global: GlobalSummary?
-    // smile_module / brow_module / midface_module / temporal_dynamics exist in
-    // the file but aren't decoded in v1 (Eye + Synkinesis only).
+    let smile: SmileSummary?
+    let brow: BrowSummary?
+    let midface: MidfaceSummary?
+    // temporal_dynamics also exists in the file but isn't decoded yet.
 
     enum CodingKeys: String, CodingKey {
         case eye = "eye_module"
         case synkinesis
         case global = "global_score"
+        case smile = "smile_module"
+        case brow = "brow_module"
+        case midface = "midface_module"
     }
 }
 
@@ -100,6 +105,61 @@ struct GlobalSummary: Codable {
     let current, baseline, mean, max, min: Double?
 }
 
+struct SmileSummary: Codable {
+    let maxCommissureExcL, maxCommissureExcR: Double?
+    let maxSmileMagnitude: Double?
+    let meanSmileSymmetry: Double?
+    let meanSmileVelocity, maxSmileVelocity: Double?
+    let maxDentalShow: Double?
+    let maxSmileVectorL, maxSmileVectorR: Double?
+    let meanFai: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case maxCommissureExcL = "max_commissure_exc_l"
+        case maxCommissureExcR = "max_commissure_exc_r"
+        case maxSmileMagnitude = "max_smile_magnitude"
+        case meanSmileSymmetry = "mean_smile_symmetry"
+        case meanSmileVelocity = "mean_smile_velocity"
+        case maxSmileVelocity = "max_smile_velocity"
+        case maxDentalShow = "max_dental_show"
+        case maxSmileVectorL = "max_smile_vector_l"
+        case maxSmileVectorR = "max_smile_vector_r"
+        case meanFai = "mean_fai"
+    }
+}
+
+// NOTE: the worker emits only single (not per-side) values for brow + midface
+// — no `*_l`/`*_r`, no medial/lateral recruitment, no midface_contour. The
+// mock's affected-vs-normal columns for those domains therefore render as a
+// single value until the worker adds per-side fields (see Track B notes).
+struct BrowSummary: Codable {
+    let maxBrowElevation: Double?
+    let meanBrowSymmetry: Double?
+    let meanRecruitmentRatio: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case maxBrowElevation = "max_brow_elevation"
+        case meanBrowSymmetry = "mean_brow_symmetry"
+        case meanRecruitmentRatio = "mean_recruitment_ratio"
+    }
+}
+
+struct MidfaceSummary: Codable {
+    let maxAlarMovement: Double?
+    let meanAlarSymmetry: Double?
+    let meanCheekElevation: Double?
+    let meanMidfaceArea: Double?
+    let meanDynamicShift: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case maxAlarMovement = "max_alar_movement"
+        case meanAlarSymmetry = "mean_alar_symmetry"
+        case meanCheekElevation = "mean_cheek_elevation"
+        case meanMidfaceArea = "mean_midface_area"
+        case meanDynamicShift = "mean_dynamic_shift"
+    }
+}
+
 // Per-frame slice — only the fields v1 charts need. The file has 50+ per frame;
 // extra keys are ignored. `frame` is a JSON float (1.0), so decode as Double.
 struct FrameMetrics: Codable {
@@ -108,6 +168,8 @@ struct FrameMetrics: Codable {
     let eyeClosureCompletenessR: Double?
     let eyeClosureCompletenessL: Double?
     let synkScore: Double?
+    let browElevation: Double?       // drives the Brow Elevation trend chart
+    let cupidBowDeviation: Double?   // midface: max abs over frames = "deviation"
 
     enum CodingKeys: String, CodingKey {
         case frame
@@ -115,5 +177,7 @@ struct FrameMetrics: Codable {
         case eyeClosureCompletenessR = "eye_closure_completeness_r"
         case eyeClosureCompletenessL = "eye_closure_completeness_l"
         case synkScore = "synk_score"
+        case browElevation = "brow_elevation"
+        case cupidBowDeviation = "cupid_bow_deviation"
     }
 }

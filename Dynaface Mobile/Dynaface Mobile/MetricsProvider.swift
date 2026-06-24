@@ -35,7 +35,8 @@ struct MockMetricsProvider: MetricsProviding {
         return FacialMetricsReport(
             jobId: nil, userId: nil, inputObjectName: nil, videoPath: nil,
             annotatedVideoPath: nil, resultsJsonPath: nil, generatedAt: nil,
-            summary: MetricsSummary(eye: nil, synkinesis: nil, global: nil),
+            summary: MetricsSummary(eye: nil, synkinesis: nil, global: nil,
+                                    smile: nil, brow: nil, midface: nil),
             perFrame: []
         )
     }()

@@ -55,8 +55,8 @@ enum AnalysisDomain: String, CaseIterable, Identifiable {
         }
     }
 
-    /// v1 ships detail pages only for Eye + Synkinesis.
-    var hasDetailV1: Bool { self == .eye || self == .synkinesis }
+    /// All five domains now have detail pages.
+    var hasDetailV1: Bool { true }
 
     /// Synkinesis is a severity score (higher = worse); functional domains are
     /// the opposite (higher = better).
@@ -122,14 +122,31 @@ struct SynkDetailModel {
     let rows: [SynkRowVM]
 }
 
+struct SmileDetailModel {
+    let badgeText: String
+    let badgeSeverity: MetricSeverity
+    let commissureLeft: Double      // max_commissure_exc_l
+    let commissureRight: Double     // max_commissure_exc_r
+    let rows: [MetricRowVM]
+}
+
+struct BrowDetailModel {
+    let badgeText: String
+    let badgeSeverity: MetricSeverity
+    let rows: [MetricRowVM]
+    let trend: [ChartPoint]         // per-frame brow elevation
+}
+
+struct MidfaceDetailModel {
+    let badgeText: String
+    let badgeSeverity: MetricSeverity
+    let rows: [MetricRowVM]
+    let contourCaption: String
+}
+
 // MARK: - Mapper
 
 enum AnalysisPresentation {
-
-    // Placeholder bar values for domains without a v1 formula (Smile/Brow/Midface).
-    // Mocked to the prototype's home values; replaced once those domains ship.
-    private static let placeholderPercents: [AnalysisDomain: Int] =
-        [.smile: 72, .brow: 63, .midface: 64]
 
     // MARK: Home
 
@@ -148,9 +165,15 @@ enum AnalysisPresentation {
                 bars.append(DomainBar(domain: .eye, percent: eyePct, severity: functionSeverity(eyePct)))
             case .synkinesis:
                 bars.append(DomainBar(domain: .synkinesis, percent: synkPct, severity: synkSeverity(synkVal).severity))
-            default:
-                let p = placeholderPercents[domain] ?? 0
-                bars.append(DomainBar(domain: domain, percent: p, severity: functionSeverity(p)))
+            case .smile:
+                let p = smileScore(report.summary.smile)
+                bars.append(DomainBar(domain: .smile, percent: p, severity: functionSeverity(p)))
+            case .brow:
+                let p = browScore(report.summary.brow)
+                bars.append(DomainBar(domain: .brow, percent: p, severity: functionSeverity(p)))
+            case .midface:
+                let p = midfaceScore(report.summary.midface)
+                bars.append(DomainBar(domain: .midface, percent: p, severity: functionSeverity(p)))
             }
         }
 
@@ -245,6 +268,78 @@ enum AnalysisPresentation {
         )
     }
 
+    // MARK: Smile detail (smile_module — fully data-backed)
+
+    static func smileDetail(_ report: FacialMetricsReport) -> SmileDetailModel {
+        let s = report.summary.smile
+        let symmetry = s?.meanSmileSymmetry ?? 0
+        let score = smileScore(s)
+        let sev = functionSeverity(score)
+        let vectorDiff = abs((s?.maxSmileVectorL ?? 0) - (s?.maxSmileVectorR ?? 0))
+        let rows: [MetricRowVM] = [
+            MetricRowVM(label: "Smile Symmetry Ratio", affected: num(symmetry), normal: nil,
+                        severity: functionSeverity(Int((symmetry * 100).rounded()))),
+            MetricRowVM(label: "FAI / Vector Difference", affected: mm(vectorDiff), normal: nil,
+                        severity: vectorDiff > 3 ? .caution : .normal),
+            MetricRowVM(label: "Dental Show", affected: mm(s?.maxDentalShow ?? 0), normal: nil, severity: nil),
+            MetricRowVM(label: "Smile Velocity", affected: speed(s?.meanSmileVelocity ?? 0), normal: nil, severity: nil),
+            MetricRowVM(label: "Smile Magnitude", affected: num(s?.maxSmileMagnitude ?? 0), normal: nil, severity: nil),
+        ]
+        return SmileDetailModel(
+            badgeText: "\(score) \(severityWord(sev))",
+            badgeSeverity: sev,
+            commissureLeft: s?.maxCommissureExcL ?? 0,
+            commissureRight: s?.maxCommissureExcR ?? 0,
+            rows: rows
+        )
+    }
+
+    // MARK: Brow detail (brow_module — single values; no per-side data yet)
+
+    static func browDetail(_ report: FacialMetricsReport) -> BrowDetailModel {
+        let b = report.summary.brow
+        let symmetry = b?.meanBrowSymmetry ?? 0
+        let score = browScore(b)
+        let sev = functionSeverity(score)
+        let rows: [MetricRowVM] = [
+            MetricRowVM(label: "Brow Elevation (max)", affected: mm(b?.maxBrowElevation ?? 0), normal: nil, severity: nil),
+            MetricRowVM(label: "Brow Symmetry", affected: num(symmetry), normal: nil,
+                        severity: functionSeverity(Int((symmetry * 100).rounded()))),
+            MetricRowVM(label: "Recruitment Ratio", affected: num(b?.meanRecruitmentRatio ?? 0), normal: nil, severity: nil),
+        ]
+        return BrowDetailModel(
+            badgeText: "\(score) \(severityWord(sev))",
+            badgeSeverity: sev,
+            rows: rows,
+            trend: series(report) { $0.browElevation }
+        )
+    }
+
+    // MARK: Midface detail (midface_module + per-frame cupid's bow)
+
+    static func midfaceDetail(_ report: FacialMetricsReport) -> MidfaceDetailModel {
+        let m = report.summary.midface
+        let alarSym = m?.meanAlarSymmetry ?? 0
+        let score = midfaceScore(m)
+        let sev = functionSeverity(score)
+        let cupid = report.perFrame.compactMap { $0.cupidBowDeviation }.map(abs).max() ?? 0
+        let rows: [MetricRowVM] = [
+            MetricRowVM(label: "Alar Symmetry", affected: num(alarSym), normal: nil,
+                        severity: functionSeverity(Int((alarSym * 100).rounded()))),
+            MetricRowVM(label: "Alar Movement (max)", affected: mm(m?.maxAlarMovement ?? 0), normal: nil, severity: nil),
+            MetricRowVM(label: "Cheek Elevation (mean)", affected: mm(m?.meanCheekElevation ?? 0), normal: nil, severity: nil),
+            MetricRowVM(label: "Cupid's Bow Deviation", affected: mm(cupid), normal: nil, severity: nil),
+            MetricRowVM(label: "Dynamic Cupid's Bow Shift", affected: mm(m?.meanDynamicShift ?? 0), normal: nil, severity: nil),
+            MetricRowVM(label: "Upper Lip 2D Area", affected: num(m?.meanMidfaceArea ?? 0), normal: nil, severity: nil),
+        ]
+        return MidfaceDetailModel(
+            badgeText: "\(score) \(severityWord(sev))",
+            badgeSeverity: sev,
+            rows: rows,
+            contourCaption: "2D contour proxy — not true volumetric measurement"
+        )
+    }
+
     // MARK: - Scores & thresholds (v1-provisional; clinically uncalibrated)
 
     /// Eye composite 0-100. Per expert recommendation, ANCHORED ON THE
@@ -275,6 +370,31 @@ enum AnalysisPresentation {
                 + 0.20 * areaSymmetry
                 - 0.15 * eyelidSynk
         return Int((max(0, min(1, raw)) * 100).rounded())
+    }
+
+    /// Smile composite 0-100 (v1-provisional): symmetry + commissure symmetry.
+    static func smileScore(_ s: SmileSummary?) -> Int {
+        let symmetry = s?.meanSmileSymmetry ?? 0
+        let cl = s?.maxCommissureExcL ?? 0
+        let cr = s?.maxCommissureExcR ?? 0
+        let hi = max(cl, cr)
+        let commissureSym = hi > 0 ? min(cl, cr) / hi : 0
+        let raw = 0.6 * symmetry + 0.4 * commissureSym
+        return Int((max(0, min(1, raw)) * 100).rounded())
+    }
+
+    /// Brow composite 0-100 (v1-provisional): symmetry + recruitment.
+    static func browScore(_ b: BrowSummary?) -> Int {
+        let symmetry = b?.meanBrowSymmetry ?? 0
+        let recruit = min(max(b?.meanRecruitmentRatio ?? 0, 0), 1)
+        let raw = 0.7 * symmetry + 0.3 * recruit
+        return Int((max(0, min(1, raw)) * 100).rounded())
+    }
+
+    /// Midface composite 0-100 (v1-provisional): driven by alar symmetry.
+    static func midfaceScore(_ m: MidfaceSummary?) -> Int {
+        let alarSym = min(max(m?.meanAlarSymmetry ?? 0, 0), 1)
+        return Int((alarSym * 100).rounded())
     }
 
     /// Functional-domain color: higher % is better.
@@ -310,6 +430,7 @@ enum AnalysisPresentation {
     private static func pct(_ v: Double) -> String { "\(Int((v * 100).rounded()))%" }
     private static func num(_ v: Double) -> String { String(format: "%.2f", v) }
     private static func speed(_ v: Double) -> String { String(format: "%.1f /s", v) }
+    private static func mm(_ v: Double) -> String { String(format: "%.1fmm", v) }
 
     private static func series(_ report: FacialMetricsReport,
                                _ pick: (FrameMetrics) -> Double?) -> [ChartPoint] {
