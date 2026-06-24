@@ -1,5 +1,6 @@
 import SwiftUI
-import Supabase
+import FirebaseFirestore
+import FirebaseStorage
 
 // MARK: - PatientVideoTabs
 //
@@ -9,19 +10,19 @@ import Supabase
 //
 //   1. Self-recorded jobs — `processing_jobs.user_id = patient.id`
 //      (the patient recorded on their own device).
-//   2. Attribution-linked jobs — rows in `job_patient_attributions`
+//   2. Attribution-linked jobs — documents in `job_patient_attributions`
 //      where `patient_id = patient.id` (typically a clinician
 //      recorded for the patient and picked them in the post-upload
 //      attribution sheet).
 //
-// We don't UNION server-side because the two queries have different
-// shapes (one filters by user_id, the other looks up by job_id), and
-// Supabase's PostgREST does not expose a single endpoint for that
-// without a custom view. Two round-trips, merge in Swift.
+// We don't union server-side because the two queries have different
+// shapes (one filters by user_id, the other looks up by document ID),
+// and Firestore doesn't support that kind of join either. Two round-trips,
+// merge in Swift — same approach as the old Supabase version.
 
 // MARK: - PatientHistoryTab
 //
-// Every processing_jobs row for this patient regardless of status.
+// Every processing_jobs document for this patient regardless of status.
 // Renders a simple chronological list — date, exercise, status pill.
 
 struct PatientHistoryTab: View {
@@ -151,14 +152,11 @@ struct PatientHistoryTab: View {
         do {
             let merged = try await fetchAllJobs(
                 forPatient: patientId,
-                supabase: authService.supabaseClient,
                 attributionService: attributionService,
                 onlyCompleted: false
             )
             self.jobs = merged
         } catch is CancellationError {
-            return
-        } catch let urlError as URLError where urlError.code == .cancelled {
             return
         } catch {
             errorMessage = "Couldn't load recordings: \(error.localizedDescription)"
@@ -170,7 +168,7 @@ struct PatientHistoryTab: View {
         activeDownloadJobId = job.id
         defer { activeDownloadJobId = nil }
         do {
-            let url = try await signedRawVideoURL(for: job, supabase: authService.supabaseClient)
+            let url = try await signedRawVideoURL(for: job)
             selectedVideo = PatientProcessedPlayback(
                 id: job.id,
                 playbackURL: url,
@@ -185,13 +183,10 @@ struct PatientHistoryTab: View {
     }
 
     private func displayDate(for job: PatientJobRow) -> String {
-        guard let raw = job.created_at,
-              let parsed = ISO8601DateFormatter.flexible.date(from: raw) else {
-            return "Unknown date"
-        }
+        guard let date = job.created_at else { return "Unknown date" }
         let f = DateFormatter()
         f.dateFormat = "MMM d, yyyy 'at' h:mm a"
-        return f.string(from: parsed)
+        return f.string(from: date)
     }
 }
 
@@ -256,13 +251,12 @@ struct PatientVideosTab: View {
 
 // MARK: - PatientProcessedTab
 //
-// Only completed jobs — i.e. processing_jobs rows with status =
+// Only completed jobs — i.e. processing_jobs documents with status =
 // 'completed' AND an output_video_path. Used by clinicians (and
 // the patient themselves) to find the annotated result video.
 
 struct PatientProcessedTab: View {
     let patientId: UUID
-    private let resultsBucket = "results"
 
     @EnvironmentObject private var authService: AuthenticationService
     @EnvironmentObject private var attributionService: JobAttributionService
@@ -385,7 +379,6 @@ struct PatientProcessedTab: View {
         do {
             let merged = try await fetchAllJobs(
                 forPatient: patientId,
-                supabase: authService.supabaseClient,
                 attributionService: attributionService,
                 onlyCompleted: true
             )
@@ -394,8 +387,6 @@ struct PatientProcessedTab: View {
                 return !(out?.isEmpty ?? true)
             }
         } catch is CancellationError {
-            return
-        } catch let urlError as URLError where urlError.code == .cancelled {
             return
         } catch {
             errorMessage = "Couldn't load processed videos: \(error.localizedDescription)"
@@ -410,7 +401,7 @@ struct PatientProcessedTab: View {
         defer { activeDownloadJobId = nil }
 
         do {
-            let playbackURL = try await signedPlayableURL(for: job)
+            let playbackURL = try await signedProcessedVideoURL(for: job)
             selectedVideo = PatientProcessedPlayback(
                 id: job.id,
                 playbackURL: playbackURL,
@@ -420,32 +411,15 @@ struct PatientProcessedTab: View {
         } catch is CancellationError {
             return
         } catch {
-            if isCancellationLike(error) { return }
             errorMessage = error.localizedDescription
         }
     }
 
-    private func signedPlayableURL(for job: PatientJobRow) async throws -> URL {
-        try await signedProcessedVideoURL(for: job, supabase: authService.supabaseClient)
-    }
-
-    private func isCancellationLike(_ error: Error) -> Bool {
-        let nsError = error as NSError
-        if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorCancelled {
-            return true
-        }
-        let text = error.localizedDescription.lowercased()
-        return text.contains("cancelled") || text.contains("canceled")
-    }
-
     private func displayDate(for job: PatientJobRow) -> String {
-        guard let raw = job.created_at,
-              let parsed = ISO8601DateFormatter.flexible.date(from: raw) else {
-            return "Unknown date"
-        }
+        guard let date = job.created_at else { return "Unknown date" }
         let f = DateFormatter()
         f.dateFormat = "MMM d, yyyy 'at' h:mm a"
-        return f.string(from: parsed)
+        return f.string(from: date)
     }
 }
 
@@ -461,75 +435,64 @@ private struct PatientProcessedPlayback: Identifiable {
 // MARK: - Shared processed-video path resolution
 //
 // Single source of truth for turning a job's stored output path into the
-// candidate object paths in the `results` bucket. Used by BOTH the
-// Processed tab and TimelinePage so playback resolves identically.
+// candidate object paths in the results bucket. Used by BOTH the
+// Processed tab and TimelinePage (via AssessmentVideoDetailView) so
+// playback resolves identically. Paths are full in-bucket object paths
+// (e.g. "results/{user}/{job}/annotated.mp4") exactly as
+// google_remote_dynaface_worker.py writes them — no bucket-name prefix
+// to strip, unlike the old Supabase setup where the bucket happened to
+// also be named "results".
 
 func processedVideoPathCandidates(
     outputVideoPath: String?,
     outputCsvPath: String?,
     userId: UUID?,
-    jobId: UUID,
-    resultsBucket: String = "results"
+    jobId: UUID
 ) -> [String] {
-    func normalize(_ path: String) -> String {
-        let prefix = "\(resultsBucket)/"
-        return path.hasPrefix(prefix) ? String(path.dropFirst(prefix.count)) : path
+    let base = outputVideoPath ?? outputCsvPath ?? ""
+    var candidates: [String] = [base]
+
+    if base.hasSuffix(".mov") {
+        candidates.append(String(base.dropLast(4)) + ".mp4")
+    } else if base.hasSuffix(".mp4") {
+        candidates.append(String(base.dropLast(4)) + ".mov")
+    } else if base.hasSuffix(".csv") {
+        let stem = String(base.dropLast(4))
+        candidates.append(stem + ".mp4")
+        candidates.append(stem + ".mov")
     }
 
-    let normalized = normalize(outputVideoPath ?? outputCsvPath ?? "")
-    var candidates: [String] = [normalized]
-
-    if normalized.hasSuffix(".mov") {
-        candidates.append(String(normalized.dropLast(4)) + ".mp4")
-    } else if normalized.hasSuffix(".mp4") {
-        candidates.append(String(normalized.dropLast(4)) + ".mov")
-    } else if normalized.hasSuffix(".csv") {
-        let base = String(normalized.dropLast(4))
-        candidates.append(base + ".mp4")
-        candidates.append(base + ".mov")
-    }
-
-    let directory = (normalized as NSString).deletingLastPathComponent
+    let directory = (base as NSString).deletingLastPathComponent
     if !directory.isEmpty {
         candidates.append("\(directory)/annotated.mp4")
         candidates.append("\(directory)/annotated.mov")
     }
 
+    // Canonical worker output convention fallback.
     if let userId {
-        candidates.append("\(userId.uuidString)/\(jobId.uuidString)/annotated.mp4")
-        candidates.append("\(userId.uuidString)/\(jobId.uuidString)/annotated.mov")
+        candidates.append("results/\(userId.uuidString)/\(jobId.uuidString)/annotated.mp4")
+        candidates.append("results/\(userId.uuidString)/\(jobId.uuidString)/annotated.mov")
     }
 
-    var seen = Set<String>()
-    var deduped: [String] = []
-    for c in candidates where !c.isEmpty {
-        if !seen.contains(c) {
-            seen.insert(c)
-            deduped.append(c)
-        }
-    }
-    return deduped
+    return dedupeNonEmpty(candidates)
 }
 
 /// The one and only "play this job's processed video" resolver. Called by
 /// both the Processed tab and the timeline so playback is identical.
-func signedProcessedVideoURL(
-    for job: PatientJobRow,
-    supabase: SupabaseClient,
-    resultsBucket: String = "results"
-) async throws -> URL {
+/// `downloadURL()` returns an authenticated, directly-playable HTTPS URL —
+/// storage.rules (not a Supabase signed URL) is what gates access.
+func signedProcessedVideoURL(for job: PatientJobRow) async throws -> URL {
     let candidates = processedVideoPathCandidates(
         outputVideoPath: job.output_video_path,
         outputCsvPath: job.output_csv_path,
         userId: job.user_id,
         jobId: job.id
     )
+    let storage = Storage.storage(url: FirebaseConfig.resultsBucketURL)
     var lastError: Error?
     for path in candidates {
         do {
-            return try await supabase.storage
-                .from(resultsBucket)
-                .createSignedURL(path: path, expiresIn: 3600)
+            return try await storage.reference(withPath: path).downloadURL()
         } catch {
             lastError = error
             continue
@@ -542,36 +505,26 @@ func signedProcessedVideoURL(
     )
 }
 
-/// "Original" (raw) recording URL: `{user_id}/{job_id}/video.{mov|mp4}` in
-/// the raw-videos bucket. Used by the patient Videos "Original" segment.
-func signedRawVideoURL(
-    for job: PatientJobRow,
-    supabase: SupabaseClient,
-    rawVideosBucket: String = "raw-videos"
-) async throws -> URL {
+/// "Original" (raw) recording URL: `uploads/{user_id}/{job_id}/video.{mov|mp4}`
+/// in the raw videos bucket. Used by the patient Videos "Original" segment.
+func signedRawVideoURL(for job: PatientJobRow) async throws -> URL {
     var candidates: [String] = []
     // Prefer the exact stored upload path (mirrors how Analyzed uses
     // output_video_path), then fall back to the canonical convention.
     if let input = job.input_video_path, !input.isEmpty {
-        let prefix = "\(rawVideosBucket)/"
-        candidates.append(input.hasPrefix(prefix) ? String(input.dropFirst(prefix.count)) : input)
+        candidates.append(input)
     }
     if let userId = job.user_id {
-        candidates.append("\(userId.uuidString)/\(job.id.uuidString)/video.mov")
-        candidates.append("\(userId.uuidString)/\(job.id.uuidString)/video.mp4")
+        candidates.append("uploads/\(userId.uuidString)/\(job.id.uuidString)/video.mov")
+        candidates.append("uploads/\(userId.uuidString)/\(job.id.uuidString)/video.mp4")
     }
-    var seen = Set<String>()
-    var deduped: [String] = []
-    for c in candidates where !c.isEmpty {
-        if seen.insert(c).inserted { deduped.append(c) }
-    }
+    let deduped = dedupeNonEmpty(candidates)
 
+    let storage = Storage.storage(url: FirebaseConfig.rawVideosBucketURL)
     var lastError: Error?
     for path in deduped {
         do {
-            return try await supabase.storage
-                .from(rawVideosBucket)
-                .createSignedURL(path: path, expiresIn: 3600)
+            return try await storage.reference(withPath: path).downloadURL()
         } catch {
             lastError = error
             continue
@@ -581,19 +534,27 @@ func signedRawVideoURL(
                               userInfo: [NSLocalizedDescriptionKey: "Original recording not found in storage."])
 }
 
+private func dedupeNonEmpty(_ values: [String]) -> [String] {
+    var seen = Set<String>()
+    var deduped: [String] = []
+    for v in values where !v.isEmpty {
+        if seen.insert(v).inserted { deduped.append(v) }
+    }
+    return deduped
+}
+
 // MARK: - AssessmentVideoDetailView
 //
 // Opened from a timeline movement. Flips between the Original (raw) and
 // Processed (annotated) version of that one recording. Works for clinicians
-// (any patient, registered or not) and the patient themselves — storage RLS
-// gates what each can actually read.
+// (any patient, registered or not) and the patient themselves — storage
+// rules gate what each can actually read.
 
 struct AssessmentVideoDetailView: View {
     let jobId: UUID
     let title: String
     let dateText: String
 
-    @EnvironmentObject private var authService: AuthenticationService
     @Environment(\.dismiss) private var dismiss
 
     enum Segment: String, CaseIterable, Identifiable {
@@ -661,13 +622,15 @@ struct AssessmentVideoDetailView: View {
     private func resolve() async {
         if job == nil {
             do {
-                job = try await authService.supabaseClient
-                    .from("processing_jobs")
-                    .select()
-                    .eq("id", value: jobId.uuidString)
-                    .single()
-                    .execute()
-                    .value
+                let snapshot = try await Firestore.firestore()
+                    .collection("processing_jobs")
+                    .document(jobId.uuidString)
+                    .getDocument()
+                guard let data = snapshot.data() else {
+                    errorMessage = "Couldn't load this recording."
+                    return
+                }
+                job = decodeJobRow(id: jobId.uuidString, data: data)
             } catch {
                 errorMessage = "Couldn't load this recording."
                 return
@@ -682,9 +645,9 @@ struct AssessmentVideoDetailView: View {
         do {
             switch segment {
             case .processed:
-                url = try await signedProcessedVideoURL(for: job, supabase: authService.supabaseClient)
+                url = try await signedProcessedVideoURL(for: job)
             case .original:
-                url = try await signedRawVideoURL(for: job, supabase: authService.supabaseClient)
+                url = try await signedRawVideoURL(for: job)
             }
         } catch {
             errorMessage = (segment == .processed)
@@ -697,14 +660,13 @@ struct AssessmentVideoDetailView: View {
 // MARK: - Shared fetch helper
 //
 // Two round-trips against `processing_jobs`:
-//   1. user_id = patient.id  (self-recorded)
-//   2. id IN (attribution job_ids)  (clinician-recorded, attributed)
+//   1. user_id == patient.id  (self-recorded)
+//   2. document ID IN (attribution job ids)  (clinician-recorded, attributed)
 // Then merge + dedupe + sort newest first.
 
 @MainActor
 func fetchAllJobs(
     forPatient patientId: UUID,
-    supabase: SupabaseClient,
     attributionService: JobAttributionService,
     onlyCompleted: Bool
 ) async throws -> [PatientJobRow] {
@@ -713,44 +675,43 @@ func fetchAllJobs(
     //    here we still return whatever the user-side query gives.
     let attributedIds = await attributionService.loadAttributedJobIds(forPatient: patientId)
 
-    // 2. Self-recorded jobs (processing_jobs.user_id == patientId).
-    //    Select all columns — the table may not have output_video_path /
-    //    output_csv_path (Alex's worker adds these later). PostgREST
-    //    errors on missing named columns, but "*" tolerates absence.
-    var selfQuery = supabase
-        .from("processing_jobs")
-        .select()
-        .eq("user_id", value: patientId.uuidString)
-    if onlyCompleted {
-        selfQuery = selfQuery.eq("status", value: "completed")
-    }
-    let selfJobs: [PatientJobRow] = try await selfQuery
-        .order("created_at", ascending: false)
-        .execute()
-        .value
+    let db = Firestore.firestore()
 
-    // 3. Attribution-linked jobs that aren't already in selfJobs.
+    // 2. Self-recorded jobs (processing_jobs.user_id == patientId).
+    var selfQuery: Query = db.collection("processing_jobs")
+        .whereField("user_id", isEqualTo: patientId.uuidString)
+    if onlyCompleted {
+        selfQuery = selfQuery.whereField("status", isEqualTo: "completed")
+    }
+    let selfSnapshot = try await selfQuery.getDocuments()
+    let selfJobs = selfSnapshot.documents.compactMap { decodeJobRow(id: $0.documentID, data: $0.data()) }
+
+    // 3. Attribution-linked jobs that aren't already in selfJobs. Firestore
+    //    "in" queries cap at 30 values, so chunk defensively.
     let selfIds = Set(selfJobs.map(\.id))
-    let extraIds = attributedIds.subtracting(selfIds)
+    let extraIds = Array(attributedIds.subtracting(selfIds))
 
     var attributedJobs: [PatientJobRow] = []
-    if !extraIds.isEmpty {
-        var attrQuery = supabase
-            .from("processing_jobs")
-            .select()
-            .in("id", values: extraIds.map { $0.uuidString })
+    for chunk in chunked(extraIds, size: 30) {
+        var attrQuery: Query = db.collection("processing_jobs")
+            .whereField(FieldPath.documentID(), in: chunk.map { $0.uuidString })
         if onlyCompleted {
-            attrQuery = attrQuery.eq("status", value: "completed")
+            attrQuery = attrQuery.whereField("status", isEqualTo: "completed")
         }
-        attributedJobs = try await attrQuery
-            .execute()
-            .value
+        let snapshot = try await attrQuery.getDocuments()
+        attributedJobs.append(contentsOf: snapshot.documents.compactMap { decodeJobRow(id: $0.documentID, data: $0.data()) })
     }
 
-    // 4. Merge + sort newest first by the raw created_at string. The
-    //    server returns ISO 8601, which sorts lexicographically.
+    // 4. Merge + sort newest first.
     return (selfJobs + attributedJobs)
-        .sorted { ($0.created_at ?? "") > ($1.created_at ?? "") }
+        .sorted { ($0.created_at ?? .distantPast) > ($1.created_at ?? .distantPast) }
+}
+
+private func chunked<T>(_ array: [T], size: Int) -> [[T]] {
+    guard size > 0, !array.isEmpty else { return array.isEmpty ? [] : [array] }
+    return stride(from: 0, to: array.count, by: size).map {
+        Array(array[$0..<min($0 + size, array.count)])
+    }
 }
 
 // MARK: - Self-view detection
@@ -771,29 +732,44 @@ private func isOwnDetail(_ patientId: UUID, authService: AuthenticationService) 
 
 // MARK: - Shared row + decode model
 
-struct PatientJobRow: Identifiable, Decodable, Hashable {
+struct PatientJobRow: Identifiable, Hashable {
     let id: UUID
     let exercise_name: String?
     let status: String?
-    let created_at: String?
+    let created_at: Date?
     let output_video_path: String?
     let output_csv_path: String?
     let input_video_path: String?
     let user_id: UUID?
 }
 
+/// Internal (not private) — reused by ExerciseHistoryPage's ProcessedVideosPage
+/// so both views decode `processing_jobs` documents identically.
+func decodeJobRow(id: String, data: [String: Any]) -> PatientJobRow? {
+    guard let uuid = UUID(uuidString: id) else { return nil }
+    let userId = (data["user_id"] as? String).flatMap(UUID.init(uuidString:))
+    let createdAt = (data["created_at"] as? Timestamp)?.dateValue()
+    return PatientJobRow(
+        id: uuid,
+        exercise_name: data["exercise_name"] as? String,
+        status: data["status"] as? String,
+        created_at: createdAt,
+        output_video_path: data["output_video_path"] as? String,
+        output_csv_path: data["output_csv_path"] as? String,
+        input_video_path: data["input_video_path"] as? String,
+        user_id: userId
+    )
+}
+
 private struct PatientJobListRow: View {
     let job: PatientJobRow
 
     private var displayDate: String {
-        guard let raw = job.created_at,
-              let parsed = ISO8601DateFormatter.flexible.date(from: raw) else {
-            return "Unknown date"
-        }
+        guard let date = job.created_at else { return "Unknown date" }
         let f = DateFormatter()
         f.dateStyle = .medium
         f.timeStyle = .short
-        return f.string(from: parsed)
+        return f.string(from: date)
     }
 
     private var statusColor: Color {
@@ -825,14 +801,4 @@ private struct PatientJobListRow: View {
         }
         .padding(.vertical, 4)
     }
-}
-
-// MARK: - ISO8601 helper
-
-private extension ISO8601DateFormatter {
-    static let flexible: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
 }

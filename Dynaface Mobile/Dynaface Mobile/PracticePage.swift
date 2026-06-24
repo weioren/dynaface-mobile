@@ -363,7 +363,7 @@ struct PracticePage: View {
         uploadedCount = 0
 
         do {
-            let uploader = VideoUploadService(supabase: authService.supabaseClient)
+            let uploader = VideoUploadService()
             var collected: [(jobId: UUID, exerciseName: String)] = []
 
             for i in exercises.indices {

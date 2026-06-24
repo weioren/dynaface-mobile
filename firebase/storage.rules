@@ -1,0 +1,50 @@
+rules_version = '2';
+
+// Deployed identically to BOTH the raw-videos bucket and the results
+// bucket (see firebase.json's two storage targets) — the path prefix
+// ("uploads/" vs "results/") is what differs, not the bucket.
+//
+// NOTE: `firestore.get(...)` cross-service rule reads are a real Firebase
+// Storage Rules v2 feature, but I couldn't deploy/test this myself (no
+// GCP console access) — please verify the exact path syntax for your
+// Firestore database id (it's usually "(default)") the first time you
+// run `firebase deploy --only storage` and fix up if the syntax has
+// drifted from this version.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function hasAppUid() {
+      return isSignedIn() && request.auth.token.app_uid is string;
+    }
+
+    function callerAppUid() {
+      return request.auth.token.app_uid;
+    }
+
+    function isClinician() {
+      return hasAppUid()
+        && firestore.get(/databases/(default)/documents/profiles/$(callerAppUid())).data.account_type == "clinician";
+    }
+
+    // Raw uploads: uploads/{userId}/{jobId}/video.{ext}
+    // Owner read/write (the upload itself); clinicians read-only so they
+    // can review a patient's original recording.
+    match /uploads/{userId}/{jobId}/{fileName} {
+      allow read: if hasAppUid() && (userId == callerAppUid() || isClinician());
+      allow write: if hasAppUid() && userId == callerAppUid();
+    }
+
+    // Processed results: results/{userId}/{jobId}/{annotated.mp4,results.json,peak_frame.png}
+    // Written only by google_remote_dynaface_worker.py via a service
+    // account (Admin SDK / GCS client — bypasses these rules entirely).
+    // Clients only ever read.
+    match /results/{userId}/{jobId}/{fileName} {
+      allow read: if hasAppUid() && (userId == callerAppUid() || isClinician());
+      allow write: if false;
+    }
+  }
+}
