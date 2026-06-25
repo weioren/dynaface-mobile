@@ -56,7 +56,6 @@ enum AuthState {
     /// layer reads `accountType` to decide whether to show the patient
     /// symptom survey or jump straight to the clinician welcome page.
     case accountCreated(email: String, accountType: AccountType)
-    case error(String)
 }
 
 // MARK: - Authentication Errors
@@ -112,6 +111,11 @@ final class AuthViewModel: ObservableObject {
 final class AuthenticationService: ObservableObject {
     @Published var authState: AuthState = .loading
     @Published var isLoading = false
+    /// Transient auth error surfaced inline (an alert) on the sign-in /
+    /// sign-up forms. Replaces the old global `.error` state that took over
+    /// the whole UI and stranded the user. Cleared at the start of each
+    /// attempt and when the form's alert is dismissed.
+    @Published var authError: String?
 
     // Store account creation data temporarily across the two-step signup flow
     private var pendingUsername: String = ""
@@ -230,6 +234,7 @@ final class AuthenticationService: ObservableObject {
     // MARK: - Create Account (Step 1)
     func createAccount(email: String, username: String, password: String, accountType: AccountType) async {
         isLoading = true
+        authError = nil
         defer { isLoading = false }
 
         print("Starting account creation for email: \(email), accountType: \(accountType.rawValue)")
@@ -241,7 +246,7 @@ final class AuthenticationService: ObservableObject {
         // effect — avoids orphan Firebase Auth users when username conflicts.
         let usernameOK = await isUsernameAvailable(username)
         if !usernameOK {
-            authState = .error("Username has been registered")
+            authError = "Username has been registered"
             return
         }
 
@@ -260,9 +265,9 @@ final class AuthenticationService: ObservableObject {
 
             let msg = error.localizedDescription.lowercased()
             if msg.contains("already") || msg.contains("registered") || msg.contains("exists") || msg.contains("in use") {
-                authState = .error("Email has been registered")
+                authError = "Email has been registered"
             } else {
-                authState = .error("Failed to create account: \(error.localizedDescription)")
+                authError = "Failed to create account: \(error.localizedDescription)"
             }
         }
     }
@@ -279,10 +284,13 @@ final class AuthenticationService: ObservableObject {
     // with the current user's ID token.
     func completeProfile(email: String, surveyResponses: SurveyResponses?) async {
         isLoading = true
+        authError = nil
         defer { isLoading = false }
 
         guard let user = Auth.auth().currentUser else {
-            authState = .error("Failed to create account. Please try again or contact support.")
+            // Broken session (no Firebase user) — recover to the auth selector.
+            authError = "Failed to create account. Please try again or contact support."
+            authState = .signedOut
             return
         }
 
@@ -306,7 +314,8 @@ final class AuthenticationService: ObservableObject {
             print("Profile completion successful")
         } catch {
             print("Profile completion error: \(error)")
-            authState = .error("Failed to create account. Please try again or contact support.")
+            // Stay on the survey (.accountCreated) so the user can retry submit.
+            authError = "Failed to create account. Please try again or contact support."
         }
     }
 
@@ -373,18 +382,22 @@ final class AuthenticationService: ObservableObject {
     // MARK: - Sign In
     func signIn(email: String, password: String) async {
         isLoading = true
+        authError = nil
         defer { isLoading = false }
 
         do {
             let result = try await Auth.auth().signIn(withEmail: email, password: password)
             let tokenResult = try await result.user.getIDTokenResult()
             guard let appUid = tokenResult.claims["app_uid"] as? String else {
-                authState = .error("This account hasn't finished setup. Please contact support.")
+                // Signed in to Firebase but profile setup never finished —
+                // drop the half-session and surface the message on the form.
+                try? Auth.auth().signOut()
+                authError = "This account hasn't finished setup. Please contact support."
                 return
             }
             try await loadProfile(for: appUid)
         } catch {
-            authState = .error(error.localizedDescription)
+            authError = error.localizedDescription
         }
     }
 
@@ -401,11 +414,12 @@ final class AuthenticationService: ObservableObject {
     // than passed per-call like Supabase's `redirectTo`.
     func resetPassword(email: String) async {
         isLoading = true
+        authError = nil
         defer { isLoading = false }
         do {
             try await Auth.auth().sendPasswordReset(withEmail: email)
         } catch {
-            authState = .error(error.localizedDescription)
+            authError = error.localizedDescription
         }
     }
 }
