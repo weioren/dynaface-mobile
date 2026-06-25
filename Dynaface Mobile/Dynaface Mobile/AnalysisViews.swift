@@ -332,14 +332,26 @@ struct SynkinesisDetailView: View {
 
                 VStack(spacing: 0) {
                     ForEach(model.rows) { r in
-                        HStack {
-                            Text(r.label).font(.body)
-                            Spacer()
-                            Text(String(format: "%.2f", r.value))
-                                .fontWeight(.semibold).foregroundColor(r.severity.color)
-                            Text(r.word.uppercased())
-                                .font(.caption2).fontWeight(.semibold)
-                                .foregroundColor(r.severity.color)
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text(r.label).font(.body)
+                                Spacer()
+                                Text(String(format: "%.2f", r.value))
+                                    .fontWeight(.semibold).foregroundColor(r.severity.color)
+                                Text(r.word.uppercased())
+                                    .font(.caption2).fontWeight(.semibold)
+                                    .foregroundColor(r.severity.color)
+                            }
+                            // Per-row severity bar (matches the prototype's
+                            // colored track under each synkinesis metric).
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    Capsule().fill(Color.gray.opacity(0.18))
+                                    Capsule().fill(r.severity.color)
+                                        .frame(width: geo.size.width * CGFloat(min(max(r.value, 0), 1)))
+                                }
+                            }
+                            .frame(height: 6)
                         }
                         .padding(.vertical, 10)
                         if r.id != model.rows.last?.id { Divider() }
