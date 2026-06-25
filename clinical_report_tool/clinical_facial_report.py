@@ -35,30 +35,33 @@ LANDMARK_RE = re.compile(r"^landmark[-_]?([0-9]+)[-_](x|y)$", re.IGNORECASE)
 FRAME_RE = re.compile(r"^frame$|^frame_num$|^frame_number$", re.IGNORECASE)
 TIME_RE = re.compile(r"^time$|^time_sec$|^timestamp$", re.IGNORECASE)
 
-# Landmark indices validated against Dynaface code paths:
-# - FAI: landmarks[64], [76], [68], [82]
-# - Oral commissure excursion: landmarks[76], [82], [85]
-# - Eye area: landmarks[60:68] and [68:76]
-# - Dental area: landmarks[88:96]
-# - Nose frontal: landmarks[52:60], brow anchors: landmarks[35], [44]
-# These indices are therefore used here to remain consistent with dynaface-main.
-RIGHT_EYE_POLY = [60, 61, 62, 63, 64, 65, 66, 67]
-LEFT_EYE_POLY = [68, 69, 70, 71, 72, 73, 74, 75]
-MOUTH_POLY = [88, 89, 90, 91, 92, 93, 94, 95]
-RIGHT_EYE_UPPER = [61, 62, 63]
-RIGHT_EYE_LOWER = [65, 66, 67]
-LEFT_EYE_UPPER = [69, 70, 71]
-LEFT_EYE_LOWER = [73, 74, 75]
-RIGHT_BROW = [35, 36, 37, 38, 39, 40]
-LEFT_BROW = [44, 45, 46, 47, 48, 49]
-NOSE_LEFT = 55
-NOSE_RIGHT = 59
-NOSE_BRIDGE = 52
-NOSE_BASE = 53
-NOSE_TIP = 54
-MOUTH_RIGHT = 76
-MOUTH_LEFT = 82
-MOUTH_CENTER = 85
+# Landmark indices validated against Dynaface code paths. Note: dynaface-main's
+# AnalyzeLandmarks.calc() (measures_frontal.py) exports columns 1-indexed
+# (`n = i + 1  # 1-indexed`), while internal dynaface-main code/docs reference
+# the underlying 0-indexed WFLW list. The indices below are the 1-indexed
+# (export-side) values — i.e. one greater than the internal/WFLW numbers:
+# - FAI: landmarks[65], [77], [69], [83]   (WFLW 64/76/68/82 + 1)
+# - Oral commissure excursion: landmarks[77], [83], [86]   (WFLW 76/82/85 + 1)
+# - Eye area: landmarks[61:69] and [69:77]   (WFLW 60:68/68:76 + 1)
+# - Dental area: landmarks[89:97]   (WFLW 88:96 + 1)
+# - Nose frontal: landmarks[53:61], brow anchors: landmarks[36], [45]   (WFLW + 1)
+RIGHT_EYE_POLY = [61, 62, 63, 64, 65, 66, 67, 68]
+LEFT_EYE_POLY = [69, 70, 71, 72, 73, 74, 75, 76]
+MOUTH_POLY = [89, 90, 91, 92, 93, 94, 95, 96]
+RIGHT_EYE_UPPER = [62, 63, 64]
+RIGHT_EYE_LOWER = [66, 67, 68]
+LEFT_EYE_UPPER = [70, 71, 72]
+LEFT_EYE_LOWER = [74, 75, 76]
+RIGHT_BROW = [36, 37, 38, 39, 40, 41]
+LEFT_BROW = [45, 46, 47, 48, 49, 50]
+NOSE_LEFT = 56
+NOSE_RIGHT = 60
+NOSE_BRIDGE = 53
+NOSE_BASE = 54
+NOSE_TIP = 55
+MOUTH_RIGHT = 77
+MOUTH_LEFT = 83
+MOUTH_CENTER = 86
 
 
 @dataclass
@@ -297,22 +300,84 @@ def split_by_proximity_to_midline(
     return ordered[:near_count], ordered[near_count:]
 
 
-def classify_left_right(
-    indices: list[int], landmarks: dict[int, tuple[float, float]], midline_x: float, right_side_is_smaller_x: bool
+def split_loop_into_margins(
+    loop_idx: list[int], landmarks: dict[int, tuple[float, float]]
 ) -> tuple[list[int], list[int]]:
-    """Split landmark indices into (left, right) groups by x position at rest.
+    """Split a closed, ordered point loop (e.g. the 8-point inner-mouth contour) into
+    its upper and lower margins.
 
-    Sidedness is anchored to MOUTH_RIGHT/MOUTH_LEFT (already-validated named landmarks)
-    rather than assumed, so it stays correct regardless of which side has smaller x.
+    Corners are identified as the two most extreme-x points (data-driven, not a
+    hardcoded position) — the mouth's actual left/right corners. Walking the loop's
+    existing adjacency between them (in both directions) gives the two margins as
+    contiguous arcs, each already including both corners, so each is independently
+    closeable into a valid sub-polygon. The margin with the smaller mean y is "upper".
+
+    A naive y-threshold filter (e.g. "points above the loop's mean y") can scatter
+    across both margins and miss the corners entirely, producing a non-contiguous,
+    anatomically broken point set — this avoids that failure mode.
     """
-    left: list[int] = []
-    right: list[int] = []
-    for i in indices:
-        if i not in landmarks:
-            continue
-        is_smaller = landmarks[i][0] < midline_x
-        (right if is_smaller == right_side_is_smaller_x else left).append(i)
-    return left, right
+    present = [i for i in loop_idx if i in landmarks]
+    if len(present) < 4:
+        return present, present
+
+    corner_a = min(present, key=lambda i: landmarks[i][0])
+    corner_b = max(present, key=lambda i: landmarks[i][0])
+    ia, ib = present.index(corner_a), present.index(corner_b)
+    if ia > ib:
+        ia, ib = ib, ia
+
+    margin1 = present[ia : ib + 1]
+    margin2 = present[ib:] + present[: ia + 1]
+    mean_y1 = mean_y([landmarks[i] for i in margin1])
+    mean_y2 = mean_y([landmarks[i] for i in margin2])
+    return (margin1, margin2) if mean_y1 <= mean_y2 else (margin2, margin1)
+
+
+def clip_polygon_by_x(points: list[tuple[float, float]], midline_x: float, keep_left: bool) -> list[tuple[float, float]]:
+    """Sutherland-Hodgman clip of a closed point loop against the half-plane
+    x < midline_x (keep_left=True) or x >= midline_x (keep_left=False).
+
+    Inserts an interpolated point at each boundary crossing, so a small input
+    point set (e.g. a 4-point lip arc) still yields a valid, non-degenerate
+    sub-polygon instead of silently dropping to <3 points per side.
+    """
+    if len(points) < 2:
+        return []
+
+    def inside(p: tuple[float, float]) -> bool:
+        return (p[0] < midline_x) if keep_left else (p[0] >= midline_x)
+
+    output: list[tuple[float, float]] = []
+    n = len(points)
+    for i in range(n):
+        cur = points[i]
+        prev = points[i - 1]
+        cur_in = inside(cur)
+        prev_in = inside(prev)
+        if cur_in != prev_in:
+            x0, y0 = prev
+            x1, y1 = cur
+            t = (midline_x - x0) / (x1 - x0) if (x1 - x0) != 0 else 0.5
+            output.append((midline_x, y0 + t * (y1 - y0)))
+        if cur_in:
+            output.append(cur)
+    return output
+
+
+def split_area_by_side(
+    points: list[tuple[float, float]], midline_x: float, right_side_is_smaller_x: bool
+) -> tuple[float, float]:
+    """Clip a closed point loop at midline_x and return (area_left, area_right).
+
+    For an open arc (e.g. an upper-lip subset), the loop is implicitly closed by
+    the edge between its first and last point — the same chord-closure convention
+    already used elsewhere in this file (e.g. mouth_area on the full mouth loop).
+    """
+    smaller_x_area = polygon_area(clip_polygon_by_x(points, midline_x, keep_left=True))
+    larger_x_area = polygon_area(clip_polygon_by_x(points, midline_x, keep_left=False))
+    if right_side_is_smaller_x:
+        return larger_x_area, smaller_x_area
+    return smaller_x_area, larger_x_area
 
 
 # ---------------------------------------------------------------------------
@@ -330,7 +395,7 @@ def compute_landmark_metrics(records: list[FrameRecord], metadata: Metadata, res
     rest_landmarks = rest.landmarks
 
     # Reference facial size N: use intercanthal distance from Dynaface landmark convention.
-    n = dist(rest_landmarks[64], rest_landmarks[68]) if 64 in rest_landmarks and 68 in rest_landmarks else 0.0
+    n = dist(rest_landmarks[65], rest_landmarks[69]) if 65 in rest_landmarks and 69 in rest_landmarks else 0.0
     if n <= 0:
         n = 1.0
 
@@ -352,17 +417,11 @@ def compute_landmark_metrics(records: list[FrameRecord], metadata: Metadata, res
     BROW_MEDIAL_R, BROW_LATERAL_R = split_by_proximity_to_midline(RIGHT_BROW, rest_landmarks, rest_x_midline, 3)
     BROW_MEDIAL_L, BROW_LATERAL_L = split_by_proximity_to_midline(LEFT_BROW, rest_landmarks, rest_x_midline, 3)
 
-    # Upper-lip subset of the mouth polygon (points above its mean y at rest), split
-    # left/right of the midline with sidedness anchored to MOUTH_RIGHT/MOUTH_LEFT.
-    mouth_rest_points = poly_points(rest_landmarks, MOUTH_POLY)
-    mouth_rest_mean_y = mean_y(mouth_rest_points) if mouth_rest_points else 0.0
-    upper_lip_idx = [i for i in MOUTH_POLY if i in rest_landmarks and rest_landmarks[i][1] <= mouth_rest_mean_y] or list(MOUTH_POLY)
+    # Upper-lip margin of the mouth polygon (the true upper arc between the two mouth
+    # corners, found structurally rather than via a y-threshold), split left/right of
+    # the midline with sidedness anchored to MOUTH_RIGHT/MOUTH_LEFT.
+    upper_lip_idx, _ = split_loop_into_margins(MOUTH_POLY, rest_landmarks)
     right_side_is_smaller_x = rest_landmarks.get(MOUTH_RIGHT, (rest_x_midline, 0.0))[0] <= rest_landmarks.get(MOUTH_LEFT, (rest_x_midline, 0.0))[0]
-    UPPER_LIP_L, UPPER_LIP_R = classify_left_right(upper_lip_idx, rest_landmarks, rest_x_midline, right_side_is_smaller_x)
-
-    # Midface-proxy region (#26 mouth-polygon proxy), split left/right of the midline
-    # the same way as the upper-lip subset, just over the full MOUTH_POLY.
-    MIDFACE_L, MIDFACE_R = classify_left_right(MOUTH_POLY, rest_landmarks, rest_x_midline, right_side_is_smaller_x)
 
     # Eye closure reference apertures.
     rest_aperture_r = safe_mean([rest_landmarks[i][1] for i in RIGHT_EYE_UPPER if i in rest_landmarks]) - safe_mean([rest_landmarks[i][1] for i in RIGHT_EYE_LOWER if i in rest_landmarks])
@@ -387,9 +446,9 @@ def compute_landmark_metrics(records: list[FrameRecord], metadata: Metadata, res
 
         # FAI (validated from dynaface measures_frontal.py)
         fai = 0.0
-        if 64 in lm and 76 in lm and 68 in lm and 82 in lm:
-            d1 = dist(lm[64], lm[76])
-            d2 = dist(lm[68], lm[82])
+        if 65 in lm and 77 in lm and 69 in lm and 83 in lm:
+            d1 = dist(lm[65], lm[77])
+            d2 = dist(lm[69], lm[83])
             fai = abs(d1 - d2)
         row["fai"] = normalize_by_n(fai, n)
 
@@ -482,12 +541,16 @@ def compute_landmark_metrics(records: list[FrameRecord], metadata: Metadata, res
         row["cheek_elevation_l"] = row["brow_elevation_l"]
         row["cheek_symmetry"] = clamp(1.0 - abs(row["cheek_elevation_l"] - row["cheek_elevation_r"]) / max(abs(row["cheek_elevation_l"]) + abs(row["cheek_elevation_r"]), 1e-9))
 
-        row["upper_lip_area_l"] = normalize_by_n(polygon_area(poly_points(lm, UPPER_LIP_L)), n, power=2)
-        row["upper_lip_area_r"] = normalize_by_n(polygon_area(poly_points(lm, UPPER_LIP_R)), n, power=2)
+        upper_lip_points = [lm[i] for i in upper_lip_idx if i in lm]
+        upper_lip_area_l_raw, upper_lip_area_r_raw = split_area_by_side(upper_lip_points, rest_x_midline, right_side_is_smaller_x)
+        row["upper_lip_area_l"] = normalize_by_n(upper_lip_area_l_raw, n, power=2)
+        row["upper_lip_area_r"] = normalize_by_n(upper_lip_area_r_raw, n, power=2)
         row["upper_lip_symmetry"] = clamp(1.0 - abs(row["upper_lip_area_l"] - row["upper_lip_area_r"]) / max(row["upper_lip_area_l"] + row["upper_lip_area_r"], 1e-9))
 
-        row["midface_area_l"] = normalize_by_n(polygon_area(poly_points(lm, MIDFACE_L)), n, power=2)
-        row["midface_area_r"] = normalize_by_n(polygon_area(poly_points(lm, MIDFACE_R)), n, power=2)
+        midface_points = [lm[i] for i in MOUTH_POLY if i in lm]
+        midface_area_l_raw, midface_area_r_raw = split_area_by_side(midface_points, rest_x_midline, right_side_is_smaller_x)
+        row["midface_area_l"] = normalize_by_n(midface_area_l_raw, n, power=2)
+        row["midface_area_r"] = normalize_by_n(midface_area_r_raw, n, power=2)
         row["midface_symmetry"] = clamp(1.0 - abs(row["midface_area_l"] - row["midface_area_r"]) / max(row["midface_area_l"] + row["midface_area_r"], 1e-9))
 
         # Temporal dynamics.
