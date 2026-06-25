@@ -97,7 +97,10 @@ struct TimelinePage: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             compareFloatingBar
         }
-        .refreshable { await timelineService.loadEvents() }
+        .refreshable {
+            await timelineService.loadEvents()
+            await timelineService.loadJobStatuses()
+        }
         .task { await reloadIfNeeded() }
         .alert(
             "Couldn't load timeline",
@@ -435,6 +438,7 @@ struct TimelinePage: View {
         if timelineService.events.isEmpty {
             await timelineService.loadEvents()
         }
+        await timelineService.loadJobStatuses()
     }
 }
 

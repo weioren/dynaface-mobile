@@ -24,6 +24,12 @@ import FirebaseFirestore
 final class TimelineService: ObservableObject {
 
     @Published private(set) var events: [TimelineEvent] = []
+    /// `processing_jobs.status` keyed by job_id, for the assessment-row badge
+    /// (Processed / Processing / Failed). Populated by `loadJobStatuses()` via
+    /// per-document reads — a single `documentID in [...]` list query is denied
+    /// for patients (one unreadable id fails the whole query), which made every
+    /// patient badge fall back to "Processing".
+    @Published private(set) var jobStatusByJobId: [UUID: String] = [:]
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
 
@@ -52,6 +58,34 @@ final class TimelineService: ObservableObject {
         } catch {
             errorMessage = "Couldn't load timeline: \(error.localizedDescription)"
         }
+    }
+
+    /// Pull `status` for each assessment event's linked `processing_jobs` doc,
+    /// keyed by job_id for the row badge. Uses PER-DOCUMENT `getDocument()`
+    /// reads (not one `documentID in [...]` list query): a list query is denied
+    /// for patients if ANY matched doc fails the read rule, which made every
+    /// patient badge fall back to "Processing". A per-doc read is evaluated on
+    /// its own and can satisfy attribution-based `allow read` rules, so
+    /// readable jobs populate and unreadable ones are simply skipped. Non-fatal.
+    func loadJobStatuses() async {
+        let jobIds = Set(events.compactMap(\.jobId))
+        guard !jobIds.isEmpty else {
+            jobStatusByJobId = [:]
+            return
+        }
+        var map: [UUID: String] = [:]
+        for jobId in jobIds {
+            do {
+                let doc = try await db.collection("processing_jobs")
+                    .document(jobId.uuidString).getDocument()
+                if let status = doc.data()?["status"] as? String {
+                    map[jobId] = status
+                }
+            } catch {
+                print("[TimelineStatus] job \(jobId.uuidString) read FAILED: \(error.localizedDescription)")
+            }
+        }
+        jobStatusByJobId = map
     }
 
     // MARK: - Write
