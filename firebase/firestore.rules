@@ -40,6 +40,16 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/profiles/$(callerAppUid())).data.account_type == "clinician";
     }
 
+    // A patient may read a job that's attributed to them (a clinician-recorded
+    // assessment logged onto the patient's own timeline). The
+    // job_patient_attributions doc id == the processing_jobs id, so look it up
+    // by jobId directly. Only evaluated for the patient case (owners and
+    // clinicians short-circuit before this), so the extra get() is rare.
+    function isAttributedToCaller(jobId) {
+      return exists(/databases/$(database)/documents/job_patient_attributions/$(jobId))
+        && isCaller(get(/databases/$(database)/documents/job_patient_attributions/$(jobId)).data.patient_id);
+    }
+
     // profiles/{app_uid}
     // Created exclusively by the create_profile Cloud Function (Admin
     // SDK, bypasses these rules) so app_uid minting can't be spoofed by
@@ -66,7 +76,8 @@ service cloud.firestore {
     // VideoUploadService.swift). `status` must start at "queued"; only
     // the worker (Admin SDK) advances it from there.
     match /processing_jobs/{jobId} {
-      allow read: if hasAppUid() && (isCaller(resource.data.user_id) || isClinician());
+      allow read: if hasAppUid()
+        && (isCaller(resource.data.user_id) || isClinician() || isAttributedToCaller(jobId));
       allow create: if hasAppUid()
         && isCaller(request.resource.data.user_id)
         && request.resource.data.status == "queued";

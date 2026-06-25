@@ -25,10 +25,11 @@ final class TimelineService: ObservableObject {
 
     @Published private(set) var events: [TimelineEvent] = []
     /// `processing_jobs.status` keyed by job_id, for the assessment-row badge
-    /// (Processed / Processing / Failed). Populated by `loadJobStatuses()` via
-    /// per-document reads — a single `documentID in [...]` list query is denied
-    /// for patients (one unreadable id fails the whole query), which made every
-    /// patient badge fall back to "Processing".
+    /// (Processed / Processing / Failed). Filled by `loadEvents()` before the
+    /// list is published (so the first render is correct) and refreshed by
+    /// `loadJobStatuses()`. Reads are per-document — a single `documentID in
+    /// [...]` list query is denied for patients (one unreadable id fails the
+    /// whole query), which made every patient badge fall back to "Processing".
     @Published private(set) var jobStatusByJobId: [UUID: String] = [:]
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
@@ -44,7 +45,11 @@ final class TimelineService: ObservableObject {
 
     // MARK: - Read
 
-    /// Pull every event for this patient, newest occurrence first.
+    /// Pull every event for this patient (newest first) AND each linked job's
+    /// status, then publish both together. Fetching statuses BEFORE assigning
+    /// `events` means the first render already has the right badge — without
+    /// this, the list rendered with an empty status map and every assessment
+    /// flashed "Processing" until `loadJobStatuses()` caught up.
     func loadEvents() async {
         isLoading = true
         defer { isLoading = false }
@@ -54,38 +59,48 @@ final class TimelineService: ObservableObject {
                 .whereField("patient_id", isEqualTo: patientId.uuidString)
                 .order(by: "occurred_at", descending: true)
                 .getDocuments()
-            self.events = snapshot.documents.compactMap { decode(id: $0.documentID, data: $0.data()) }
+            let fetched = snapshot.documents.compactMap { decode(id: $0.documentID, data: $0.data()) }
+            let statuses = await fetchJobStatuses(for: fetched)
+            // Two @Published writes with no await between them coalesce into a
+            // single render, so there's no empty-map frame.
+            self.events = fetched
+            self.jobStatusByJobId = statuses
         } catch {
             errorMessage = "Couldn't load timeline: \(error.localizedDescription)"
         }
     }
 
-    /// Pull `status` for each assessment event's linked `processing_jobs` doc,
-    /// keyed by job_id for the row badge. Uses PER-DOCUMENT `getDocument()`
-    /// reads (not one `documentID in [...]` list query): a list query is denied
-    /// for patients if ANY matched doc fails the read rule, which made every
-    /// patient badge fall back to "Processing". A per-doc read is evaluated on
-    /// its own and can satisfy attribution-based `allow read` rules, so
-    /// readable jobs populate and unreadable ones are simply skipped. Non-fatal.
+    /// Refresh just the status map for the already-loaded events (pull-to-refresh,
+    /// or a re-appear after some jobs may have completed). The map is already
+    /// populated by then, so this updates in place with no "Processing" flash.
     func loadJobStatuses() async {
+        jobStatusByJobId = await fetchJobStatuses(for: events)
+    }
+
+    /// `status` for each assessment event's linked `processing_jobs` doc, keyed
+    /// by job_id. PER-DOCUMENT `getDocument()` reads run in PARALLEL — not a
+    /// `documentID in [...]` list query, which Firestore denies for patients if
+    /// ANY matched doc fails the read rule (that made every patient badge fall
+    /// back to "Processing"). A per-doc read is evaluated on its own and can
+    /// satisfy attribution-based `allow read` rules; unreadable jobs are skipped.
+    private func fetchJobStatuses(for events: [TimelineEvent]) async -> [UUID: String] {
         let jobIds = Set(events.compactMap(\.jobId))
-        guard !jobIds.isEmpty else {
-            jobStatusByJobId = [:]
-            return
-        }
-        var map: [UUID: String] = [:]
-        for jobId in jobIds {
-            do {
-                let doc = try await db.collection("processing_jobs")
-                    .document(jobId.uuidString).getDocument()
-                if let status = doc.data()?["status"] as? String {
-                    map[jobId] = status
+        guard !jobIds.isEmpty else { return [:] }
+        return await withTaskGroup(of: (UUID, String)?.self) { group in
+            for jobId in jobIds {
+                group.addTask {
+                    let doc = try? await Firestore.firestore()
+                        .collection("processing_jobs")
+                        .document(jobId.uuidString)
+                        .getDocument()
+                    if let status = doc?.data()?["status"] as? String { return (jobId, status) }
+                    return nil
                 }
-            } catch {
-                print("[TimelineStatus] job \(jobId.uuidString) read FAILED: \(error.localizedDescription)")
             }
+            var map: [UUID: String] = [:]
+            for await pair in group { if let pair { map[pair.0] = pair.1 } }
+            return map
         }
-        jobStatusByJobId = map
     }
 
     // MARK: - Write

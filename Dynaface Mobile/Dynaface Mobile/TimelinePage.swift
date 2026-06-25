@@ -98,8 +98,7 @@ struct TimelinePage: View {
             compareFloatingBar
         }
         .refreshable {
-            await timelineService.loadEvents()
-            await timelineService.loadJobStatuses()
+            await timelineService.loadEvents()   // includes statuses now
         }
         .task { await reloadIfNeeded() }
         .alert(
@@ -436,9 +435,10 @@ struct TimelinePage: View {
 
     private func reloadIfNeeded() async {
         if timelineService.events.isEmpty {
-            await timelineService.loadEvents()
+            await timelineService.loadEvents()        // loads events + statuses atomically
+        } else {
+            await timelineService.loadJobStatuses()   // re-appear: refresh statuses only
         }
-        await timelineService.loadJobStatuses()
     }
 }
 
@@ -544,7 +544,7 @@ enum JobStatusBadge {
 
     var label: String {
         switch self {
-        case .processed:  return "Processed"
+        case .processed:  return "Completed"
         case .processing: return "Processing"
         case .failed:     return "Failed"
         }
