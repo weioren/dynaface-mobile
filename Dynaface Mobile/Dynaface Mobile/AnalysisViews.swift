@@ -79,12 +79,12 @@ struct AnalysisHomeView: View {
                             .buttonStyle(.plain)
                         case .brow:
                             NavigationLink {
-                                BrowDetailView(model: AnalysisPresentation.browDetail(report))
+                                BrowDetailView(model: AnalysisPresentation.browDetail(report, affected: service.affectedSide))
                             } label: { DomainBarRow(bar: bar, navigable: true) }
                             .buttonStyle(.plain)
                         case .midface:
                             NavigationLink {
-                                MidfaceDetailView(model: AnalysisPresentation.midfaceDetail(report))
+                                MidfaceDetailView(model: AnalysisPresentation.midfaceDetail(report, affected: service.affectedSide))
                             } label: { DomainBarRow(bar: bar, navigable: true) }
                             .buttonStyle(.plain)
                         }
@@ -442,7 +442,7 @@ struct BrowDetailView: View {
 
                 VStack(spacing: 0) {
                     ForEach(model.rows) { row in
-                        MetricRowView(row: row)
+                        DetailRowView(row: row)
                         if row.id != model.rows.last?.id { Divider() }
                     }
                 }
@@ -455,9 +455,11 @@ struct BrowDetailView: View {
                         .frame(height: 180)
                 }
 
-                Text("Per-side (left/right) and medial/lateral recruitment aren't in the current results yet.")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
+                if let note = model.note {
+                    Text(note)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
             }
             .padding()
         }
@@ -481,7 +483,7 @@ struct MidfaceDetailView: View {
 
                 VStack(spacing: 0) {
                     ForEach(model.rows) { row in
-                        MetricRowView(row: row)
+                        DetailRowView(row: row)
                         if row.id != model.rows.last?.id { Divider() }
                     }
                 }
@@ -528,6 +530,48 @@ private struct CompareBar: View {
                     .font(.caption).foregroundColor(rightColor)
             }
         }
+    }
+}
+
+/// Renders a Brow/Midface detail row that's either a single value or a
+/// two-tone affected | normal compare bar.
+private struct DetailRowView: View {
+    let row: DetailRow
+    var body: some View {
+        switch row {
+        case .single(let r):  MetricRowView(row: r)
+        case .compare(let r): CompareRowView(row: r)
+        }
+    }
+}
+
+/// Affected | normal comparison row: label + both values on top, a
+/// proportional orange/green bar below (matches the prototype's per-side rows).
+private struct CompareRowView: View {
+    let row: CompareRowVM
+    private let affColor = Color(red: 0.95, green: 0.60, blue: 0.15)   // affected
+    private let normColor = Color(red: 0.20, green: 0.70, blue: 0.45)  // normal
+
+    var body: some View {
+        let total = max(row.affectedValue + row.normalValue, 0.0001)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(row.label).font(.body)
+                Spacer()
+                Text(row.affectedText).fontWeight(.semibold).foregroundColor(affColor)
+                Text("|").foregroundColor(.secondary)
+                Text(row.normalText).fontWeight(.semibold).foregroundColor(normColor)
+            }
+            GeometryReader { geo in
+                HStack(spacing: 2) {
+                    affColor.frame(width: geo.size.width * CGFloat(row.affectedValue / total))
+                    normColor
+                }
+                .clipShape(Capsule())
+            }
+            .frame(height: 8)
+        }
+        .padding(.vertical, 10)
     }
 }
 

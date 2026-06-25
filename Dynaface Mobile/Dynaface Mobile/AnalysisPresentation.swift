@@ -94,6 +94,29 @@ struct MetricRowVM: Identifiable {
     let severity: MetricSeverity?
 }
 
+/// A two-tone affected | normal comparison row (e.g. per-side Brow Elevation).
+struct CompareRowVM: Identifiable {
+    let id = UUID()
+    let label: String
+    let affectedValue: Double   // drives the affected (orange) bar segment
+    let normalValue: Double     // drives the normal (green) segment
+    let affectedText: String    // formatted label, e.g. "0.08" or "45%"
+    let normalText: String
+}
+
+/// A Brow/Midface detail row is either a single value or a two-tone compare
+/// bar, kept in prototype order.
+enum DetailRow: Identifiable {
+    case single(MetricRowVM)
+    case compare(CompareRowVM)
+    var id: UUID {
+        switch self {
+        case .single(let r): return r.id
+        case .compare(let r): return r.id
+        }
+    }
+}
+
 struct EyeDetailModel {
     let badgeText: String       // e.g. "76 Moderate"
     let badgeSeverity: MetricSeverity
@@ -133,14 +156,15 @@ struct SmileDetailModel {
 struct BrowDetailModel {
     let badgeText: String
     let badgeSeverity: MetricSeverity
-    let rows: [MetricRowVM]
-    let trend: [ChartPoint]         // per-frame brow elevation
+    let rows: [DetailRow]
+    let trend: [ChartPoint]         // per-frame brow elevation (affected side)
+    let note: String?               // nil once per-side data is present
 }
 
 struct MidfaceDetailModel {
     let badgeText: String
     let badgeSeverity: MetricSeverity
-    let rows: [MetricRowVM]
+    let rows: [DetailRow]
     let contourCaption: String
 }
 
@@ -294,44 +318,129 @@ enum AnalysisPresentation {
         )
     }
 
-    // MARK: Brow detail (brow_module — single values; no per-side data yet)
+    // MARK: Brow detail (brow_module — per-side compare bars + recruitment)
 
-    static func browDetail(_ report: FacialMetricsReport) -> BrowDetailModel {
+    static func browDetail(_ report: FacialMetricsReport, affected: AffectedSide) -> BrowDetailModel {
         let b = report.summary.brow
         let symmetry = b?.meanBrowSymmetry ?? 0
         let score = browScore(b)
         let sev = functionSeverity(score)
-        let rows: [MetricRowVM] = [
-            MetricRowVM(label: "Brow Elevation (max)", affected: mm(b?.maxBrowElevation ?? 0), normal: nil, severity: nil),
-            MetricRowVM(label: "Brow Symmetry", affected: num(symmetry), normal: nil,
-                        severity: functionSeverity(Int((symmetry * 100).rounded()))),
-            MetricRowVM(label: "Recruitment Ratio", affected: num(b?.meanRecruitmentRatio ?? 0), normal: nil, severity: nil),
-        ]
+        let affectedIsLeft = (affected != .right)
+        func split(_ l: Double?, _ r: Double?) -> (aff: Double, norm: Double) {
+            let lv = l ?? 0, rv = r ?? 0
+            return affectedIsLeft ? (lv, rv) : (rv, lv)
+        }
+        let hasPerSide = b?.maxBrowElevationL != nil || b?.maxBrowElevationR != nil
+
+        var rows: [DetailRow] = []
+
+        // 1. Brow Elevation — per-side compare bar (single fallback pre-update)
+        if hasPerSide {
+            let (aff, norm) = split(b?.maxBrowElevationL, b?.maxBrowElevationR)
+            rows.append(.compare(CompareRowVM(label: "Brow Elevation",
+                affectedValue: aff, normalValue: norm,
+                affectedText: num(aff), normalText: num(norm))))
+        } else {
+            rows.append(.single(MetricRowVM(label: "Brow Elevation (max)",
+                affected: num(b?.maxBrowElevation ?? 0), normal: nil, severity: nil)))
+        }
+
+        // 2. Brow Symmetry — single
+        rows.append(.single(MetricRowVM(label: "Brow Symmetry", affected: num(symmetry), normal: nil,
+            severity: functionSeverity(Int((symmetry * 100).rounded())))))
+
+        // 3-4. Medial / Lateral Recruitment — per-side compare bars (as %)
+        if b?.medialRecruitmentL != nil || b?.medialRecruitmentR != nil {
+            let (am, nm) = split(b?.medialRecruitmentL, b?.medialRecruitmentR)
+            rows.append(.compare(CompareRowVM(label: "Medial Recruitment",
+                affectedValue: am, normalValue: nm, affectedText: pct(am), normalText: pct(nm))))
+            let (al, nl) = split(b?.lateralRecruitmentL, b?.lateralRecruitmentR)
+            rows.append(.compare(CompareRowVM(label: "Lateral Recruitment",
+                affectedValue: al, normalValue: nl, affectedText: pct(al), normalText: pct(nl))))
+        } else {
+            rows.append(.single(MetricRowVM(label: "Recruitment Ratio",
+                affected: num(b?.meanRecruitmentRatio ?? 0), normal: nil, severity: nil)))
+        }
+
+        // Trend: affected-side per-frame brow elevation (else the aggregate series).
+        let trend = series(report) {
+            affectedIsLeft ? ($0.browElevationL ?? $0.browElevation)
+                           : ($0.browElevationR ?? $0.browElevation)
+        }
+
         return BrowDetailModel(
             badgeText: "\(score) \(severityWord(sev))",
             badgeSeverity: sev,
             rows: rows,
-            trend: series(report) { $0.browElevation }
+            trend: trend,
+            note: hasPerSide ? nil
+                : "Per-side (left/right) and medial/lateral recruitment aren't in the current results yet."
         )
     }
 
-    // MARK: Midface detail (midface_module + per-frame cupid's bow)
+    // MARK: Midface detail (midface_module — per-side bars + signed cupid's bow)
 
-    static func midfaceDetail(_ report: FacialMetricsReport) -> MidfaceDetailModel {
+    static func midfaceDetail(_ report: FacialMetricsReport, affected: AffectedSide) -> MidfaceDetailModel {
         let m = report.summary.midface
         let alarSym = m?.meanAlarSymmetry ?? 0
         let score = midfaceScore(m)
         let sev = functionSeverity(score)
-        let cupid = report.perFrame.compactMap { $0.cupidBowDeviation }.map(abs).max() ?? 0
-        let rows: [MetricRowVM] = [
-            MetricRowVM(label: "Alar Symmetry", affected: num(alarSym), normal: nil,
-                        severity: functionSeverity(Int((alarSym * 100).rounded()))),
-            MetricRowVM(label: "Alar Movement (max)", affected: mm(m?.maxAlarMovement ?? 0), normal: nil, severity: nil),
-            MetricRowVM(label: "Cheek Elevation (mean)", affected: mm(m?.meanCheekElevation ?? 0), normal: nil, severity: nil),
-            MetricRowVM(label: "Cupid's Bow Deviation", affected: mm(cupid), normal: nil, severity: nil),
-            MetricRowVM(label: "Dynamic Cupid's Bow Shift", affected: mm(m?.meanDynamicShift ?? 0), normal: nil, severity: nil),
-            MetricRowVM(label: "Upper Lip 2D Area", affected: num(m?.meanMidfaceArea ?? 0), normal: nil, severity: nil),
-        ]
+        let affectedIsLeft = (affected != .right)
+        func split(_ l: Double?, _ r: Double?) -> (aff: Double, norm: Double) {
+            let lv = l ?? 0, rv = r ?? 0
+            return affectedIsLeft ? (lv, rv) : (rv, lv)
+        }
+
+        var rows: [DetailRow] = []
+
+        // 1. Alar Movement — per-side compare bar
+        if m?.maxAlarMovementL != nil || m?.maxAlarMovementR != nil {
+            let (aff, norm) = split(m?.maxAlarMovementL, m?.maxAlarMovementR)
+            rows.append(.compare(CompareRowVM(label: "Alar Movement",
+                affectedValue: aff, normalValue: norm, affectedText: num(aff), normalText: num(norm))))
+        } else {
+            rows.append(.single(MetricRowVM(label: "Alar Movement (max)",
+                affected: num(m?.maxAlarMovement ?? 0), normal: nil, severity: nil)))
+        }
+
+        // 2. Alar Symmetry — single
+        rows.append(.single(MetricRowVM(label: "Alar Symmetry", affected: num(alarSym), normal: nil,
+            severity: functionSeverity(Int((alarSym * 100).rounded())))))
+
+        // 3. Cupid's Bow Deviation — signed magnitude + direction
+        let cupidSigned = m?.maxCupidBowDeviation
+            ?? (report.perFrame.compactMap { $0.cupidBowDeviation }.max(by: { abs($0) < abs($1) }) ?? 0)
+        let direction = cupidSigned >= 0 ? "toward right" : "toward left"
+        rows.append(.single(MetricRowVM(label: "Cupid's Bow Deviation",
+            affected: "\(num(abs(cupidSigned))) \(direction)", normal: nil, severity: nil)))
+
+        // 4. Dynamic Cupid's Bow Shift — single
+        rows.append(.single(MetricRowVM(label: "Dynamic Cupid's Bow Shift",
+            affected: num(m?.meanDynamicShift ?? 0), normal: nil, severity: nil)))
+
+        // 5. Upper Lip 2D Area — symmetry %
+        if let uls = m?.upperLipSymmetry {
+            rows.append(.single(MetricRowVM(label: "Upper Lip 2D Area",
+                affected: "\(pct(uls)) symmetry", normal: nil,
+                severity: functionSeverity(Int((uls * 100).rounded())))))
+        }
+
+        // 6. Cheek Elevation — per-side compare bar
+        if m?.meanCheekElevationL != nil || m?.meanCheekElevationR != nil {
+            let (aff, norm) = split(m?.meanCheekElevationL, m?.meanCheekElevationR)
+            rows.append(.compare(CompareRowVM(label: "Cheek Elevation",
+                affectedValue: aff, normalValue: norm, affectedText: num(aff), normalText: num(norm))))
+        } else {
+            rows.append(.single(MetricRowVM(label: "Cheek Elevation (mean)",
+                affected: num(m?.meanCheekElevation ?? 0), normal: nil, severity: nil)))
+        }
+
+        // 7. Midface Contour — single (symmetry 0..1)
+        if let contour = m?.midfaceContour {
+            rows.append(.single(MetricRowVM(label: "Midface Contour", affected: num(contour), normal: nil,
+                severity: functionSeverity(Int((contour * 100).rounded())))))
+        }
+
         return MidfaceDetailModel(
             badgeText: "\(score) \(severityWord(sev))",
             badgeSeverity: sev,
