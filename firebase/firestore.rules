@@ -1,0 +1,107 @@
+rules_version = '2';
+
+// Mirrors the access patterns from the old Supabase RLS migrations
+// (see dynaface-mobile/supabase/migrations/), translated to Firestore.
+//
+// Identity: `request.auth.token.app_uid` is a custom claim set by the
+// `create_profile` Cloud Function at signup — NOT the raw Firebase Auth
+// UID. See Authentication.swift and gcp-backend/create_profile/main.py
+// for why. All ownership checks below use this claim.
+//
+// `processing_jobs` status transitions (queued -> processing -> completed
+// /failed) are written by google_remote_dynaface_worker.py and
+// firestore_function.py using the Admin SDK, which bypasses these rules
+// entirely — clients only ever read that collection after creating it.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function hasAppUid() {
+      return isSignedIn() && request.auth.token.app_uid is string;
+    }
+
+    function callerAppUid() {
+      return request.auth.token.app_uid;
+    }
+
+    // Case-insensitive owner check. The iOS app writes id fields from
+    // Swift's UUID.uuidString (UPPERCASE), while the `app_uid` custom claim
+    // is a lowercase UUID (Python uuid4 in create_profile). Compare with
+    // both sides lowercased so they match regardless of case.
+    function isCaller(v) {
+      return v.lower() == callerAppUid().lower();
+    }
+
+    function isClinician() {
+      return hasAppUid()
+        && get(/databases/$(database)/documents/profiles/$(callerAppUid())).data.account_type == "clinician";
+    }
+
+    // A patient may read a job that's attributed to them (a clinician-recorded
+    // assessment logged onto the patient's own timeline). The
+    // job_patient_attributions doc id == the processing_jobs id, so look it up
+    // by jobId directly. Only evaluated for the patient case (owners and
+    // clinicians short-circuit before this), so the extra get() is rare.
+    function isAttributedToCaller(jobId) {
+      return exists(/databases/$(database)/documents/job_patient_attributions/$(jobId))
+        && isCaller(get(/databases/$(database)/documents/job_patient_attributions/$(jobId)).data.patient_id);
+    }
+
+    // profiles/{app_uid}
+    // Created exclusively by the create_profile Cloud Function (Admin
+    // SDK, bypasses these rules) so app_uid minting can't be spoofed by
+    // a client — `allow create: if false` is intentional.
+    match /profiles/{profileId} {
+      allow read: if hasAppUid()
+        && (isCaller(profileId) || (isClinician() && resource.data.account_type == "patient"));
+      allow create: if false;
+      allow update: if hasAppUid() && isCaller(profileId);
+      allow delete: if false;
+    }
+
+    // patients/{patientId} — clinician-owned roster rows. Patients never
+    // read this collection directly (they don't know they're on a
+    // clinician's unregistered roster).
+    match /patients/{patientId} {
+      allow read: if isClinician();
+      allow create: if isClinician() && isCaller(request.resource.data.clinician_id);
+      allow update: if isClinician() && isCaller(resource.data.clinician_id);
+      allow delete: if false;
+    }
+
+    // processing_jobs/{jobId} — created by the client on upload (see
+    // VideoUploadService.swift). `status` must start at "queued"; only
+    // the worker (Admin SDK) advances it from there.
+    match /processing_jobs/{jobId} {
+      allow read: if hasAppUid()
+        && (isCaller(resource.data.user_id) || isClinician() || isAttributedToCaller(jobId));
+      allow create: if hasAppUid()
+        && isCaller(request.resource.data.user_id)
+        && request.resource.data.status == "queued";
+      allow update, delete: if false;
+    }
+
+    // job_patient_attributions/{jobId} — doc id == processing_jobs id, so
+    // `set()` is naturally an upsert.
+    match /job_patient_attributions/{jobId} {
+      allow read: if hasAppUid() && (isClinician() || isCaller(resource.data.patient_id));
+      allow create, update: if hasAppUid()
+        && isCaller(request.resource.data.attributed_by)
+        && (isClinician() || isCaller(request.resource.data.patient_id));
+      allow delete: if isClinician();
+    }
+
+    // timeline_events/{eventId}
+    match /timeline_events/{eventId} {
+      allow read: if hasAppUid() && (isClinician() || isCaller(resource.data.patient_id));
+      allow create: if hasAppUid()
+        && isCaller(request.resource.data.created_by)
+        && (isClinician() || isCaller(request.resource.data.patient_id));
+      allow update: if isClinician();
+      allow delete: if false;
+    }
+  }
+}

@@ -12,7 +12,6 @@ private let brandBlue = Color(red: 0.12, green: 0.29, blue: 0.64)
 
 struct AnalysisHomeView: View {
     @ObservedObject var service: AnalysisService
-    @EnvironmentObject private var authService: AuthenticationService
     @EnvironmentObject private var attributionService: JobAttributionService
 
     var body: some View {
@@ -27,9 +26,8 @@ struct AnalysisHomeView: View {
             }
         }
         .task {
-            // Switch to the live Supabase source (env objects available here),
-            // then load. Falls back to whatever provider was injected.
-            service.useSupabase(authService.supabaseClient, attribution: attributionService)
+            // Switch to the live Firebase source, then load.
+            service.useFirebase(attribution: attributionService)
             await service.loadIfNeeded()
         }
         .alert(
@@ -74,8 +72,21 @@ struct AnalysisHomeView: View {
                                 SynkinesisDetailView(model: AnalysisPresentation.synkDetail(report))
                             } label: { DomainBarRow(bar: bar, navigable: true) }
                             .buttonStyle(.plain)
-                        default:
-                            DomainBarRow(bar: bar, navigable: false)
+                        case .smile:
+                            NavigationLink {
+                                SmileDetailView(model: AnalysisPresentation.smileDetail(report))
+                            } label: { DomainBarRow(bar: bar, navigable: true) }
+                            .buttonStyle(.plain)
+                        case .brow:
+                            NavigationLink {
+                                BrowDetailView(model: AnalysisPresentation.browDetail(report, affected: service.affectedSide))
+                            } label: { DomainBarRow(bar: bar, navigable: true) }
+                            .buttonStyle(.plain)
+                        case .midface:
+                            NavigationLink {
+                                MidfaceDetailView(model: AnalysisPresentation.midfaceDetail(report, affected: service.affectedSide))
+                            } label: { DomainBarRow(bar: bar, navigable: true) }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -321,14 +332,26 @@ struct SynkinesisDetailView: View {
 
                 VStack(spacing: 0) {
                     ForEach(model.rows) { r in
-                        HStack {
-                            Text(r.label).font(.body)
-                            Spacer()
-                            Text(String(format: "%.2f", r.value))
-                                .fontWeight(.semibold).foregroundColor(r.severity.color)
-                            Text(r.word.uppercased())
-                                .font(.caption2).fontWeight(.semibold)
-                                .foregroundColor(r.severity.color)
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text(r.label).font(.body)
+                                Spacer()
+                                Text(String(format: "%.2f", r.value))
+                                    .fontWeight(.semibold).foregroundColor(r.severity.color)
+                                Text(r.word.uppercased())
+                                    .font(.caption2).fontWeight(.semibold)
+                                    .foregroundColor(r.severity.color)
+                            }
+                            // Per-row severity bar (matches the prototype's
+                            // colored track under each synkinesis metric).
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    Capsule().fill(Color.gray.opacity(0.18))
+                                    Capsule().fill(r.severity.color)
+                                        .frame(width: geo.size.width * CGFloat(min(max(r.value, 0), 1)))
+                                }
+                            }
+                            .frame(height: 6)
                         }
                         .padding(.vertical, 10)
                         if r.id != model.rows.last?.id { Divider() }
@@ -368,6 +391,197 @@ private struct SynkScaleBar: View {
                 Text("Low"); Spacer(); Text("Moderate"); Spacer(); Text("High")
             }
             .font(.caption2).foregroundColor(.secondary)
+        }
+    }
+}
+
+// MARK: - Smile detail
+
+struct SmileDetailView: View {
+    let model: SmileDetailModel
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Spacer()
+                    SeverityBadge(text: model.badgeText, color: model.badgeSeverity.color)
+                }
+
+                Text("Commissure Excursion")
+                    .font(.headline)
+                CompareBar(leftValue: model.commissureLeft, rightValue: model.commissureRight,
+                           leftLabel: "Left", rightLabel: "Right")
+
+                VStack(spacing: 0) {
+                    ForEach(model.rows) { row in
+                        MetricRowView(row: row)
+                        if row.id != model.rows.last?.id { Divider() }
+                    }
+                }
+            }
+            .padding()
+        }
+        .navigationTitle("Smile Function")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Brow detail
+
+struct BrowDetailView: View {
+    let model: BrowDetailModel
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Spacer()
+                    SeverityBadge(text: model.badgeText, color: model.badgeSeverity.color)
+                }
+
+                VStack(spacing: 0) {
+                    ForEach(model.rows) { row in
+                        DetailRowView(row: row)
+                        if row.id != model.rows.last?.id { Divider() }
+                    }
+                }
+
+                if !model.trend.isEmpty {
+                    Text("Brow Elevation Over Time")
+                        .font(.headline)
+                        .padding(.top, 4)
+                    TrendChart(points: model.trend)
+                        .frame(height: 180)
+                }
+
+                if let note = model.note {
+                    Text(note)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding()
+        }
+        .navigationTitle("Brow Function")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Midface detail
+
+struct MidfaceDetailView: View {
+    let model: MidfaceDetailModel
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Spacer()
+                    SeverityBadge(text: model.badgeText, color: model.badgeSeverity.color)
+                }
+
+                VStack(spacing: 0) {
+                    ForEach(model.rows) { row in
+                        DetailRowView(row: row)
+                        if row.id != model.rows.last?.id { Divider() }
+                    }
+                }
+
+                Text(model.contourCaption)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .padding()
+        }
+        .navigationTitle("Midface + Lip")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Shared detail components
+
+/// Two-tone left/right comparison bar (e.g. commissure excursion).
+private struct CompareBar: View {
+    let leftValue: Double
+    let rightValue: Double
+    let leftLabel: String
+    let rightLabel: String
+
+    private let leftColor = Color(red: 0.20, green: 0.70, blue: 0.45)
+    private let rightColor = Color(red: 0.95, green: 0.60, blue: 0.15)
+
+    var body: some View {
+        let total = max(leftValue + rightValue, 0.0001)
+        VStack(spacing: 6) {
+            GeometryReader { geo in
+                HStack(spacing: 2) {
+                    leftColor.frame(width: geo.size.width * CGFloat(leftValue / total))
+                    rightColor
+                }
+                .clipShape(Capsule())
+            }
+            .frame(height: 10)
+            HStack {
+                Text("\(leftLabel) \(String(format: "%.1f", leftValue))")
+                    .font(.caption).foregroundColor(leftColor)
+                Spacer()
+                Text("\(rightLabel) \(String(format: "%.1f", rightValue))")
+                    .font(.caption).foregroundColor(rightColor)
+            }
+        }
+    }
+}
+
+/// Renders a Brow/Midface detail row that's either a single value or a
+/// two-tone affected | normal compare bar.
+private struct DetailRowView: View {
+    let row: DetailRow
+    var body: some View {
+        switch row {
+        case .single(let r):  MetricRowView(row: r)
+        case .compare(let r): CompareRowView(row: r)
+        }
+    }
+}
+
+/// Affected | normal comparison row: label + both values on top, a
+/// proportional orange/green bar below (matches the prototype's per-side rows).
+private struct CompareRowView: View {
+    let row: CompareRowVM
+    private let affColor = Color(red: 0.95, green: 0.60, blue: 0.15)   // affected
+    private let normColor = Color(red: 0.20, green: 0.70, blue: 0.45)  // normal
+
+    var body: some View {
+        let total = max(row.affectedValue + row.normalValue, 0.0001)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(row.label).font(.body)
+                Spacer()
+                Text(row.affectedText).fontWeight(.semibold).foregroundColor(affColor)
+                Text("|").foregroundColor(.secondary)
+                Text(row.normalText).fontWeight(.semibold).foregroundColor(normColor)
+            }
+            GeometryReader { geo in
+                HStack(spacing: 2) {
+                    affColor.frame(width: geo.size.width * CGFloat(row.affectedValue / total))
+                    normColor
+                }
+                .clipShape(Capsule())
+            }
+            .frame(height: 8)
+        }
+        .padding(.vertical, 10)
+    }
+}
+
+/// Single-series line chart with an auto y-scale (brow elevation trend).
+private struct TrendChart: View {
+    let points: [ChartPoint]
+    var body: some View {
+        Chart(points) { p in
+            LineMark(x: .value("Time", p.t), y: .value("Value", p.v))
+                .foregroundStyle(brandBlue)
         }
     }
 }

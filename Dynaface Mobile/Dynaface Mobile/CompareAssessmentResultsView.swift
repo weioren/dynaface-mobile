@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseFirestore
 
 // MARK: - CompareAssessmentResultsView
 //
@@ -144,16 +145,20 @@ struct CompareAssessmentResultsView: View {
             return
         }
         do {
-            let job: PatientJobRow = try await authService.supabaseClient
-                .from("processing_jobs")
-                .select()
-                .eq("id", value: jobId.uuidString)
-                .single()
-                .execute()
-                .value
+            let snapshot = try await Firestore.firestore()
+                .collection("processing_jobs")
+                .document(jobId.uuidString)
+                .getDocument()
+            guard let data = snapshot.data(),
+                  let job = decodeJobRow(id: jobId.uuidString, data: data) else {
+                commit(nil, showAnnotations
+                    ? "Processed video isn't ready yet."
+                    : "Original video unavailable.")
+                return
+            }
             let url: URL = try await (showAnnotations
-                ? signedProcessedVideoURL(for: job, supabase: authService.supabaseClient)
-                : signedRawVideoURL(for: job, supabase: authService.supabaseClient))
+                ? signedProcessedVideoURL(for: job)
+                : signedRawVideoURL(for: job))
             commit(url, nil)
         } catch {
             commit(nil, showAnnotations

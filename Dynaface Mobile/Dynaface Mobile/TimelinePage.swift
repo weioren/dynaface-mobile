@@ -97,7 +97,9 @@ struct TimelinePage: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             compareFloatingBar
         }
-        .refreshable { await timelineService.loadEvents() }
+        .refreshable {
+            await timelineService.loadEvents()   // includes statuses now
+        }
         .task { await reloadIfNeeded() }
         .alert(
             "Couldn't load timeline",
@@ -433,7 +435,9 @@ struct TimelinePage: View {
 
     private func reloadIfNeeded() async {
         if timelineService.events.isEmpty {
-            await timelineService.loadEvents()
+            await timelineService.loadEvents()        // loads events + statuses atomically
+        } else {
+            await timelineService.loadJobStatuses()   // re-appear: refresh statuses only
         }
     }
 }
@@ -540,7 +544,7 @@ enum JobStatusBadge {
 
     var label: String {
         switch self {
-        case .processed:  return "Processed"
+        case .processed:  return "Completed"
         case .processing: return "Processing"
         case .failed:     return "Failed"
         }

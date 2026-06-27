@@ -118,7 +118,7 @@ struct ProfilePage: View {
                             Text("Cloud video upload")
                                 .font(.system(size: 18 * widthScale))
                                 .foregroundColor(.black)
-                            Text(videoUploadsEnabled ? "Processed videos will be uploaded to Supabase." : "Uploads are disabled. Videos stay local only.")
+                            Text(videoUploadsEnabled ? "Processed videos will be uploaded to the cloud." : "Uploads are disabled. Videos stay local only.")
                                 .font(.system(size: 12 * widthScale))
                                 .foregroundColor(.gray)
                         }

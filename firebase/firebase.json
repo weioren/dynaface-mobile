@@ -1,0 +1,16 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": [
+    {
+      "bucket": "dynaface-mobile-496023-dynaface-raw",
+      "rules": "storage.rules"
+    },
+    {
+      "bucket": "dynaface-mobile-496023-dynaface-results",
+      "rules": "storage.rules"
+    }
+  ]
+}
