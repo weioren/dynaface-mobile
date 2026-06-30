@@ -680,9 +680,12 @@ private struct TimelineAssessmentGroupRow: View {
                             .font(.subheadline).fontWeight(.semibold)
                             .foregroundColor(.primary)
                             .lineLimit(1)
+                            .layoutPriority(1)
                         Spacer(minLength: 4)
                         Text("\(events.count) \(events.count == 1 ? "movement" : "movements")")
                             .font(.caption).foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .layoutPriority(0)
                         if !isCompareMode {
                             Image(systemName: expanded ? "chevron.down" : "chevron.right")
                                 .font(.caption2).foregroundColor(.secondary)
