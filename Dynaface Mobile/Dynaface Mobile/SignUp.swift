@@ -478,14 +478,19 @@ let patientOnboardingSteps: [OnboardingStep] = [
 
 struct OnboardingFlow: View {
     let steps: [OnboardingStep]
-    let email: String
-    let symptomsLocation: String
-    let symptomsArea: String
-    let diagnosis: String
+    // Signup context — left empty in review mode (replaying from Profile).
+    var email: String = ""
+    var symptomsLocation: String = ""
+    var symptomsArea: String = ""
+    var diagnosis: String = ""
+    // When set, finishing (or "Close") dismisses instead of completing the
+    // profile — used to replay the guide from the Profile screen.
+    var onDismiss: (() -> Void)? = nil
 
     let baseWidth: CGFloat = 390
     let baseHeight: CGFloat = 844
     private let accent = Color(red: 0.12, green: 0.29, blue: 0.64)
+    private var isReview: Bool { onDismiss != nil }
 
     @EnvironmentObject var authService: AuthenticationService
     @State private var page = 0
@@ -500,10 +505,10 @@ struct OnboardingFlow: View {
             VStack(spacing: 0) {
                 HStack {
                     Spacer()
-                    Button("Skip") { completeProfile() }
+                    Button(isReview ? "Close" : "Skip") { finish() }
                         .font(.system(size: 16 * w))
                         .foregroundColor(.gray)
-                        .disabled(authService.isLoading)
+                        .disabled(!isReview && authService.isLoading)
                 }
                 .padding(.horizontal, 24 * w)
                 .padding(.top, 14 * h)
@@ -517,10 +522,10 @@ struct OnboardingFlow: View {
                 .indexViewStyle(.page(backgroundDisplayMode: .always))
 
                 Button(action: advance) {
-                    if authService.isLoading {
+                    if !isReview && authService.isLoading {
                         ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .white))
                     } else {
-                        Text(page == steps.count - 1 ? "Get started" : "Next")
+                        Text(page == steps.count - 1 ? (isReview ? "Done" : "Get started") : "Next")
                             .font(.system(size: 18 * w, weight: .semibold))
                     }
                 }
@@ -529,7 +534,7 @@ struct OnboardingFlow: View {
                 .cornerRadius(24 * w)
                 .shadow(color: Color.black.opacity(0.25), radius: 4 * w, x: 0, y: 4 * h)
                 .foregroundColor(.white)
-                .disabled(authService.isLoading)
+                .disabled(!isReview && authService.isLoading)
                 .padding(.bottom, 40 * h)
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
@@ -573,6 +578,15 @@ struct OnboardingFlow: View {
     private func advance() {
         if page < steps.count - 1 {
             withAnimation { page += 1 }
+        } else {
+            finish()
+        }
+    }
+
+    /// Review mode dismisses; signup mode writes the profile.
+    private func finish() {
+        if let onDismiss {
+            onDismiss()
         } else {
             completeProfile()
         }
