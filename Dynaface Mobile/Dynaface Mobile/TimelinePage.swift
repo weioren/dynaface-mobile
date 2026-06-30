@@ -677,10 +677,9 @@ private struct TimelineAssessmentGroupRow: View {
                         Image(systemName: "video.fill")
                             .font(.caption).foregroundColor(accent)
                         Text(title)
-                            .font(.subheadline).fontWeight(.semibold)
+                            .font(.footnote).fontWeight(.semibold)
                             .foregroundColor(.primary)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.75)
                         Spacer(minLength: 4)
                         Text("\(events.count) \(events.count == 1 ? "movement" : "movements")")
                             .font(.caption).foregroundColor(.secondary)
@@ -780,7 +779,7 @@ private struct TimelineEventRow: View {
                         .font(.caption)
                         .foregroundColor(Color(red: 0.12, green: 0.29, blue: 0.64))
                     Text(event.type.displayName)
-                        .font(.subheadline).fontWeight(.semibold)
+                        .font(.footnote).fontWeight(.semibold)
                         .foregroundColor(.primary)
                 }
                 if !event.notes.isEmpty {
