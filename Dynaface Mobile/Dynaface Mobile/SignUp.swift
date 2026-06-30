@@ -197,10 +197,11 @@ struct CreateAccountView: View {
 // MARK: - SurveyFlow
 //
 // Branches on account type. Patients go through the full symptom survey
-// (FirstPage → … → FifthPage). Clinicians skip the symptom questions and
-// land directly on FifthPage with empty symptom values. FifthPage's
-// `completeProfile` then passes `nil` for SurveyResponses, and the auth
-// service writes blank symptom columns to the profiles row.
+// (FirstPage → … → FourthPage) and then the patient OnboardingFlow.
+// Clinicians skip the symptom questions and land directly on the clinician
+// OnboardingFlow with empty symptom values. OnboardingFlow's
+// `completeProfile` passes `nil` for SurveyResponses when the symptom
+// fields are empty, and the auth service writes blank symptom columns.
 struct SurveyFlow: View {
     let email: String
     let accountType: AccountType
@@ -211,7 +212,8 @@ struct SurveyFlow: View {
             case .patient:
                 FirstPage(email: email)
             case .clinician:
-                FifthPage(
+                OnboardingFlow(
+                    steps: clinicianOnboardingSteps,
                     email: email,
                     symptomsLocation: "",
                     symptomsArea: "",
@@ -415,10 +417,10 @@ struct FourthPage: View {
                         .foregroundColor(.black)
                         .padding(.bottom, 50 * h)
 
-                    NavigationLink(destination: FifthPage(email: email, symptomsLocation: symptomsLocation, symptomsArea: symptomsArea, diagnosis: "Bell's Palsy")) { choice("Bell's Palsy", w, h) }
-                    NavigationLink(destination: FifthPage(email: email, symptomsLocation: symptomsLocation, symptomsArea: symptomsArea, diagnosis: "From Injury")) { choice("From Injury", w, h) }
-                    NavigationLink(destination: FifthPage(email: email, symptomsLocation: symptomsLocation, symptomsArea: symptomsArea, diagnosis: "From Surgery")) { choice("From Surgery", w, h) }
-                    NavigationLink(destination: FifthPage(email: email, symptomsLocation: symptomsLocation, symptomsArea: symptomsArea, diagnosis: "Unsure")) { choice("Unsure", w, h) }
+                    NavigationLink(destination: OnboardingFlow(steps: patientOnboardingSteps, email: email, symptomsLocation: symptomsLocation, symptomsArea: symptomsArea, diagnosis:"Bell's Palsy")) { choice("Bell's Palsy", w, h) }
+                    NavigationLink(destination: OnboardingFlow(steps: patientOnboardingSteps, email: email, symptomsLocation: symptomsLocation, symptomsArea: symptomsArea, diagnosis:"From Injury")) { choice("From Injury", w, h) }
+                    NavigationLink(destination: OnboardingFlow(steps: patientOnboardingSteps, email: email, symptomsLocation: symptomsLocation, symptomsArea: symptomsArea, diagnosis:"From Surgery")) { choice("From Surgery", w, h) }
+                    NavigationLink(destination: OnboardingFlow(steps: patientOnboardingSteps, email: email, symptomsLocation: symptomsLocation, symptomsArea: symptomsArea, diagnosis:"Unsure")) { choice("Unsure", w, h) }
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
@@ -435,7 +437,161 @@ struct FourthPage: View {
     }
 }
 
-// MARK: - FifthPage
+// MARK: - Onboarding walkthrough (post-signup)
+//
+// Replaces the old single "Congrats" finish screen. Walks each role through one
+// complete usage flow — a swipeable card per feature — and finishes setup via
+// completeProfile() on "Get started" (or "Skip"). Patient passes its survey
+// answers; clinician passes nil (empty symptom strings).
+struct OnboardingStep: Identifiable {
+    let id = UUID()
+    let icon: String          // SF Symbol name
+    let title: String
+    let detail: String
+}
+
+let clinicianOnboardingSteps: [OnboardingStep] = [
+    OnboardingStep(icon: "person.badge.plus", title: "Add your patients",
+                   detail: "Build and manage your patient list in one place."),
+    OnboardingStep(icon: "video.fill", title: "Record assessments",
+                   detail: "Capture guided facial exercises at each visit."),
+    OnboardingStep(icon: "calendar", title: "Track the timeline",
+                   detail: "Every assessment lands on the patient's timeline."),
+    OnboardingStep(icon: "chart.bar.xaxis", title: "Review the analysis",
+                   detail: "See a 5-domain facial-function breakdown for each visit."),
+    OnboardingStep(icon: "arrow.left.arrow.right", title: "Compare over time",
+                   detail: "Compare two assessments to track recovery."),
+]
+
+let patientOnboardingSteps: [OnboardingStep] = [
+    OnboardingStep(icon: "video.fill", title: "Record your assessment",
+                   detail: "Follow the guided facial exercises in a few minutes."),
+    OnboardingStep(icon: "checkmark.seal", title: "Processed for you",
+                   detail: "Your recording is analyzed automatically in the cloud."),
+    OnboardingStep(icon: "calendar", title: "Track your timeline",
+                   detail: "See every assessment over time in one place."),
+    OnboardingStep(icon: "chart.bar.xaxis", title: "See your analysis",
+                   detail: "Get your facial-function scores after each recording."),
+    OnboardingStep(icon: "heart.text.square", title: "Your care team",
+                   detail: "Your clinician reviews your progress and guides your care."),
+]
+
+struct OnboardingFlow: View {
+    let steps: [OnboardingStep]
+    let email: String
+    let symptomsLocation: String
+    let symptomsArea: String
+    let diagnosis: String
+
+    let baseWidth: CGFloat = 390
+    let baseHeight: CGFloat = 844
+    private let accent = Color(red: 0.12, green: 0.29, blue: 0.64)
+
+    @EnvironmentObject var authService: AuthenticationService
+    @State private var page = 0
+    @State private var showingAlert = false
+    @State private var alertMessage = ""
+
+    var body: some View {
+        GeometryReader { geometry in
+            let w = geometry.size.width / baseWidth
+            let h = geometry.size.height / baseHeight
+
+            VStack(spacing: 0) {
+                HStack {
+                    Spacer()
+                    Button("Skip") { completeProfile() }
+                        .font(.system(size: 16 * w))
+                        .foregroundColor(.gray)
+                        .disabled(authService.isLoading)
+                }
+                .padding(.horizontal, 24 * w)
+                .padding(.top, 14 * h)
+
+                TabView(selection: $page) {
+                    ForEach(Array(steps.enumerated()), id: \.element.id) { index, step in
+                        cardView(step, w: w, h: h).tag(index)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .always))
+                .indexViewStyle(.page(backgroundDisplayMode: .always))
+
+                Button(action: advance) {
+                    if authService.isLoading {
+                        ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    } else {
+                        Text(page == steps.count - 1 ? "Get started" : "Next")
+                            .font(.system(size: 18 * w, weight: .semibold))
+                    }
+                }
+                .frame(width: 282 * w, height: 48 * h)
+                .background(accent)
+                .cornerRadius(24 * w)
+                .shadow(color: Color.black.opacity(0.25), radius: 4 * w, x: 0, y: 4 * h)
+                .foregroundColor(.white)
+                .disabled(authService.isLoading)
+                .padding(.bottom, 40 * h)
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .background(Color.white)
+        }
+        .alert("Error", isPresented: $showingAlert) { Button("OK") { authService.authError = nil } } message: { Text(alertMessage) }
+        .onReceive(authService.$authError) { error in
+            if let error {
+                alertMessage = error
+                showingAlert = true
+            }
+        }
+    }
+
+    private func cardView(_ step: OnboardingStep, w: CGFloat, h: CGFloat) -> some View {
+        VStack(spacing: 22 * h) {
+            Spacer()
+            ZStack {
+                Circle()
+                    .fill(accent.opacity(0.18))
+                    .frame(width: 132 * w, height: 132 * w)
+                Image(systemName: step.icon)
+                    .font(.system(size: 54 * w))
+                    .foregroundColor(accent)
+            }
+            Text(step.title)
+                .font(.system(size: 24 * w, weight: .bold))
+                .foregroundColor(.black)
+                .multilineTextAlignment(.center)
+            Text(step.detail)
+                .font(.system(size: 16 * w))
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40 * w)
+            Spacer()
+            Spacer()
+        }
+        .padding()
+    }
+
+    private func advance() {
+        if page < steps.count - 1 {
+            withAnimation { page += 1 }
+        } else {
+            completeProfile()
+        }
+    }
+
+    private func completeProfile() {
+        // Patient passes its survey answers; clinician arrives with empty
+        // strings → pass nil so blank symptom columns are written.
+        let isPatientSurvey = !(symptomsLocation.isEmpty && symptomsArea.isEmpty && diagnosis.isEmpty)
+        let responses: SurveyResponses? = isPatientSurvey
+            ? SurveyResponses(symptomsLocation: symptomsLocation, symptomsArea: symptomsArea, diagnosis: diagnosis)
+            : nil
+        Task {
+            await authService.completeProfile(email: email, surveyResponses: responses)
+        }
+    }
+}
+
+// MARK: - FifthPage (legacy — superseded by OnboardingFlow; no longer instantiated)
 struct FifthPage: View {
     let email: String
     let baseWidth: CGFloat = 390
