@@ -680,12 +680,7 @@ private struct TimelineAssessmentGroupRow: View {
                             .font(.subheadline).fontWeight(.semibold)
                             .foregroundColor(.primary)
                             .lineLimit(1)
-                            .layoutPriority(1)
                         Spacer(minLength: 4)
-                        Text("\(events.count) \(events.count == 1 ? "movement" : "movements")")
-                            .font(.caption).foregroundColor(.secondary)
-                            .lineLimit(1)
-                            .layoutPriority(0)
                         if !isCompareMode {
                             Image(systemName: expanded ? "chevron.down" : "chevron.right")
                                 .font(.caption2).foregroundColor(.secondary)
@@ -695,7 +690,12 @@ private struct TimelineAssessmentGroupRow: View {
                 }
                 .buttonStyle(.plain)
 
-                StatusPill(badge: aggregatedBadge)
+                HStack(spacing: 8) {
+                    StatusPill(badge: aggregatedBadge)
+                    Text("\(events.count) \(events.count == 1 ? "movement" : "movements")")
+                        .font(.caption).foregroundColor(.secondary)
+                    Spacer(minLength: 0)
+                }
 
                 if expanded && !isCompareMode {
                     VStack(alignment: .leading, spacing: 0) {
