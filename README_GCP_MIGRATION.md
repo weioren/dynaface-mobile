@@ -172,13 +172,21 @@ security rules using `request.auth.token.app_uid`.
    - I could not test the `firestore.get(...)` cross-service call in
      `storage.rules` — double check that syntax against your Firestore
      database ID the first time you deploy.
-4. **Deploy/redeploy the two Cloud Functions:**
+4. **Deploy/redeploy the Cloud Functions:**
    - `create_profile` (new) — see the deploy command in
      `gcp-backend/create_profile/main.py`'s docstring.
    - `firestore_function.py` (updated) — redeploy with the same command you
      used before. **Also confirm/update its Eventarc trigger's watched
      document path is `processing_jobs/{jobId}`** — if it was wired to watch
      a different/wildcard path before, update it.
+   - `cleanup_job_storage` (new) — Firestore **delete** trigger on
+     `processing_jobs/{jobId}`; deletes the orphaned storage blobs
+     (`results/{uid}/{jobId}/` + `uploads/{uid}/{jobId}/`) after a clinician
+     deletes an assessment (the client can't — storage.rules denies it). See
+     the deploy command in `gcp-backend/cleanup_job_storage/main.py`'s
+     docstring. Its `--trigger-location` must match `firestore_function`'s
+     trigger location, and its runtime service account needs
+     `roles/storage.objectAdmin` on BOTH the raw and results buckets.
    - Grant the worker's service account (the one `dynaface-worker` Cloud Run
      Job runs as) the `roles/datastore.user` IAM role — it now reads/writes
      Firestore, which it never did before.
