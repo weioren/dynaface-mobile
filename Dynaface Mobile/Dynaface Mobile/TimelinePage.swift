@@ -37,6 +37,8 @@ struct TimelinePage: View {
     @State private var groupPendingDelete: AssessmentGroupDelete?
     /// Day-groups currently mid-delete — drives the row's "Deleting…" spinner.
     @State private var deletingDays: Set<Date> = []
+    /// Transient success/failure toast shown after a delete completes.
+    @State private var deleteToast: DeleteToast?
 
     // MARK: - Compare-assessments mode
     //
@@ -187,16 +189,43 @@ struct TimelinePage: View {
         ) { pending in
             Button("Delete", role: .destructive) {
                 let day = pending.day
+                let events = pending.events
                 deletingDays.insert(day)
                 Task {
-                    await timelineService.deleteAssessmentGroup(pending.events)
+                    let ok = await timelineService.deleteAssessmentGroup(events)
                     deletingDays.remove(day)
+                    // Show our own toast for this action; suppress the generic
+                    // error alert so feedback isn't doubled.
+                    timelineService.errorMessage = nil
+                    withAnimation {
+                        deleteToast = ok
+                            ? DeleteToast(text: "Assessment deleted", isError: false)
+                            : DeleteToast(text: "Couldn't delete assessment", isError: true)
+                    }
                 }
                 groupPendingDelete = nil
             }
             Button("Cancel", role: .cancel) { groupPendingDelete = nil }
         } message: { pending in
             Text("This permanently deletes this assessment and its \(pending.events.count) \(pending.events.count == 1 ? "recording" : "recordings"), including the processed video and analysis. This can't be undone.")
+        }
+        .overlay(alignment: .bottom) {
+            if let toast = deleteToast {
+                HStack(spacing: 8) {
+                    Image(systemName: toast.isError ? "xmark.circle.fill" : "checkmark.circle.fill")
+                        .foregroundColor(toast.isError ? .red : Color(red: 0.18, green: 0.59, blue: 0.31))
+                    Text(toast.text).font(.subheadline).fontWeight(.medium)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 12)
+                .background(.regularMaterial, in: Capsule())
+                .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
+                .padding(.bottom, 24)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .task(id: toast.id) {
+                    try? await Task.sleep(nanoseconds: 2_500_000_000)
+                    withAnimation { deleteToast = nil }
+                }
+            }
         }
     }
 
@@ -495,6 +524,15 @@ private struct AssessmentGroupDelete: Identifiable {
     let id = UUID()
     let day: Date
     let events: [TimelineEvent]
+}
+
+// MARK: - DeleteToast
+//
+// Transient success/failure banner shown after a delete completes.
+private struct DeleteToast: Identifiable {
+    let id = UUID()
+    let text: String
+    let isError: Bool
 }
 
 // MARK: - CompareSelection
