@@ -28,7 +28,7 @@ struct ProfilePage: View {
     /// separately (red styling) below this list, not as a row here.
     private func menuItems(for accountType: AccountType) -> [MenuRow] {
         let edit     = MenuRow(text: "Edit profile") { showingEditProfile = true }
-        let guide    = MenuRow(text: "How it works") { showingGuide = true }
+        let guide    = MenuRow(text: "Guide") { showingGuide = true }
         let faq      = MenuRow(text: "FAQ") { /* TODO: FAQ */ }
         let upcoming = MenuRow(text: "Upcoming appointments") { /* stub — button only */ }
 
