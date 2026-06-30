@@ -100,7 +100,17 @@ struct TimelinePage: View {
         .refreshable {
             await timelineService.loadEvents()   // includes statuses now
         }
-        .task { await reloadIfNeeded() }
+        .task {
+            await reloadIfNeeded()
+            // Live-refresh while any assessment job is still processing, so the
+            // badge flips to Completed without navigating away. Auto-cancels on
+            // disappear; stops once every status is terminal.
+            while !Task.isCancelled,
+                  timelineService.jobStatusByJobId.values.contains(where: { $0 == "queued" || $0 == "processing" }) {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                await timelineService.loadJobStatuses()
+            }
+        }
         .alert(
             "Couldn't load timeline",
             isPresented: Binding(
@@ -632,7 +642,7 @@ private struct TimelineAssessmentGroupRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: 8) {
             if isCompareMode {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
@@ -644,14 +654,16 @@ private struct TimelineAssessmentGroupRow: View {
                 Text(timelineDateFormatter.string(from: day))
                     .font(.caption).fontWeight(.medium)
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
-            .frame(width: 90, alignment: .trailing)
+            .frame(width: 64, alignment: .trailing)
 
             ZStack(alignment: .top) {
                 Rectangle().fill(Color.gray.opacity(0.25)).frame(width: 2)
                 Circle().fill(accent).frame(width: 10, height: 10).offset(y: 6)
             }
-            .frame(width: 12)
+            .frame(width: 10)
 
             VStack(alignment: .leading, spacing: 8) {
                 Button {
@@ -667,7 +679,8 @@ private struct TimelineAssessmentGroupRow: View {
                         Text(title)
                             .font(.subheadline).fontWeight(.semibold)
                             .foregroundColor(.primary)
-                        Spacer()
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
                         Text("\(events.count) \(events.count == 1 ? "movement" : "movements")")
                             .font(.caption).foregroundColor(.secondary)
                         if !isCompareMode {
@@ -734,14 +747,16 @@ private struct TimelineEventRow: View {
     }()
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: 8) {
             // Date column on the left so eyes can scan vertically by date.
             VStack(alignment: .trailing, spacing: 2) {
                 Text(timelineDateFormatter.string(from: event.occurredAt))
                     .font(.caption).fontWeight(.medium)
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
-            .frame(width: 90, alignment: .trailing)
+            .frame(width: 64, alignment: .trailing)
 
             // Vertical guideline + dot, the timeline rail.
             ZStack(alignment: .top) {
@@ -753,7 +768,7 @@ private struct TimelineEventRow: View {
                     .frame(width: 10, height: 10)
                     .offset(y: 6)
             }
-            .frame(width: 12)
+            .frame(width: 10)
 
             // Event card.
             VStack(alignment: .leading, spacing: 4) {
