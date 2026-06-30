@@ -33,6 +33,8 @@ struct TimelinePage: View {
     @State private var selectedFilter: TimelineEventType?
     /// Manual (non-assessment) event awaiting delete confirmation.
     @State private var eventPendingDelete: TimelineEvent?
+    /// Assessment day-group awaiting delete confirmation (full delete).
+    @State private var groupPendingDelete: AssessmentGroupDelete?
 
     // MARK: - Compare-assessments mode
     //
@@ -143,6 +145,15 @@ struct TimelinePage: View {
                         onPlay: { e in presentAssessmentVideo(e) },
                         onToggleSelection: { toggleAssessmentDaySelection(day) }
                     )
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        if !isComparing {
+                            Button(role: .destructive) {
+                                groupPendingDelete = AssessmentGroupDelete(day: day, events: events)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -162,6 +173,22 @@ struct TimelinePage: View {
             Button("Cancel", role: .cancel) { eventPendingDelete = nil }
         } message: { event in
             Text("This permanently deletes this \(event.type.displayName.lowercased()). This can't be undone.")
+        }
+        .alert(
+            "Delete assessment?",
+            isPresented: Binding(
+                get: { groupPendingDelete != nil },
+                set: { if !$0 { groupPendingDelete = nil } }
+            ),
+            presenting: groupPendingDelete
+        ) { pending in
+            Button("Delete", role: .destructive) {
+                Task { await timelineService.deleteAssessmentGroup(pending.events) }
+                groupPendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { groupPendingDelete = nil }
+        } message: { pending in
+            Text("This permanently deletes this assessment and its \(pending.events.count) \(pending.events.count == 1 ? "recording" : "recordings"), including the processed video and analysis. This can't be undone.")
         }
     }
 
@@ -450,6 +477,16 @@ struct TimelinePage: View {
             await timelineService.loadJobStatuses()   // re-appear: refresh statuses only
         }
     }
+}
+
+// MARK: - AssessmentGroupDelete
+//
+// The day-group of assessment events awaiting delete confirmation. Carries
+// the events so the confirm action can cascade-delete each one's job too.
+private struct AssessmentGroupDelete: Identifiable {
+    let id = UUID()
+    let day: Date
+    let events: [TimelineEvent]
 }
 
 // MARK: - CompareSelection

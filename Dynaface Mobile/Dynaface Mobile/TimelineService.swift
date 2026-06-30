@@ -242,21 +242,39 @@ final class TimelineService: ObservableObject {
         }
     }
 
-    /// Delete a non-assessment event. Assessment rows are system-managed
-    /// (linked to a processing_jobs doc) and never deletable — guarded here
-    /// client-side and by firestore.rules. On success the local copy is removed.
+    /// Delete a timeline event. For ASSESSMENT events this CASCADES: the
+    /// linked processing_job and its attribution are deleted too, so the video
+    /// + analysis are fully removed from the app (not just the timeline entry).
+    /// NOTE: the results-bucket blobs (annotated.mp4 / results.json /
+    /// peak_frame.png) can't be removed client-side — storage.rules block
+    /// client writes to results/ — so a backend cleanup function should delete
+    /// results/{uid}/{jobId}/ when the job doc is deleted.
     @discardableResult
     func deleteEvent(_ event: TimelineEvent) async -> Bool {
-        guard event.type != .assessment else { return false }
+        if event.type == .assessment, let jobId = event.jobId {
+            // Best-effort cascade; one failed piece shouldn't block the rest.
+            try? await db.collection("processing_jobs").document(jobId.uuidString).delete()
+            try? await db.collection("job_patient_attributions").document(jobId.uuidString).delete()
+        }
         do {
             try await db.collection(collectionName).document(event.id.uuidString).delete()
             events.removeAll { $0.id == event.id }
             return true
         } catch {
             print("TimelineService.deleteEvent failed: \(error)")
-            errorMessage = "Couldn't delete event: \(error.localizedDescription)"
+            errorMessage = "Couldn't delete: \(error.localizedDescription)"
             return false
         }
+    }
+
+    /// Delete every event in an assessment day-group (each one cascades).
+    @discardableResult
+    func deleteAssessmentGroup(_ groupEvents: [TimelineEvent]) async -> Bool {
+        var allOK = true
+        for event in groupEvents {
+            if await deleteEvent(event) == false { allOK = false }
+        }
+        return allOK
     }
 
     // MARK: - Helpers
