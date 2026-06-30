@@ -35,6 +35,8 @@ struct TimelinePage: View {
     @State private var eventPendingDelete: TimelineEvent?
     /// Assessment day-group awaiting delete confirmation (full delete).
     @State private var groupPendingDelete: AssessmentGroupDelete?
+    /// Day-groups currently mid-delete — drives the row's "Deleting…" spinner.
+    @State private var deletingDays: Set<Date> = []
 
     // MARK: - Compare-assessments mode
     //
@@ -143,7 +145,8 @@ struct TimelinePage: View {
                         isSelected: selectedAssessmentDays.contains(day),
                         statusByJobId: timelineService.jobStatusByJobId,
                         onPlay: { e in presentAssessmentVideo(e) },
-                        onToggleSelection: { toggleAssessmentDaySelection(day) }
+                        onToggleSelection: { toggleAssessmentDaySelection(day) },
+                        isDeleting: deletingDays.contains(day)
                     )
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         if !isComparing {
@@ -183,7 +186,12 @@ struct TimelinePage: View {
             presenting: groupPendingDelete
         ) { pending in
             Button("Delete", role: .destructive) {
-                Task { await timelineService.deleteAssessmentGroup(pending.events) }
+                let day = pending.day
+                deletingDays.insert(day)
+                Task {
+                    await timelineService.deleteAssessmentGroup(pending.events)
+                    deletingDays.remove(day)
+                }
                 groupPendingDelete = nil
             }
             Button("Cancel", role: .cancel) { groupPendingDelete = nil }
@@ -655,6 +663,8 @@ private struct TimelineAssessmentGroupRow: View {
     let statusByJobId: [UUID: String]
     let onPlay: (TimelineEvent) -> Void
     let onToggleSelection: () -> Void
+    /// True while this group's cascade delete is in flight (shows a spinner).
+    let isDeleting: Bool
 
     @State private var expanded = false
     private let accent = Color(red: 0.12, green: 0.29, blue: 0.64)
@@ -770,6 +780,19 @@ private struct TimelineAssessmentGroupRow: View {
             // same path so VoiceOver hit-targets stay intact.
             if isCompareMode { onToggleSelection() }
         }
+        .opacity(isDeleting ? 0.5 : 1)
+        .allowsHitTesting(!isDeleting)
+        .overlay {
+            if isDeleting {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Deleting…").font(.subheadline).foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: isDeleting)
     }
 }
 
