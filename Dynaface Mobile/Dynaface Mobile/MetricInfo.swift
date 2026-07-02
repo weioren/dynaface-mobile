@@ -1,21 +1,25 @@
 import Foundation
 
-// DRAFT — pending Allie clinical review (D2).
+// Analysis metric formulas (D2), surfaced by the per-metric drop-down (U5).
 //
-// One `MetricExplanation` per Analysis metric, surfaced by the per-metric
-// drop-down (U5): a plain-language description, the formula in LaTeX, a bullet
-// list explaining each variable, and a basic worked example. Content is seeded
-// from the D1 formula doc (with the "peak frame, not global average" correction
-// baked in) and will be replaced by Allie's reviewed wording — when that lands,
-// this is the ONLY file to edit.
+// These match the actual backend computation in Alex's
+// clinical_report_tool/clinical_facial_report.py (compute_landmark_metrics),
+// not a guess. Shared conventions from that file:
+//   - N = intercanthal distance (dist between the inner-eye landmarks) — the
+//     normalizer for lengths; areas are normalized by N^2.
+//   - Displacements are measured from the rest frame; image y grows downward,
+//     so an upward move (brow/cheek) is (rest_y - current_y).
+//   - "Peak" = the peak-effort frame; ratios/symmetries are per-frame then
+//     aggregated. Some rows are proxies (noted) pending real landmarks.
 //
-// LaTeX uses raw string literals (#"..."#) so backslashes stay literal. Stay
-// within SwiftMath's math subset (fractions, subscripts, roots, sums, greek,
-// \text{…}).
+// Still DRAFT wording pending Allie's clinical review — when her reviewed copy
+// lands, this is the only file to edit. LaTeX uses raw string literals
+// (#"..."#); stay within SwiftMath's math subset (\frac, subscripts, \sum,
+// greek, \text{…}).
 
 struct MetricVariable: Identifiable {
     let id = UUID()
-    let symbol: String      // LaTeX for the symbol, e.g. #"\bar{y}_{peak}"#
+    let symbol: String      // LaTeX for the symbol
     let meaning: String
 }
 
@@ -31,267 +35,274 @@ enum MetricInfo {
     // MARK: Eye
 
     static let eyeClosureCompleteness = MetricExplanation(
-        measures: "How completely the eyelid closes at maximum effort, as a fraction of the resting opening.",
-        latex: #"C = 1 - \frac{a_{closed}}{a_{rest}}"#,
+        measures: "How completely the eyelid closes at the peak-closure frame, vs its resting opening (1 = fully closed).",
+        latex: #"C = 1 - \frac{a}{a_{rest}}"#,
         variables: [
-            MetricVariable(symbol: #"a_{rest}"#, meaning: "palpebral aperture at rest"),
-            MetricVariable(symbol: #"a_{closed}"#, meaning: "aperture at the peak-closure frame"),
+            MetricVariable(symbol: #"a"#, meaning: "eyelid aperture (mean upper-lid y minus mean lower-lid y) at peak closure"),
+            MetricVariable(symbol: #"a_{rest}"#, meaning: "the same aperture at rest"),
         ],
         exampleLatex: #"C = 1 - \frac{2}{20} = 0.90"#
     )
 
     static let lagophthalmos = MetricExplanation(
-        measures: "Residual eyelid opening left at maximum closure — the gap that fails to close.",
-        latex: #"L = \frac{a_{closed}}{a_{rest}} = 1 - C"#,
+        measures: "Residual eyelid opening left at peak closure (the fraction that fails to close) — the complement of closure completeness.",
+        latex: #"L = \frac{a}{a_{rest}} = 1 - C"#,
         variables: [
-            MetricVariable(symbol: #"a_{closed}"#, meaning: "aperture at peak closure"),
+            MetricVariable(symbol: #"a"#, meaning: "aperture at peak closure"),
             MetricVariable(symbol: #"a_{rest}"#, meaning: "aperture at rest"),
-            MetricVariable(symbol: #"C"#, meaning: "closure completeness"),
+            MetricVariable(symbol: #"C"#, meaning: "eye closure completeness"),
         ],
-        exampleLatex: #"L = \frac{2}{20} = 0.10"#
+        exampleLatex: #"L = 1 - 0.90 = 0.10"#
     )
 
     static let eyeAreaRatio = MetricExplanation(
-        measures: "Ratio of the affected eye's open area to the normal eye's, oriented so the affected side reads below 1.",
-        latex: #"R = \frac{A_{aff}}{A_{norm}}"#,
+        measures: "Ratio of the two eyes' open (palpebral-fissure) areas; oriented so the affected column reads below 1.",
+        latex: #"R = \frac{A_L}{A_R}"#,
         variables: [
-            MetricVariable(symbol: #"A_{aff}"#, meaning: "palpebral-fissure area, affected side"),
-            MetricVariable(symbol: #"A_{norm}"#, meaning: "palpebral-fissure area, normal side"),
+            MetricVariable(symbol: #"A_L"#, meaning: "polygon area of the left-eye landmarks (shoelace)"),
+            MetricVariable(symbol: #"A_R"#, meaning: "polygon area of the right-eye landmarks"),
         ],
         exampleLatex: #"R = \frac{140}{200} = 0.70"#
     )
 
     static let closureSpeed = MetricExplanation(
-        measures: "Peak downward velocity of the upper eyelid during a closure.",
-        latex: #"v = \max\left|\frac{\Delta y_{lid}}{\Delta t}\right|"#,
+        measures: "Peak speed of eyelid closing — the largest frame-to-frame drop in eye aperture.",
+        latex: #"v = \max_t \left| \frac{a_t - a_{t-1}}{\Delta t} \right|"#,
         variables: [
-            MetricVariable(symbol: #"\Delta y_{lid}"#, meaning: "vertical lid displacement between frames"),
-            MetricVariable(symbol: #"\Delta t"#, meaning: "frame interval"),
+            MetricVariable(symbol: #"a_t"#, meaning: "eye aperture at frame t"),
+            MetricVariable(symbol: #"\Delta t"#, meaning: "time between frames"),
         ],
         exampleLatex: #"v = \frac{6}{0.033} \approx 180"#
     )
 
-    // MARK: Synkinesis
+    // MARK: Synkinesis (all are movement / eye-closure ratios, clamped to 0..1)
 
     static let upperEyelidSynkinesis = MetricExplanation(
-        measures: "Involuntary upper-eyelid narrowing that occurs while performing a mouth movement.",
-        latex: #"S = \frac{|\Delta a_{eye}|}{a_{rest}}"#,
+        measures: "Involuntary upper-eyelid movement during the task, relative to how well the eye closes.",
+        latex: #"S = \frac{m_{upper}}{C}"#,
         variables: [
-            MetricVariable(symbol: #"\Delta a_{eye}"#, meaning: "eye-aperture change during the mouth task"),
-            MetricVariable(symbol: #"a_{rest}"#, meaning: "resting aperture"),
+            MetricVariable(symbol: #"m_{upper}"#, meaning: "upper-eyelid displacement from rest, normalized by N"),
+            MetricVariable(symbol: #"C"#, meaning: "eye closure completeness"),
         ],
-        exampleLatex: #"S = \frac{3}{20} = 0.15"#
+        exampleLatex: #"S = \frac{0.12}{0.80} = 0.15"#
     )
 
     static let lowerEyelidSynkinesis = MetricExplanation(
-        measures: "Involuntary lower-eyelid movement that occurs while performing a mouth movement.",
-        latex: #"S = \frac{|\Delta y_{lower}|}{N}"#,
+        measures: "Involuntary lower-eyelid movement during the task, relative to eye closure.",
+        latex: #"S = \frac{m_{lower}}{C}"#,
         variables: [
-            MetricVariable(symbol: #"\Delta y_{lower}"#, meaning: "lower-lid displacement during the mouth task"),
-            MetricVariable(symbol: #"N"#, meaning: "inter-canthal distance (normalizer)"),
+            MetricVariable(symbol: #"m_{lower}"#, meaning: "lower-eyelid displacement from rest, normalized by N"),
+            MetricVariable(symbol: #"C"#, meaning: "eye closure completeness"),
         ],
-        exampleLatex: #"S = \frac{3}{60} = 0.05"#
+        exampleLatex: #"S = \frac{0.08}{0.80} = 0.10"#
     )
 
     static let mouthMovementEyeClosure = MetricExplanation(
-        measures: "Involuntary mouth-corner movement that occurs while closing the eyes.",
-        latex: #"S = \frac{|\Delta d_{mouth}|}{N}"#,
+        measures: "Involuntary mouth movement during eye closure — smile magnitude relative to total eye closure.",
+        latex: #"S = \frac{M}{C_R + C_L}"#,
         variables: [
-            MetricVariable(symbol: #"\Delta d_{mouth}"#, meaning: "commissure displacement during eye closure"),
-            MetricVariable(symbol: #"N"#, meaning: "inter-canthal distance (normalizer)"),
+            MetricVariable(symbol: #"M"#, meaning: "smile magnitude"),
+            MetricVariable(symbol: #"C_R,\, C_L"#, meaning: "right / left eye closure completeness"),
         ],
-        exampleLatex: #"S = \frac{5}{60} \approx 0.08"#
+        exampleLatex: #"S = \frac{0.30}{0.80 + 0.82} \approx 0.19"#
     )
 
     static let browEyeCoupling = MetricExplanation(
-        measures: "How strongly brow motion is coupled to eye-closure motion (unintended linkage).",
-        latex: #"\rho = \mathrm{corr}(b_t,\, e_t)"#,
+        measures: "Unintended brow lift coupled to mouth movement — brow elevation relative to smile magnitude.",
+        latex: #"S = \frac{|E|}{M}"#,
         variables: [
-            MetricVariable(symbol: #"b_t"#, meaning: "per-frame brow position"),
-            MetricVariable(symbol: #"e_t"#, meaning: "per-frame eye aperture"),
+            MetricVariable(symbol: #"E"#, meaning: "brow elevation (normalized)"),
+            MetricVariable(symbol: #"M"#, meaning: "smile magnitude"),
         ],
-        exampleLatex: #"\rho = 0.42"#
+        exampleLatex: #"S = \frac{0.20}{0.50} = 0.40"#
     )
 
     static let globalSynkinesis = MetricExplanation(
-        measures: "Overall synkinesis — the mean of the individual synkinesis measures.",
-        latex: #"\bar{S} = \frac{1}{n}\sum_{i=1}^{n} S_i"#,
+        measures: "Overall synkinesis — a weighted blend of the four measures above.",
+        latex: #"\bar{S} = 0.30\,S_{up} + 0.30\,S_{low} + 0.25\,S_{me} + 0.15\,S_{be}"#,
         variables: [
-            MetricVariable(symbol: #"S_i"#, meaning: "each component synkinesis score"),
-            MetricVariable(symbol: #"n"#, meaning: "number of components"),
+            MetricVariable(symbol: #"S_{up},\, S_{low}"#, meaning: "upper / lower eyelid synkinesis"),
+            MetricVariable(symbol: #"S_{me}"#, meaning: "mouth-movement-during-eye-closure synkinesis"),
+            MetricVariable(symbol: #"S_{be}"#, meaning: "brow-eye coupling"),
         ],
-        exampleLatex: #"\bar{S} = \frac{0.15+0.05+0.08+0.42}{4} \approx 0.18"#
+        exampleLatex: #"\bar{S} = 0.30(0.15) + 0.30(0.10) + 0.25(0.19) + 0.15(0.40) \approx 0.18"#
     )
 
     // MARK: Smile
 
     static let smileSymmetryRatio = MetricExplanation(
-        measures: "Symmetry of mouth-corner excursion between the two sides during a smile (1 = symmetric).",
-        latex: #"\sigma = \frac{\min(e_L, e_R)}{\max(e_L, e_R)}"#,
+        measures: "Right vs left mouth-corner excursion during the smile (1 = symmetric).",
+        latex: #"\sigma = \frac{e_R}{e_L}"#,
         variables: [
-            MetricVariable(symbol: #"e_L,\, e_R"#, meaning: "commissure excursion on each side"),
+            MetricVariable(symbol: #"e_R,\, e_L"#, meaning: "mouth-corner (commissure) excursion from rest, right / left"),
         ],
         exampleLatex: #"\sigma = \frac{6}{10} = 0.60"#
     )
 
     static let faiVectorDifference = MetricExplanation(
-        measures: "Facial Asymmetry Index — the difference between the left and right smile displacement vectors.",
-        latex: #"\mathrm{FAI} = \left|\, \vec{s}_L - \vec{s}_R \,\right|"#,
+        measures: "Facial Asymmetry Index — the difference between the two sides' eye-to-mouth-corner distances.",
+        latex: #"\mathrm{FAI} = \left| v_L - v_R \right|"#,
         variables: [
-            MetricVariable(symbol: #"\vec{s}_L,\, \vec{s}_R"#, meaning: "smile displacement vector (mm) per side"),
+            MetricVariable(symbol: #"v_L,\, v_R"#, meaning: "distance from the eye center to the mouth corner (÷N), each side"),
         ],
-        exampleLatex: #"\mathrm{FAI} = |8 - 4| = 4\ \text{mm}"#
+        exampleLatex: #"\mathrm{FAI} = |0.42 - 0.30| = 0.12"#
     )
 
     static let dentalShow = MetricExplanation(
-        measures: "Maximum vertical tooth show during the smile.",
-        latex: #"D = \max_t\, d_{show}(t)"#,
+        measures: "Proxy for tooth show — vertical drop of the mouth center from rest (the backend uses this as a stand-in, not true dental show).",
+        latex: #"D = \frac{|\, y_c - y_{c,rest} \,|}{N}"#,
         variables: [
-            MetricVariable(symbol: #"d_{show}(t)"#, meaning: "visible tooth height at frame t"),
+            MetricVariable(symbol: #"y_c"#, meaning: "mouth-center y at peak"),
+            MetricVariable(symbol: #"y_{c,rest}"#, meaning: "mouth-center y at rest"),
+            MetricVariable(symbol: #"N"#, meaning: "intercanthal distance"),
         ],
-        exampleLatex: #"D = 5\ \text{mm}"#
+        exampleLatex: #"D = \frac{5}{60} \approx 0.08"#
     )
 
     static let smileVelocity = MetricExplanation(
-        measures: "Average speed of mouth-corner movement while forming the smile.",
-        latex: #"v = \frac{1}{n}\sum_t \frac{\Delta d_t}{\Delta t}"#,
+        measures: "Average speed of the smile — mean frame-to-frame change in smile magnitude.",
+        latex: #"v = \frac{1}{T}\sum_t \frac{M_t - M_{t-1}}{\Delta t}"#,
         variables: [
-            MetricVariable(symbol: #"\Delta d_t"#, meaning: "commissure displacement per frame"),
-            MetricVariable(symbol: #"\Delta t"#, meaning: "frame interval"),
+            MetricVariable(symbol: #"M_t"#, meaning: "smile magnitude at frame t"),
+            MetricVariable(symbol: #"\Delta t"#, meaning: "time between frames"),
+            MetricVariable(symbol: #"T"#, meaning: "number of frames"),
         ],
-        exampleLatex: #"v \approx 45\ \text{mm/s}"#
+        exampleLatex: #"v \approx 0.8\ \text{/s}"#
     )
 
     static let smileMagnitude = MetricExplanation(
-        measures: "Overall size of the smile — peak combined mouth-corner excursion.",
-        latex: #"M = \max_t\, \big(e_L(t) + e_R(t)\big)"#,
+        measures: "Size of the smile — the larger of the two mouth-corner excursions, at its peak.",
+        latex: #"M = \frac{\max(e_R, e_L)}{N}"#,
         variables: [
-            MetricVariable(symbol: #"e_L,\, e_R"#, meaning: "per-side commissure excursion"),
+            MetricVariable(symbol: #"e_R,\, e_L"#, meaning: "mouth-corner excursion from rest, right / left"),
+            MetricVariable(symbol: #"N"#, meaning: "intercanthal distance"),
         ],
-        exampleLatex: #"M = 10 + 9 = 19"#
+        exampleLatex: #"M = \frac{\max(9, 10)}{60} \approx 0.17"#
     )
 
     // MARK: Brow
 
     static let browElevation = MetricExplanation(
-        measures: "How high the brow raises from rest at peak effort, normalized by inter-canthal distance.",
-        latex: #"E = \frac{\bar{y}_{rest} - \bar{y}_{peak}}{N}"#,
+        measures: "How far the brow rises from rest at peak effort, normalized by intercanthal distance.",
+        latex: #"E = \frac{\bar{y}_{rest} - \bar{y}}{N}"#,
         variables: [
-            MetricVariable(symbol: #"\bar{y}_{rest}"#, meaning: "mean brow-landmark height at rest"),
-            MetricVariable(symbol: #"\bar{y}_{peak}"#, meaning: "mean brow-landmark height at peak (image y grows downward)"),
-            MetricVariable(symbol: #"N"#, meaning: "inter-canthal distance (normalizer)"),
+            MetricVariable(symbol: #"\bar{y}_{rest}"#, meaning: "mean brow-landmark y at rest"),
+            MetricVariable(symbol: #"\bar{y}"#, meaning: "mean brow-landmark y at peak (y grows downward, so a rise is positive)"),
+            MetricVariable(symbol: #"N"#, meaning: "intercanthal distance"),
         ],
         exampleLatex: #"E = \frac{130 - 100}{60} = 0.50"#
     )
 
     static let browSymmetry = MetricExplanation(
-        measures: "Symmetry of brow elevation between the two sides (1 = symmetric).",
-        latex: #"\sigma = \frac{\min(E_L, E_R)}{\max(E_L, E_R)}"#,
+        measures: "Right vs left brow elevation (1 = symmetric).",
+        latex: #"\sigma = \frac{|E_R|}{|E_L|}"#,
         variables: [
-            MetricVariable(symbol: #"E_L,\, E_R"#, meaning: "brow elevation per side"),
+            MetricVariable(symbol: #"E_R,\, E_L"#, meaning: "per-side brow elevation (rest minus current mean y)"),
         ],
-        exampleLatex: #"\sigma = \frac{0.3}{0.5} = 0.60"#
+        exampleLatex: #"\sigma = \frac{0.30}{0.50} = 0.60"#
     )
 
     static let medialRecruitment = MetricExplanation(
-        measures: "Share of brow elevation coming from the medial (inner) brow points.",
-        latex: #"R_m = \frac{\Delta y_{medial}}{\Delta y_{brow}}"#,
+        measures: "Movement of the inner (medial) brow points from rest, normalized by intercanthal distance.",
+        latex: #"R_m = \frac{|\, \bar{y}_{med,rest} - \bar{y}_{med} \,|}{N}"#,
         variables: [
-            MetricVariable(symbol: #"\Delta y_{medial}"#, meaning: "displacement of the medial brow points"),
-            MetricVariable(symbol: #"\Delta y_{brow}"#, meaning: "total brow displacement"),
+            MetricVariable(symbol: #"\bar{y}_{med}"#, meaning: "mean y of the 3 innermost brow points (per side), at peak"),
+            MetricVariable(symbol: #"\bar{y}_{med,rest}"#, meaning: "the same at rest"),
+            MetricVariable(symbol: #"N"#, meaning: "intercanthal distance"),
         ],
-        exampleLatex: #"R_m = \frac{12}{30} = 0.40"#
+        exampleLatex: #"R_m = \frac{12}{60} = 0.20"#
     )
 
     static let lateralRecruitment = MetricExplanation(
-        measures: "Share of brow elevation coming from the lateral (outer) brow points.",
-        latex: #"R_\ell = \frac{\Delta y_{lateral}}{\Delta y_{brow}}"#,
+        measures: "Movement of the outer (lateral) brow points from rest, normalized by intercanthal distance.",
+        latex: #"R_\ell = \frac{|\, \bar{y}_{lat,rest} - \bar{y}_{lat} \,|}{N}"#,
         variables: [
-            MetricVariable(symbol: #"\Delta y_{lateral}"#, meaning: "displacement of the lateral brow points"),
-            MetricVariable(symbol: #"\Delta y_{brow}"#, meaning: "total brow displacement"),
+            MetricVariable(symbol: #"\bar{y}_{lat}"#, meaning: "mean y of the 3 outermost brow points (per side), at peak"),
+            MetricVariable(symbol: #"\bar{y}_{lat,rest}"#, meaning: "the same at rest"),
+            MetricVariable(symbol: #"N"#, meaning: "intercanthal distance"),
         ],
-        exampleLatex: #"R_\ell = \frac{18}{30} = 0.60"#
+        exampleLatex: #"R_\ell = \frac{18}{60} = 0.30"#
     )
 
     static let recruitmentRatio = MetricExplanation(
-        measures: "Balance of medial vs lateral brow recruitment during elevation.",
-        latex: #"R = \frac{\Delta y_{medial}}{\Delta y_{lateral}}"#,
+        measures: "Right brow's share of total brow movement (fallback when per-side medial/lateral isn't available).",
+        latex: #"R = \frac{|E_R|}{|E_R| + |E_L|}"#,
         variables: [
-            MetricVariable(symbol: #"\Delta y_{medial}"#, meaning: "medial brow-point displacement"),
-            MetricVariable(symbol: #"\Delta y_{lateral}"#, meaning: "lateral brow-point displacement"),
+            MetricVariable(symbol: #"E_R,\, E_L"#, meaning: "per-side brow elevation"),
         ],
-        exampleLatex: #"R = \frac{12}{18} \approx 0.67"#
+        exampleLatex: #"R = \frac{0.30}{0.30 + 0.20} = 0.60"#
     )
 
     // MARK: Midface
 
     static let alarMovement = MetricExplanation(
-        measures: "Peak displacement of the nostril rim (ala) during the exercise, normalized by inter-canthal distance.",
-        latex: #"A = \frac{\max_t\, |p_{ala}(t) - p_{ala}^{\,rest}|}{N}"#,
+        measures: "Displacement of the nostril rim (ala) from rest, per side, normalized by intercanthal distance.",
+        latex: #"A = \frac{|\, p_{ala} - p_{ala}^{\,rest} \,|}{N}"#,
         variables: [
-            MetricVariable(symbol: #"p_{ala}(t)"#, meaning: "ala landmark position at frame t"),
-            MetricVariable(symbol: #"p_{ala}^{\,rest}"#, meaning: "resting ala position"),
-            MetricVariable(symbol: #"N"#, meaning: "inter-canthal distance (normalizer)"),
+            MetricVariable(symbol: #"p_{ala}"#, meaning: "nostril landmark position at peak"),
+            MetricVariable(symbol: #"p_{ala}^{\,rest}"#, meaning: "resting nostril position"),
+            MetricVariable(symbol: #"N"#, meaning: "intercanthal distance"),
         ],
         exampleLatex: #"A = \frac{9}{60} = 0.15"#
     )
 
     static let alarSymmetry = MetricExplanation(
-        measures: "Symmetry of nostril-rim movement between the two sides.",
-        latex: #"\sigma = \frac{\min(A_L, A_R)}{\max(A_L, A_R)}"#,
+        measures: "How stable the inter-alar (nostril-to-nostril) width stays vs rest (1 = unchanged).",
+        latex: #"\sigma = 1 - \frac{|\, w - w_{rest} \,|}{w}"#,
         variables: [
-            MetricVariable(symbol: #"A_L,\, A_R"#, meaning: "alar movement per side"),
+            MetricVariable(symbol: #"w"#, meaning: "inter-alar width at peak (|left nostril x − right nostril x|)"),
+            MetricVariable(symbol: #"w_{rest}"#, meaning: "inter-alar width at rest"),
         ],
-        exampleLatex: #"\sigma = \frac{0.12}{0.15} = 0.80"#
+        exampleLatex: #"\sigma = 1 - \frac{|62 - 60|}{62} \approx 0.97"#
     )
 
     static let cupidBowDeviation = MetricExplanation(
-        measures: "Horizontal deviation of the cupid's-bow midpoint from the facial midline (signed: + right, − left).",
-        latex: #"\delta = x_{cupid} - x_{mid}"#,
+        measures: "Horizontal shift of the mouth center (cupid's bow) off the facial midline, signed (+ right, − left), normalized.",
+        latex: #"\delta = \frac{x_c - x_{mid}}{N}"#,
         variables: [
-            MetricVariable(symbol: #"x_{cupid}"#, meaning: "cupid's-bow midpoint x-coordinate"),
-            MetricVariable(symbol: #"x_{mid}"#, meaning: "facial-midline x-coordinate"),
+            MetricVariable(symbol: #"x_c"#, meaning: "mouth-center x"),
+            MetricVariable(symbol: #"x_{mid}"#, meaning: "facial-midline x (mean of the two eye centers)"),
+            MetricVariable(symbol: #"N"#, meaning: "intercanthal distance"),
         ],
-        exampleLatex: #"\delta = +3\ \text{(toward right)}"#
+        exampleLatex: #"\delta = \frac{+3}{60} = +0.05"#
     )
 
     static let dynamicCupidShift = MetricExplanation(
-        measures: "Average horizontal shift of the cupid's bow across the movement (per-frame).",
-        latex: #"\bar{\delta} = \frac{1}{n}\sum_t \big(x_{cupid}(t) - x_{mid}\big)"#,
+        measures: "Vertical shift of the mouth center from rest during the movement, normalized.",
+        latex: #"\Delta = \frac{|\, y_c - y_{c,rest} \,|}{N}"#,
         variables: [
-            MetricVariable(symbol: #"x_{cupid}(t)"#, meaning: "cupid's-bow x at frame t"),
-            MetricVariable(symbol: #"x_{mid}"#, meaning: "facial-midline x"),
-            MetricVariable(symbol: #"n"#, meaning: "number of frames"),
+            MetricVariable(symbol: #"y_c"#, meaning: "mouth-center y at peak"),
+            MetricVariable(symbol: #"y_{c,rest}"#, meaning: "mouth-center y at rest"),
+            MetricVariable(symbol: #"N"#, meaning: "intercanthal distance"),
         ],
-        exampleLatex: #"\bar{\delta} \approx 1.5"#
+        exampleLatex: #"\Delta = \frac{4}{60} \approx 0.07"#
     )
 
     static let upperLip2DArea = MetricExplanation(
-        measures: "Symmetry of the upper-lip area between the two halves (polygon area via the shoelace formula).",
-        latex: #"A = \tfrac{1}{2}\left|\sum_i (x_i y_{i+1} - x_{i+1} y_i)\right|,\quad \sigma = \frac{\min(A_L, A_R)}{\max(A_L, A_R)}"#,
+        measures: "Left/right symmetry of the upper-lip area (1 = symmetric).",
+        latex: #"\sigma = 1 - \frac{|A_L - A_R|}{A_L + A_R}"#,
         variables: [
-            MetricVariable(symbol: #"(x_i, y_i)"#, meaning: "upper-lip contour landmarks"),
-            MetricVariable(symbol: #"A_L,\, A_R"#, meaning: "upper-lip half-areas"),
+            MetricVariable(symbol: #"A_L,\, A_R"#, meaning: "upper-lip polygon area either side of the midline (shoelace, ÷N²)"),
         ],
-        exampleLatex: #"\sigma = \frac{95}{100} = 0.95"#
+        exampleLatex: #"\sigma = 1 - \frac{|95 - 100|}{195} \approx 0.97"#
     )
 
     static let cheekElevation = MetricExplanation(
-        measures: "Mean upward cheek movement per side during the smile, normalized by inter-canthal distance.",
-        latex: #"H = \frac{\bar{y}_{rest} - \bar{y}_{peak}}{N}"#,
+        measures: "Cheek lift per side — currently a proxy equal to brow elevation (no dedicated cheek landmarks yet).",
+        latex: #"H = \frac{\bar{y}_{rest} - \bar{y}}{N}"#,
         variables: [
-            MetricVariable(symbol: #"\bar{y}_{rest}"#, meaning: "mean cheek-landmark height at rest"),
-            MetricVariable(symbol: #"\bar{y}_{peak}"#, meaning: "mean cheek-landmark height at peak"),
-            MetricVariable(symbol: #"N"#, meaning: "inter-canthal distance (normalizer)"),
+            MetricVariable(symbol: #"\bar{y}_{rest}"#, meaning: "mean brow-landmark y at rest (proxy source)"),
+            MetricVariable(symbol: #"\bar{y}"#, meaning: "mean brow-landmark y at peak"),
+            MetricVariable(symbol: #"N"#, meaning: "intercanthal distance"),
         ],
         exampleLatex: #"H = \frac{118 - 100}{60} = 0.30"#
     )
 
     static let midfaceContour = MetricExplanation(
-        measures: "Left/right symmetry of the midface contour (1 = symmetric); a 2D proxy, not a volumetric measurement.",
-        latex: #"\sigma = 1 - \frac{|C_L - C_R|}{C_L + C_R}"#,
+        measures: "Left/right symmetry of the midface (mouth-region) area (1 = symmetric); a 2D proxy, not a volumetric measurement.",
+        latex: #"\sigma = 1 - \frac{|A_L - A_R|}{A_L + A_R}"#,
         variables: [
-            MetricVariable(symbol: #"C_L,\, C_R"#, meaning: "midface contour extent per side"),
+            MetricVariable(symbol: #"A_L,\, A_R"#, meaning: "midface polygon area either side of the midline (shoelace, ÷N²)"),
         ],
         exampleLatex: #"\sigma = 1 - \frac{|48 - 52|}{100} = 0.96"#
     )
