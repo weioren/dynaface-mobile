@@ -124,9 +124,13 @@ final class AuthViewModel: ObservableObject {
         guard parts.count == 2, !parts[0].isEmpty else { return false }
         let domain = String(parts[1])
         guard domain.contains("."), !domain.hasPrefix("."), !domain.hasSuffix(".") else { return false }
-        // Academic (.edu, .edu.au, .ac.uk, …) or a popular consumer provider.
-        if domain.hasSuffix(".edu") || domain.contains(".edu.") || domain.contains(".ac.") {
-            return true
+        // Academic — check the trailing domain labels (not a loose substring),
+        // so a spoof like "foo.edu.evil.com" is NOT accepted.
+        let labels = domain.split(separator: ".").map(String.init)
+        if labels.last == "edu" { return true }                 // x.edu, mail.jhu.edu
+        if labels.count >= 2 {
+            let secondLevel = labels[labels.count - 2]
+            if secondLevel == "edu" || secondLevel == "ac" { return true }  // x.edu.au, x.ac.uk
         }
         return AuthViewModel.allowedEmailDomains.contains(domain)
     }
