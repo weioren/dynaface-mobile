@@ -11,6 +11,18 @@ struct CreateAccountView: View {
     let baseWidth: CGFloat = 390
     let baseHeight: CGFloat = 844
 
+    @ViewBuilder
+    private func passwordRule(_ text: String, _ met: Bool, _ w: CGFloat) -> some View {
+        HStack(spacing: 6 * w) {
+            Image(systemName: met ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 13 * w))
+                .foregroundColor(met ? .green : .gray)
+            Text(text)
+                .font(.system(size: 12 * w))
+                .foregroundColor(met ? .black : .gray)
+        }
+    }
+
     var body: some View {
         GeometryReader { geometry in
             let w = geometry.size.width / baseWidth
@@ -96,6 +108,19 @@ struct CreateAccountView: View {
                             SecureField("Create a password", text: $authViewModel.password)
                                 .textFieldStyle(CustomTextFieldStyle())
                                 .textContentType(.newPassword)
+
+                            // Live password requirements — explains the greyed-out
+                            // Create Account button.
+                            if !authViewModel.password.isEmpty {
+                                VStack(alignment: .leading, spacing: 4 * h) {
+                                    passwordRule("At least 8 characters", authViewModel.hasMinLength, w)
+                                    passwordRule("An uppercase letter", authViewModel.hasUpper, w)
+                                    passwordRule("A lowercase letter", authViewModel.hasLower, w)
+                                    passwordRule("A number", authViewModel.hasDigit, w)
+                                    passwordRule("A special character", authViewModel.hasSpecial, w)
+                                }
+                                .padding(.top, 4 * h)
+                            }
                         }
                         .padding(.horizontal, 20 * w)
 

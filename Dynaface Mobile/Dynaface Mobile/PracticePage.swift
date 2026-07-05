@@ -22,7 +22,6 @@ struct PracticePage: View {
     @State private var isUploadingAll = false
     @State private var uploadErrorMessage: String?
     @State private var uploadedCount: Int = 0
-    @AppStorage("videoUploadsEnabled") private var videoUploadsEnabled = true
     @Environment(\.presentationMode) var presentationMode
     @EnvironmentObject private var authService: AuthenticationService
     // Phase 8: needed so the attribution sheet inherits these via explicit
@@ -269,9 +268,7 @@ struct PracticePage: View {
                     await uploadAllRecordingsAndFinish()
                 }
             } label: {
-                Text(isUploadingAll
-                     ? "Uploading..."
-                     : ((videoUploadsEnabled || isClinician) ? "Upload All & Finish" : "Finish Assessment"))
+                Text(isUploadingAll ? "Uploading..." : "Upload All & Finish")
                     .foregroundColor(.white)
                     .font(.headline)
                     .frame(maxWidth: .infinity)
@@ -346,15 +343,6 @@ struct PracticePage: View {
         guard !isUploadingAll else { return }
         guard recordings.count == exercises.count else {
             uploadErrorMessage = "Please complete all selected exercises before uploading."
-            return
-        }
-
-        // Honour the upload toggle only for patient self-records. Clinicians
-        // always upload (the recordings belong to the chosen patient).
-        if !videoUploadsEnabled && !isClinician {
-            NotificationCenter.default.post(name: .assessmentCompleted, object: nil)
-            NotificationCenter.default.post(name: .recordingAccepted, object: nil)
-            presentationMode.wrappedValue.dismiss()
             return
         }
 
@@ -435,13 +423,6 @@ struct PracticePage: View {
         }
     }
 
-
-    private var isClinician: Bool {
-        if case .signedIn(let profile) = authService.authState {
-            return profile.accountType == .clinician
-        }
-        return false
-    }
 
     private func cleanupRecordings() {
         for url in recordings.values {

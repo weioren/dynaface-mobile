@@ -15,6 +15,8 @@ struct Dashboard: View {
     @StateObject private var attributionService = JobAttributionService()
 
     @State private var selectedTab = 0
+    @State private var emailBannerDismissed = false
+    @State private var resendConfirmation = false
 
     /// Whether the signed-in user is a clinician. Drives the optional
     /// "Patients" tab. Falls back to `false` (no extra tab) for any state
@@ -33,6 +35,43 @@ struct Dashboard: View {
             return UUID(uuidString: profile.id)
         }
         return nil
+    }
+
+    // Non-blocking "verify your email" prompt shown at the top of the app while
+    // the signed-in user's email is unverified. The verification mail is sent at
+    // signup (AuthenticationService.createAccount); this just nudges + resends.
+    private var emailVerificationBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "envelope.badge")
+                .foregroundColor(.white)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Verify your email")
+                    .font(.footnote).fontWeight(.semibold)
+                    .foregroundColor(.white)
+                Text(resendConfirmation ? "Verification email sent." : "Check your inbox to confirm your address.")
+                    .font(.caption2)
+                    .foregroundColor(.white.opacity(0.9))
+            }
+            Spacer()
+            Button("Resend") {
+                Task {
+                    await authService.resendVerificationEmail()
+                    resendConfirmation = true
+                }
+            }
+            .font(.caption).fontWeight(.semibold)
+            .foregroundColor(.white)
+            Button {
+                emailBannerDismissed = true
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.9))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color(red: 0.12, green: 0.29, blue: 0.64))
     }
 
     var body: some View {
@@ -103,6 +142,16 @@ struct Dashboard: View {
             .navigationBarHidden(true)
         }
         .navigationViewStyle(.stack)
+        .safeAreaInset(edge: .top) {
+            if !authService.emailVerified && !emailBannerDismissed {
+                emailVerificationBanner
+            }
+        }
+        .task {
+            // Re-check verification (e.g. the user clicked the emailed link
+            // out-of-app) so the banner clears itself.
+            await authService.refreshEmailVerification()
+        }
         .onAppear {
             // Check if we should navigate to a specific tab
             if let tabToSelect = UserDefaults.standard.object(forKey: "selectedTab") as? Int {

@@ -93,12 +93,25 @@ final class AuthViewModel: ObservableObject {
     @Published var accountType: AccountType = .clinician
     @Published var surveyResponses: SurveyResponses?
 
+    // Password strength — new signups must include an uppercase, a lowercase, a
+    // number, and a special character, and be at least 8 chars. Sign-in is NOT
+    // re-checked (existing accounts keep whatever they have).
+    var hasMinLength: Bool { password.count >= 8 }
+    var hasUpper: Bool { password.rangeOfCharacter(from: .uppercaseLetters) != nil }
+    var hasLower: Bool { password.rangeOfCharacter(from: .lowercaseLetters) != nil }
+    var hasDigit: Bool { password.rangeOfCharacter(from: .decimalDigits) != nil }
+    var hasSpecial: Bool {
+        password.rangeOfCharacter(from: CharacterSet(charactersIn: "!@#$%^&*()_-+=[]{}|;:,.<>?/~`")) != nil
+    }
+    var isPasswordStrong: Bool {
+        hasMinLength && hasUpper && hasLower && hasDigit && hasSpecial
+    }
+
     var isSignUpValid: Bool {
         !email.isEmpty &&
         !username.isEmpty &&
-        !password.isEmpty &&
         password == confirmPassword &&
-        password.count >= 6
+        isPasswordStrong
     }
 
     var isSignInValid: Bool {
@@ -116,6 +129,10 @@ final class AuthenticationService: ObservableObject {
     /// the whole UI and stranded the user. Cleared at the start of each
     /// attempt and when the form's alert is dismissed.
     @Published var authError: String?
+    /// Whether the signed-in Firebase user's email is verified. Drives the
+    /// non-blocking "Verify your email" banner. Refreshed on session checks and
+    /// by refreshEmailVerification() (which reloads the user first).
+    @Published var emailVerified: Bool = false
 
     // Store account creation data temporarily across the two-step signup flow
     private var pendingUsername: String = ""
@@ -140,6 +157,7 @@ final class AuthenticationService: ObservableObject {
             authState = .signedOut
             return
         }
+        emailVerified = user.isEmailVerified
         do {
             let tokenResult = try await user.getIDTokenResult()
             guard let appUid = tokenResult.claims["app_uid"] as? String else {
@@ -182,6 +200,7 @@ final class AuthenticationService: ObservableObject {
             throw AuthError.userNotFound
         }
         authState = .signedIn(profile)
+        emailVerified = Auth.auth().currentUser?.isEmailVerified ?? false
     }
 
     // MARK: - Update Profile
@@ -258,6 +277,10 @@ final class AuthenticationService: ObservableObject {
         do {
             let result = try await Auth.auth().createUser(withEmail: email, password: password)
             print("Firebase auth user created with UID: \(result.user.uid)")
+            // Fire the verification email at signup. Non-blocking — the user can
+            // still proceed; a banner nudges them to verify. Best-effort.
+            try? await result.user.sendEmailVerification()
+            emailVerified = false
             authState = .accountCreated(email: email, accountType: accountType)
         } catch {
             print("Firebase signup failed: \(error)")
@@ -323,6 +346,27 @@ final class AuthenticationService: ObservableObject {
         pendingUsername = ""
         pendingPassword = ""
         pendingAccountType = .patient
+    }
+
+    // MARK: - Email verification
+    //
+    // Soft / non-blocking: the verification email is sent at signup
+    // (createAccount); the app shows a "Verify your email" banner while
+    // `emailVerified` is false. No backend involvement — this is purely
+    // Firebase Auth client + the console's email template.
+
+    /// Re-send the verification email to the currently signed-in user.
+    func resendVerificationEmail() async {
+        guard let user = Auth.auth().currentUser else { return }
+        try? await user.sendEmailVerification()
+    }
+
+    /// Reload the Firebase user and republish `emailVerified` — call on app
+    /// foreground / banner appear so it clears itself once the user verifies.
+    func refreshEmailVerification() async {
+        guard let user = Auth.auth().currentUser else { return }
+        try? await user.reload()
+        emailVerified = Auth.auth().currentUser?.isEmailVerified ?? false
     }
 
     // MARK: - create_profile Cloud Function call
