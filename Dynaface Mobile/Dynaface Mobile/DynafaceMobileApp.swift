@@ -45,9 +45,7 @@ struct RootContainer: View {
                     AuthSelector()
 
                 case .accountCreated(let email, let accountType):
-                    // Hard email-verification gate — the survey/app only opens
-                    // once the address is verified.
-                    SignupVerificationGate(email: email, accountType: accountType)
+                    SurveyFlow(email: email, accountType: accountType)
                 }
             }
         }
