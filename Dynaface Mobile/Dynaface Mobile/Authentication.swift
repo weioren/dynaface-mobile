@@ -475,6 +475,18 @@ final class AuthenticationService: ObservableObject {
         authState = .signedOut
     }
 
+    /// Abandon a half-finished signup (Firebase user created but email not yet
+    /// verified and no profile written): delete the auth user so the address is
+    /// free to sign up again, then sign out. Falls back to a plain sign-out if
+    /// the delete fails (e.g. requires-recent-login).
+    func cancelPendingSignup() async {
+        if let user = Auth.auth().currentUser {
+            try? await user.delete()
+        }
+        emailVerified = false
+        await signOut()
+    }
+
     // MARK: - Password Reset
     //
     // Firebase sends its own templated reset email; the continuation/action
