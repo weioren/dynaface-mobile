@@ -61,6 +61,13 @@ struct CreateAccountView: View {
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled(true)
                                 .textContentType(.emailAddress)
+
+                            // Restrict to .edu / common providers.
+                            if !authViewModel.email.isEmpty && !authViewModel.isEmailAllowed {
+                                Text("Use a .edu or common email (Gmail, Outlook, Yahoo, iCloud…).")
+                                    .font(.system(size: 12 * w))
+                                    .foregroundColor(.red)
+                            }
                         }
                         .padding(.horizontal, 20 * w)
 

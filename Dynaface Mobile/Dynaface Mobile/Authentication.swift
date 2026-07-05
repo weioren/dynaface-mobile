@@ -107,8 +107,32 @@ final class AuthViewModel: ObservableObject {
         hasMinLength && hasUpper && hasLower && hasDigit && hasSpecial
     }
 
+    // Email allow-list — signups must use a .edu / academic address or a common
+    // consumer provider (blocks throwaway / uncommon domains). Client-side gate;
+    // extend by editing `allowedEmailDomains`.
+    private static let allowedEmailDomains: Set<String> = [
+        "gmail.com", "googlemail.com",
+        "outlook.com", "hotmail.com", "live.com", "msn.com",
+        "yahoo.com", "ymail.com",
+        "icloud.com", "me.com", "mac.com",
+        "aol.com", "proton.me", "protonmail.com"
+    ]
+
+    var isEmailAllowed: Bool {
+        let e = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let parts = e.split(separator: "@", omittingEmptySubsequences: false)
+        guard parts.count == 2, !parts[0].isEmpty else { return false }
+        let domain = String(parts[1])
+        guard domain.contains("."), !domain.hasPrefix("."), !domain.hasSuffix(".") else { return false }
+        // Academic (.edu, .edu.au, .ac.uk, …) or a popular consumer provider.
+        if domain.hasSuffix(".edu") || domain.contains(".edu.") || domain.contains(".ac.") {
+            return true
+        }
+        return AuthViewModel.allowedEmailDomains.contains(domain)
+    }
+
     var isSignUpValid: Bool {
-        !email.isEmpty &&
+        isEmailAllowed &&
         !username.isEmpty &&
         password == confirmPassword &&
         isPasswordStrong
