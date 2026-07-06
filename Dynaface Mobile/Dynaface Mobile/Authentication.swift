@@ -303,13 +303,7 @@ final class AuthenticationService: ObservableObject {
         } catch {
             print("Firebase signup failed: \(error)")
             clearPendingSignupState()
-
-            let msg = error.localizedDescription.lowercased()
-            if msg.contains("already") || msg.contains("registered") || msg.contains("exists") || msg.contains("in use") {
-                authError = "Email has been registered"
-            } else {
-                authError = "Failed to create account: \(error.localizedDescription)"
-            }
+            authError = signUpErrorMessage(for: error)
         }
     }
 
@@ -356,7 +350,7 @@ final class AuthenticationService: ObservableObject {
         } catch {
             print("Profile completion error: \(error)")
             // Stay on the survey (.accountCreated) so the user can retry submit.
-            authError = "Failed to create account. Please try again or contact support."
+            authError = completeProfileErrorMessage(for: error)
         }
     }
 
@@ -364,6 +358,43 @@ final class AuthenticationService: ObservableObject {
         pendingUsername = ""
         pendingPassword = ""
         pendingAccountType = .patient
+    }
+
+    // MARK: - Error messages
+    //
+    // Map raw Firebase / network errors to a clear, user-facing line so the
+    // signup alerts say what actually went wrong instead of a generic
+    // "Failed to create account". FirebaseAuth surfaces its AuthErrorCode as a
+    // stable integer on the NSError (matching the code is more robust than
+    // scanning the localized message text, which can be reworded/localized).
+    private func signUpErrorMessage(for error: Error) -> String {
+        let nsError = error as NSError
+        switch nsError.code {
+        case 17007: return "Email has been registered"            // emailAlreadyInUse
+        case 17008: return "That email address looks invalid"     // invalidEmail
+        case 17026: return "Password is too weak"                 // weakPassword
+        case 17020: return "No connection. Check your network and try again."  // networkError
+        default:
+            if nsError.domain == NSURLErrorDomain {
+                return "No connection. Check your network and try again."
+            }
+            return "Couldn't create the account: \(error.localizedDescription)"
+        }
+    }
+
+    private func completeProfileErrorMessage(for error: Error) -> String {
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain || nsError.code == 17020 {  // network
+            return "No connection. Check your network and try again."
+        }
+        // Errors thrown by callCreateProfile carry the function's response text.
+        if nsError.domain == "create_profile" {
+            if nsError.localizedDescription.lowercased().contains("username") {
+                return "Username has been registered"
+            }
+            return "Couldn't finish setup: \(nsError.localizedDescription)"
+        }
+        return "Couldn't finish setup. Please try again or contact support."
     }
 
     // MARK: - create_profile Cloud Function call
