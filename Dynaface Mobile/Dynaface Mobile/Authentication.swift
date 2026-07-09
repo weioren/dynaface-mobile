@@ -157,6 +157,10 @@ final class AuthenticationService: ObservableObject {
     /// the whole UI and stranded the user. Cleared at the start of each
     /// attempt and when the form's alert is dismissed.
     @Published var authError: String?
+    /// Whether the signed-in Firebase user's email is verified. Drives the
+    /// non-blocking "Verify your email" banner. Refreshed on session checks and
+    /// by refreshEmailVerification() (which reloads the user first).
+    @Published var emailVerified: Bool = false
 
     // Store account creation data temporarily across the two-step signup flow
     private var pendingUsername: String = ""
@@ -181,6 +185,7 @@ final class AuthenticationService: ObservableObject {
             authState = .signedOut
             return
         }
+        emailVerified = user.isEmailVerified
         do {
             let tokenResult = try await user.getIDTokenResult()
             guard let appUid = tokenResult.claims["app_uid"] as? String else {
@@ -223,6 +228,7 @@ final class AuthenticationService: ObservableObject {
             throw AuthError.userNotFound
         }
         authState = .signedIn(profile)
+        emailVerified = Auth.auth().currentUser?.isEmailVerified ?? false
     }
 
     // MARK: - Update Profile
@@ -299,6 +305,10 @@ final class AuthenticationService: ObservableObject {
         do {
             let result = try await Auth.auth().createUser(withEmail: email, password: password)
             print("Firebase auth user created with UID: \(result.user.uid)")
+            // Fire the verification email at signup. Non-blocking — the user can
+            // still proceed; a banner nudges them to verify. Best-effort.
+            try? await result.user.sendEmailVerification()
+            emailVerified = false
             authState = .accountCreated(email: email, accountType: accountType)
         } catch {
             print("Firebase signup failed: \(error)")
@@ -331,7 +341,10 @@ final class AuthenticationService: ObservableObject {
 
         do {
             print("Completing profile for email: \(email), accountType: \(pendingAccountType.rawValue)")
-            let idToken = try await user.getIDToken()
+            // Force-refresh so the token carries the up-to-date `email_verified`
+            // claim (the user just clicked the verification link); create_profile
+            // rejects an unverified token.
+            let idToken = try await user.getIDToken(forcingRefresh: true)
             let appUid = try await callCreateProfile(
                 idToken: idToken,
                 email: email,
@@ -389,12 +402,39 @@ final class AuthenticationService: ObservableObject {
         }
         // Errors thrown by callCreateProfile carry the function's response text.
         if nsError.domain == "create_profile" {
-            if nsError.localizedDescription.lowercased().contains("username") {
+            let detail = nsError.localizedDescription.lowercased()
+            // create_profile returns 403 with "verify" when email_verified is false.
+            if detail.contains("verify") {
+                return "Please verify your email first."
+            }
+            if detail.contains("username") {
                 return "Username has been registered"
             }
             return "Couldn't finish setup: \(nsError.localizedDescription)"
         }
         return "Couldn't finish setup. Please try again or contact support."
+    }
+
+    // MARK: - Email verification
+    //
+    // Firebase sends the verification email (a link) at signup (createAccount).
+    // SignupVerificationGate hard-blocks the rest of onboarding until
+    // `emailVerified`, and create_profile enforces it server-side too (403 if
+    // the token's email_verified is false). The Dashboard banner is a fallback
+    // nudge for any pre-existing unverified account.
+
+    /// Re-send the verification email to the currently signed-in user.
+    func resendVerificationEmail() async {
+        guard let user = Auth.auth().currentUser else { return }
+        try? await user.sendEmailVerification()
+    }
+
+    /// Reload the Firebase user and republish `emailVerified` — the gate polls
+    /// this so Continue enables once the user taps the emailed link.
+    func refreshEmailVerification() async {
+        guard let user = Auth.auth().currentUser else { return }
+        try? await user.reload()
+        emailVerified = Auth.auth().currentUser?.isEmailVerified ?? false
     }
 
     // MARK: - create_profile Cloud Function call
@@ -477,6 +517,18 @@ final class AuthenticationService: ObservableObject {
     func signOut() async {
         try? Auth.auth().signOut()
         authState = .signedOut
+    }
+
+    /// Abandon a half-finished signup (Firebase user created but email not yet
+    /// verified and no profile written): delete the auth user so the address is
+    /// free to sign up again, then sign out. Falls back to a plain sign-out if
+    /// the delete fails (e.g. requires-recent-login).
+    func cancelPendingSignup() async {
+        if let user = Auth.auth().currentUser {
+            try? await user.delete()
+        }
+        emailVerified = false
+        await signOut()
     }
 
     // MARK: - Password Reset
