@@ -1,5 +1,6 @@
 import Foundation
 import FirebaseFirestore
+import FirebaseAuth
 
 // MARK: - PatientService
 //
@@ -272,5 +273,161 @@ final class PatientService: ObservableObject {
         }
         let createdAt = (data["created_at"] as? Timestamp)?.dateValue() ?? Date()
         return PatientCandidate(id: uuid, username: username, email: email, createdAt: createdAt)
+    }
+}
+
+// MARK: - ClinicianLink
+//
+// A patient-side view of one clinician they've connected to, backed by a
+// `patients` row whose `claimed_user_id` is this patient. `documentId` is the
+// raw Firestore doc id (kept as-is — the redeem function writes lowercase
+// UUIDs, so round-tripping through Swift's UPPERCASE `UUID.uuidString` would
+// miss the doc on disconnect).
+struct ClinicianLink: Identifiable, Hashable {
+    let documentId: String
+    let clinicianName: String
+    let connectedAt: Date
+
+    var id: String { documentId }
+}
+
+// MARK: - InviteError
+enum InviteError: LocalizedError {
+    case notSignedIn
+    case badResponse
+    case server(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .notSignedIn:          return "You need to be signed in."
+        case .badResponse:          return "Unexpected response from the server."
+        case .server(let message):  return message
+        }
+    }
+}
+
+// MARK: - InviteService
+//
+// Stateless helpers for the patient<->clinician invite / opt-in flow (Phase 1:
+// invite code). Kept as static funcs (no ObservableObject / @EnvironmentObject)
+// because the patient side (ProfilePage) is NOT inside the clinician's
+// PatientService environment — views own their own loading/error @State.
+//
+// Clinician creates an invite client-side (firestore.rules lets a clinician
+// write their own `patient_invites` row). A patient redeems it through the
+// `redeem_invite` Cloud Function (Admin SDK) because rules forbid a patient
+// from creating a `patients` row. Disconnect is a client-side soft-archive
+// the relaxed `patients` update rule permits.
+enum InviteService {
+
+    /// Unambiguous alphabet — no 0/O/1/I/L, to avoid transcription errors.
+    private static let codeAlphabet = Array("ABCDEFGHJKMNPQRSTUVWXYZ23456789")
+    private static let codeLength = 6
+    private static let inviteTTL: TimeInterval = 14 * 24 * 60 * 60  // 14 days
+
+    private static var db: Firestore { Firestore.firestore() }
+
+    // MARK: Clinician — create / revoke an invite
+
+    /// Generates a unique short code, writes `patient_invites/{code}`, and
+    /// returns it for the clinician to share. `patientName` is an optional
+    /// note for the clinician's own reference (not required to redeem).
+    static func createInvite(clinicianId: String, clinicianName: String, patientName: String?) async throws -> String {
+        let invites = db.collection("patient_invites")
+
+        // Retry on the (astronomically unlikely) code collision so we never
+        // overwrite another clinician's live invite.
+        for _ in 0..<6 {
+            let code = randomCode()
+            let ref = invites.document(code)
+            if try await ref.getDocument().exists { continue }
+
+            var data: [String: Any] = [
+                "clinician_id": clinicianId,
+                "clinician_name": clinicianName,
+                "created_at": FieldValue.serverTimestamp(),
+                "expires_at": Timestamp(date: Date().addingTimeInterval(inviteTTL)),
+            ]
+            let note = (patientName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !note.isEmpty { data["patient_name"] = note }
+
+            try await ref.setData(data)
+            return code
+        }
+        throw InviteError.server("Couldn't generate a code. Please try again.")
+    }
+
+    /// Revokes an unredeemed invite the clinician created.
+    static func revokeInvite(code: String) async throws {
+        try await db.collection("patient_invites").document(code).delete()
+    }
+
+    // MARK: Patient — redeem an invite
+
+    /// POSTs the code to the `redeem_invite` Cloud Function with the patient's
+    /// ID token. Returns the connected clinician's name on success; throws
+    /// `InviteError.server` carrying the function's specific message
+    /// (invalid / expired / already-used) on failure.
+    @discardableResult
+    static func redeem(code: String) async throws -> String {
+        guard let user = Auth.auth().currentUser else { throw InviteError.notSignedIn }
+        guard let url = URL(string: FirebaseConfig.redeemInviteFunctionURL) else {
+            throw InviteError.badResponse
+        }
+        let idToken = try await user.getIDToken()
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["code": code])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw InviteError.badResponse }
+        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+
+        guard (200..<300).contains(http.statusCode) else {
+            let message = (json?["error"] as? String) ?? "Couldn't connect with that code."
+            throw InviteError.server(message)
+        }
+        return (json?["clinician_name"] as? String) ?? "your clinician"
+    }
+
+    // MARK: Patient — manage connections
+
+    /// Loads the clinicians this patient is actively connected to (their own
+    /// non-archived `patients` rows). `patientAppUid` is the patient's
+    /// `profile.id` (app_uid).
+    static func myClinicians(patientAppUid: String) async throws -> [ClinicianLink] {
+        let snapshot = try await db.collection("patients")
+            .whereField("claimed_user_id", isEqualTo: patientAppUid)
+            .getDocuments()
+        return snapshot.documents
+            .compactMap { decodeLink(id: $0.documentID, data: $0.data()) }
+            .sorted { $0.connectedAt > $1.connectedAt }
+    }
+
+    /// Disconnects from a clinician by archiving the patient's own `patients`
+    /// row (soft delete). firestore.rules lets the linked patient change only
+    /// `archived_at` / `updated_at`.
+    static func disconnect(_ link: ClinicianLink) async throws {
+        try await db.collection("patients").document(link.documentId).updateData([
+            "archived_at": FieldValue.serverTimestamp(),
+            "updated_at": FieldValue.serverTimestamp(),
+        ])
+    }
+
+    // MARK: Helpers
+
+    private static func randomCode() -> String {
+        String((0..<codeLength).map { _ in codeAlphabet.randomElement()! })
+    }
+
+    private static func decodeLink(id: String, data: [String: Any]) -> ClinicianLink? {
+        // Active links only — an archived row is a disconnected clinician.
+        guard (data["archived_at"] as? Timestamp) == nil else { return nil }
+        let name = (data["clinician_name"] as? String) ?? "Your clinician"
+        let connectedAt = (data["created_at"] as? Timestamp)?.dateValue() ?? Date()
+        return ClinicianLink(documentId: id, clinicianName: name, connectedAt: connectedAt)
     }
 }

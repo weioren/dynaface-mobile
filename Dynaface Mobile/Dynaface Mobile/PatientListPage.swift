@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - PatientListPage
 //
@@ -22,6 +23,7 @@ struct PatientListPage: View {
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
     @State private var showingAddPatient = false
+    @State private var showingInvite = false
 
     private var filtered: [PatientRef] {
         patientService.searchedRoster(matching: searchText)
@@ -50,6 +52,10 @@ struct PatientListPage: View {
                 .environmentObject(patientService)
                 .environmentObject(authService)
         }
+        .sheet(isPresented: $showingInvite) {
+            InvitePatientSheet()
+                .environmentObject(authService)
+        }
         .alert(
             "Couldn't load patients",
             isPresented: Binding(
@@ -67,10 +73,16 @@ struct PatientListPage: View {
     // MARK: - Subviews
 
     private var header: some View {
-        HStack {
+        HStack(spacing: 18) {
             Text("Patients")
                 .font(.largeTitle).fontWeight(.bold)
             Spacer()
+            Button { showingInvite = true } label: {
+                Image(systemName: "person.badge.plus")
+                    .font(.title2)
+                    .foregroundColor(Color(red: 0.12, green: 0.29, blue: 0.64))
+            }
+            .accessibilityLabel("Invite patient")
             Button { showingAddPatient = true } label: {
                 Image(systemName: "plus.circle.fill")
                     .font(.title2)
@@ -214,5 +226,143 @@ private struct PatientRow: View {
             Spacer()
         }
         .padding(.vertical, 4)
+    }
+}
+
+// MARK: - InvitePatientSheet
+//
+// Clinician-facing. Generates a short, single-use invite code and lets the
+// clinician copy / share it. The patient enters it under
+// Profile -> My clinicians -> "Connect with a clinician", which links them to
+// this clinician via the `redeem_invite` Cloud Function. No email infra.
+struct InvitePatientSheet: View {
+    @EnvironmentObject var authService: AuthenticationService
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var patientNote = ""
+    @State private var code: String?
+    @State private var isWorking = false
+    @State private var errorMessage: String?
+
+    private let accent = Color(red: 0.12, green: 0.29, blue: 0.64)
+
+    /// The signed-in clinician's app_uid + display name, or nil if somehow
+    /// not signed in (button is disabled in that case).
+    private var clinician: (id: String, name: String)? {
+        if case .signedIn(let profile) = authService.authState {
+            return (profile.id, profile.username)
+        }
+        return nil
+    }
+
+    private var shareMessage: String {
+        let name = clinician?.name ?? "Your clinician"
+        return "\(name) invited you to connect on Dynaface. Open the app and go to "
+            + "Profile → My clinicians → Connect with a clinician, then enter code: \(code ?? "")"
+    }
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Share a code with your patient. When they enter it in the app, they'll be connected to you.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+
+                    if let code {
+                        codeCard(code)
+                    } else {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Patient name (optional)")
+                                .font(.footnote).foregroundColor(.secondary)
+                            TextField("For your reference", text: $patientNote)
+                                .textInputAutocapitalization(.words)
+                                .autocorrectionDisabled()
+                                .padding()
+                                .background(Color(.systemGray6))
+                                .cornerRadius(10)
+                        }
+                    }
+
+                    if let errorMessage {
+                        Text(errorMessage).font(.footnote).foregroundColor(.red)
+                    }
+
+                    Button {
+                        Task { await generate() }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if isWorking { ProgressView().tint(.white) }
+                            Text(code == nil ? "Generate code" : "Generate a new code")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(accent)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                    }
+                    .disabled(isWorking || clinician == nil)
+
+                    Text("Codes expire in 14 days and can be used once.")
+                        .font(.caption).foregroundColor(.secondary)
+
+                    Spacer(minLength: 0)
+                }
+                .padding()
+            }
+            .navigationTitle("Invite patient")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func codeCard(_ code: String) -> some View {
+        VStack(spacing: 14) {
+            Text(code)
+                .font(.system(size: 40, weight: .bold, design: .monospaced))
+                .kerning(4)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 24)
+                .background(Color(.systemGray6))
+                .cornerRadius(14)
+
+            HStack(spacing: 12) {
+                Button {
+                    UIPasteboard.general.string = code
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                        .frame(maxWidth: .infinity).padding(.vertical, 10)
+                        .background(Color(.systemGray5)).cornerRadius(10)
+                }
+                ShareLink(item: shareMessage) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity).padding(.vertical, 10)
+                        .background(Color(.systemGray5)).cornerRadius(10)
+                }
+            }
+            .foregroundColor(accent)
+        }
+    }
+
+    private func generate() async {
+        guard let clinician else { return }
+        isWorking = true
+        errorMessage = nil
+        defer { isWorking = false }
+        do {
+            code = try await InviteService.createInvite(
+                clinicianId: clinician.id,
+                clinicianName: clinician.name,
+                patientName: patientNote
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }

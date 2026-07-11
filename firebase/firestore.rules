@@ -62,14 +62,39 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // patients/{patientId} — clinician-owned roster rows. Patients never
-    // read this collection directly (they don't know they're on a
-    // clinician's unregistered roster).
+    // patients/{patientId} — clinician-owned roster rows. A clinician sees the
+    // shared roster. A *linked* patient (their own `claimed_user_id`) may
+    // additionally read and self-manage ONLY their own rows — this powers the
+    // patient-side "My clinicians" list and lets them disconnect by setting
+    // `archived_at`. Creation stays clinician-only; a patient's opt-in goes
+    // through the redeem_invite Cloud Function (Admin SDK), never a direct
+    // client create.
     match /patients/{patientId} {
-      allow read: if isClinician();
+      allow read: if isClinician()
+        || (hasAppUid()
+            && resource.data.claimed_user_id != null
+            && isCaller(resource.data.claimed_user_id));
       allow create: if isClinician() && isCaller(request.resource.data.clinician_id);
-      allow update: if isClinician() && isCaller(resource.data.clinician_id);
+      allow update: if (isClinician() && isCaller(resource.data.clinician_id))
+        || (hasAppUid()
+            && resource.data.claimed_user_id != null
+            && isCaller(resource.data.claimed_user_id)
+            && request.resource.data.diff(resource.data)
+                 .affectedKeys().hasOnly(['archived_at', 'updated_at']));
       allow delete: if false;
+    }
+
+    // patient_invites/{code} — a short code a clinician generates and shares
+    // so a patient can opt into that clinician (see redeem_invite). The doc id
+    // IS the code (a shared secret), so any signed-in user who has it may read
+    // it (to preview "Dr. X invited you"). Creating an invite is limited to a
+    // clinician creating their own; consuming it (setting redeemed_by) is
+    // Admin-SDK only, so client update is denied.
+    match /patient_invites/{code} {
+      allow read:   if hasAppUid();
+      allow create: if isClinician() && isCaller(request.resource.data.clinician_id);
+      allow update: if false;
+      allow delete: if isClinician() && isCaller(resource.data.clinician_id);
     }
 
     // processing_jobs/{jobId} — created by the client on upload (see
