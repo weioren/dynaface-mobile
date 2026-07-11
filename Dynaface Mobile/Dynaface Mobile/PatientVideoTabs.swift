@@ -486,6 +486,38 @@ func signedRawVideoURL(for job: PatientJobRow) async throws -> URL {
                               userInfo: [NSLocalizedDescriptionKey: "Original recording not found in storage."])
 }
 
+/// Peak-expression still image: `results/{user_id}/{job_id}/peak_frame.png` in
+/// the results bucket, written by the worker alongside annotated.mp4. Used by
+/// the Compare view's "Key image only" mode. Jobs processed before peak_frame
+/// existed will 404 here — callers surface a fallback.
+func signedPeakFrameURL(for job: PatientJobRow) async throws -> URL {
+    var candidates: [String] = []
+    // If the processed output path is known, peak_frame.png sits in its folder.
+    let base = job.output_video_path ?? job.output_csv_path ?? ""
+    let directory = (base as NSString).deletingLastPathComponent
+    if !directory.isEmpty {
+        candidates.append("\(directory)/peak_frame.png")
+    }
+    // Canonical worker output convention.
+    if let userId = job.user_id {
+        candidates.append("results/\(userId.uuidString)/\(job.id.uuidString)/peak_frame.png")
+    }
+    let deduped = dedupeNonEmpty(candidates)
+
+    let storage = Storage.storage(url: FirebaseConfig.resultsBucketURL)
+    var lastError: Error?
+    for path in deduped {
+        do {
+            return try await storage.reference(withPath: path).downloadURL()
+        } catch {
+            lastError = error
+            continue
+        }
+    }
+    throw lastError ?? NSError(domain: "PatientPeakFrame", code: 404,
+                              userInfo: [NSLocalizedDescriptionKey: "Key image not found in storage."])
+}
+
 private func dedupeNonEmpty(_ values: [String]) -> [String] {
     var seen = Set<String>()
     var deduped: [String] = []
