@@ -150,16 +150,16 @@ struct CreateAccountView: View {
                 }
             }
         }
-        .alert("Error", isPresented: $showingAlert) { Button("OK") { } } message: { Text(alertMessage) }
-        .onReceive(authService.$authState) { state in
-            switch state {
-            case .error(let message):
-                alertMessage = message
+        .alert("Error", isPresented: $showingAlert) { Button("OK") { authService.authError = nil } } message: { Text(alertMessage) }
+        .onReceive(authService.$authError) { error in
+            if let error {
+                alertMessage = error
                 showingAlert = true
-            case .accountCreated:
+            }
+        }
+        .onReceive(authService.$authState) { state in
+            if case .accountCreated = state {
                 dismiss() // Close the sheet, app will show survey flow
-            default:
-                break
             }
         }
         .toolbar {
@@ -506,10 +506,10 @@ struct FifthPage: View {
             .frame(width: geometry.size.width, height: geometry.size.height)
             .background(Color.white)
         }
-        .alert("Error", isPresented: $showingAlert) { Button("OK") { } } message: { Text(alertMessage) }
-        .onReceive(authService.$authState) { state in
-            if case .error(let message) = state {
-                alertMessage = message
+        .alert("Error", isPresented: $showingAlert) { Button("OK") { authService.authError = nil } } message: { Text(alertMessage) }
+        .onReceive(authService.$authError) { error in
+            if let error {
+                alertMessage = error
                 showingAlert = true
             }
         }

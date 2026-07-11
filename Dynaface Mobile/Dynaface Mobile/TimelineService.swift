@@ -1,18 +1,20 @@
 import Foundation
-import Supabase
+import FirebaseFirestore
 
 // MARK: - TimelineService
 //
-// Loads / inserts / updates rows on `timeline_events` for a single
-// patient. One instance per `PatientDetailView` invocation — the
-// service is scoped to a specific `patientId` so we don't have to
-// pass it on every call.
+// Loads / inserts / updates documents in `timeline_events` for a single
+// patient. One instance per `PatientDetailView` invocation — the service
+// is scoped to a specific `patientId` so we don't have to pass it on
+// every call. Document IDs are client-generated UUIDs (not Firestore
+// auto-IDs — see PatientService for why), matching the old Supabase PK.
 //
-// RLS contract (2026-05-08 migration):
-//   - SELECT: clinicians see all; patient sees own
-//   - INSERT: clinicians for any patient; patient for self only;
-//             `created_by` must equal `auth.uid()`
-//   - UPDATE: clinicians only (regardless of original creator)
+// Access contract (mirrors the old Supabase RLS, enforced by
+// firestore.rules using request.auth.token.app_uid + a role lookup):
+//   - read:  clinicians see all; patient sees own
+//   - write: clinicians for any patient; patient for self only;
+//            `created_by` must equal the caller's app_uid
+//   - update: clinicians only (regardless of original creator)
 //
 // View hierarchy: PatientDetailView creates the service via
 // @StateObject; TimelinePage and AddEditEventSheet read it via
@@ -22,23 +24,20 @@ import Supabase
 final class TimelineService: ObservableObject {
 
     @Published private(set) var events: [TimelineEvent] = []
+    /// `processing_jobs.status` keyed by job_id, for the assessment-row badge
+    /// (Processed / Processing / Failed). Filled by `loadEvents()` before the
+    /// list is published (so the first render is correct) and refreshed by
+    /// `loadJobStatuses()`. Reads are per-document — a single `documentID in
+    /// [...]` list query is denied for patients (one unreadable id fails the
+    /// whole query), which made every patient badge fall back to "Processing".
+    @Published private(set) var jobStatusByJobId: [UUID: String] = [:]
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
 
-    /// Raw `processing_jobs.status` keyed by job_id, populated by
-    /// `loadJobStatuses` after every `loadEvents()`. Lets the timeline
-    /// render per-exercise + per-group processed/processing badges
-    /// without each row issuing its own fetch. Missing keys are
-    /// rendered as "Processing" client-side (default for in-flight jobs
-    /// not yet present in the snapshot).
-    @Published private(set) var jobStatusByJobId: [UUID: String] = [:]
-
     let patientId: UUID
 
-    private let supabase = SupabaseClient(
-        supabaseURL: URL(string: SupabaseConfig.projectURL)!,
-        supabaseKey:  SupabaseConfig.anonKey
-    )
+    private let db = Firestore.firestore()
+    private let collectionName = "timeline_events"
 
     init(patientId: UUID) {
         self.patientId = patientId
@@ -46,64 +45,69 @@ final class TimelineService: ObservableObject {
 
     // MARK: - Read
 
-    /// Pull every event for this patient, newest occurrence first.
-    /// Follows up with `loadJobStatuses` so the timeline can render
-    /// processed/processing badges in the same UI tick — both run on
-    /// every pull-to-refresh, so a clinician watching a queued job
-    /// can refresh to flip it to Processed.
+    /// Pull every event for this patient (newest first) AND each linked job's
+    /// status, then publish both together. Fetching statuses BEFORE assigning
+    /// `events` means the first render already has the right badge — without
+    /// this, the list rendered with an empty status map and every assessment
+    /// flashed "Processing" until `loadJobStatuses()` caught up.
     func loadEvents() async {
         isLoading = true
         defer { isLoading = false }
 
         do {
-            let rows: [TimelineEvent] = try await supabase
-                .from("timeline_events")
-                .select()
-                .eq("patient_id", value: patientId.uuidString)
-                .order("occurred_at", ascending: false)
-                .execute()
-                .value
-            self.events = rows
+            let snapshot = try await db.collection(collectionName)
+                .whereField("patient_id", isEqualTo: patientId.uuidString)
+                .order(by: "occurred_at", descending: true)
+                .getDocuments()
+            let fetched = snapshot.documents.compactMap { decode(id: $0.documentID, data: $0.data()) }
+            let statuses = await fetchJobStatuses(for: fetched)
+            // Two @Published writes with no await between them coalesce into a
+            // single render, so there's no empty-map frame.
+            self.events = fetched
+            self.jobStatusByJobId = statuses
         } catch {
             errorMessage = "Couldn't load timeline: \(error.localizedDescription)"
-            return
         }
-        await loadJobStatuses()
     }
 
-    /// Batched fetch of `processing_jobs.status` for every assessment
-    /// event with a `jobId`. Failures are swallowed — the timeline
-    /// still renders without badges and clinicians can pull-to-refresh.
-    private func loadJobStatuses() async {
-        let ids = events.compactMap(\.jobId)
-        guard !ids.isEmpty else {
-            jobStatusByJobId = [:]
-            return
-        }
-        struct StatusRow: Decodable {
-            let id: UUID
-            let status: String?
-        }
-        do {
-            let rows: [StatusRow] = try await supabase
-                .from("processing_jobs")
-                .select("id, status")
-                .in("id", values: ids.map(\.uuidString))
-                .execute()
-                .value
+    /// Refresh just the status map for the already-loaded events (pull-to-refresh,
+    /// or a re-appear after some jobs may have completed). The map is already
+    /// populated by then, so this updates in place with no "Processing" flash.
+    func loadJobStatuses() async {
+        jobStatusByJobId = await fetchJobStatuses(for: events)
+    }
+
+    /// `status` for each assessment event's linked `processing_jobs` doc, keyed
+    /// by job_id. PER-DOCUMENT `getDocument()` reads run in PARALLEL — not a
+    /// `documentID in [...]` list query, which Firestore denies for patients if
+    /// ANY matched doc fails the read rule (that made every patient badge fall
+    /// back to "Processing"). A per-doc read is evaluated on its own and can
+    /// satisfy attribution-based `allow read` rules; unreadable jobs are skipped.
+    private func fetchJobStatuses(for events: [TimelineEvent]) async -> [UUID: String] {
+        let jobIds = Set(events.compactMap(\.jobId))
+        guard !jobIds.isEmpty else { return [:] }
+        return await withTaskGroup(of: (UUID, String)?.self) { group in
+            for jobId in jobIds {
+                group.addTask {
+                    let doc = try? await Firestore.firestore()
+                        .collection("processing_jobs")
+                        .document(jobId.uuidString)
+                        .getDocument()
+                    if let status = doc?.data()?["status"] as? String { return (jobId, status) }
+                    return nil
+                }
+            }
             var map: [UUID: String] = [:]
-            for r in rows { map[r.id] = r.status }
-            jobStatusByJobId = map
-        } catch {
-            print("TimelineService.loadJobStatuses failed: \(error)")
+            for await pair in group { if let pair { map[pair.0] = pair.1 } }
+            return map
         }
     }
 
     // MARK: - Write
 
-    /// Insert a new event. `createdBy` is the signed-in user's
-    /// profile id; RLS rejects mismatches so we forward whatever the
-    /// caller passes (no client-side spoofing).
+    /// Insert a new event. `createdBy` is the signed-in user's profile
+    /// id; rules reject mismatches so we forward whatever the caller
+    /// passes (no client-side spoofing).
     func addEvent(
         type: TimelineEventType,
         occurredAt: Date,
@@ -113,30 +117,32 @@ final class TimelineService: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        struct EventInsert: Encodable {
-            let patient_id: String
-            let type: String
-            let occurred_at: String   // YYYY-MM-DD per Postgres `date` column
-            let notes: String
-            let created_by: String
-        }
-
-        let payload = EventInsert(
-            patient_id:  patientId.uuidString,
-            type:        type.rawValue,
-            occurred_at: Self.dateFormatter.string(from: occurredAt),
-            notes:       notes,
-            created_by:  createdBy.uuidString
-        )
+        let newId = UUID()
+        let now = Date()
+        let normalizedDate = dateOnly(occurredAt)
+        let data: [String: Any] = [
+            "patient_id": patientId.uuidString,
+            "type": type.rawValue,
+            "occurred_at": Timestamp(date: normalizedDate),
+            "notes": notes,
+            "created_by": createdBy.uuidString,
+            "created_at": FieldValue.serverTimestamp(),
+            "updated_at": FieldValue.serverTimestamp(),
+        ]
 
         do {
-            let inserted: TimelineEvent = try await supabase
-                .from("timeline_events")
-                .insert(payload)
-                .select()
-                .single()
-                .execute()
-                .value
+            try await db.collection(collectionName).document(newId.uuidString).setData(data)
+            let inserted = TimelineEvent(
+                id: newId,
+                patientId: patientId,
+                type: type,
+                occurredAt: normalizedDate,
+                notes: notes,
+                createdBy: createdBy,
+                createdAt: now,
+                updatedAt: now,
+                jobId: nil
+            )
             // Insert at top — newest occurrence usually beats existing.
             // A subsequent loadEvents() reorders cleanly.
             events.insert(inserted, at: 0)
@@ -148,7 +154,7 @@ final class TimelineService: ObservableObject {
     }
 
     /// Insert an `assessment`-type event that links back to a
-    /// processing_jobs row (so the row's tap-target can play the
+    /// processing_jobs document (so the row's tap-target can play the
     /// processed video). Called after an upload completes if the user
     /// opts in via the "Add to timeline?" confirmation alert.
     /// `exerciseNames` are comma-joined into the event's notes field.
@@ -159,32 +165,37 @@ final class TimelineService: ObservableObject {
         exerciseNames: [String],
         createdBy: UUID
     ) async -> Bool {
-        struct EventInsert: Encodable {
-            let patient_id: String
-            let type: String
-            let occurred_at: String
-            let notes: String
-            let created_by: String
-            let job_id: String?
+        let newId = UUID()
+        let now = Date()
+        let normalizedDate = dateOnly(occurredAt)
+        let notes = exerciseNames.joined(separator: ", ")
+
+        var data: [String: Any] = [
+            "patient_id": patientId.uuidString,
+            "type": TimelineEventType.assessment.rawValue,
+            "occurred_at": Timestamp(date: normalizedDate),
+            "notes": notes,
+            "created_by": createdBy.uuidString,
+            "created_at": FieldValue.serverTimestamp(),
+            "updated_at": FieldValue.serverTimestamp(),
+        ]
+        if let jobId {
+            data["job_id"] = jobId.uuidString
         }
 
-        let payload = EventInsert(
-            patient_id:  patientId.uuidString,
-            type:        TimelineEventType.assessment.rawValue,
-            occurred_at: Self.dateFormatter.string(from: occurredAt),
-            notes:       exerciseNames.joined(separator: ", "),
-            created_by:  createdBy.uuidString,
-            job_id:      jobId?.uuidString
-        )
-
         do {
-            let inserted: TimelineEvent = try await supabase
-                .from("timeline_events")
-                .insert(payload)
-                .select()
-                .single()
-                .execute()
-                .value
+            try await db.collection(collectionName).document(newId.uuidString).setData(data)
+            let inserted = TimelineEvent(
+                id: newId,
+                patientId: patientId,
+                type: .assessment,
+                occurredAt: normalizedDate,
+                notes: notes,
+                createdBy: createdBy,
+                createdAt: now,
+                updatedAt: now,
+                jobId: jobId
+            )
             events.insert(inserted, at: 0)
             events.sort { $0.occurredAt > $1.occurredAt }
             return true
@@ -195,7 +206,7 @@ final class TimelineService: ObservableObject {
         }
     }
 
-    /// Patch an existing event. Only clinicians will succeed (RLS).
+    /// Patch an existing event. Only clinicians will succeed (rules).
     /// On success, the local copy is updated in place.
     func updateEvent(
         _ event: TimelineEvent,
@@ -206,28 +217,22 @@ final class TimelineService: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        struct EventPatch: Encodable {
-            let type: String
-            let occurred_at: String
-            let notes: String
-        }
-
-        let patch = EventPatch(
-            type:        type.rawValue,
-            occurred_at: Self.dateFormatter.string(from: occurredAt),
-            notes:       notes
-        )
+        let normalizedDate = dateOnly(occurredAt)
+        let data: [String: Any] = [
+            "type": type.rawValue,
+            "occurred_at": Timestamp(date: normalizedDate),
+            "notes": notes,
+            "updated_at": FieldValue.serverTimestamp(),
+        ]
 
         do {
-            let updated: TimelineEvent = try await supabase
-                .from("timeline_events")
-                .update(patch)
-                .eq("id", value: event.id.uuidString)
-                .select()
-                .single()
-                .execute()
-                .value
+            try await db.collection(collectionName).document(event.id.uuidString).updateData(data)
             if let idx = events.firstIndex(where: { $0.id == event.id }) {
+                var updated = event
+                updated.type = type
+                updated.occurredAt = normalizedDate
+                updated.notes = notes
+                updated.updatedAt = Date()
                 events[idx] = updated
             }
             events.sort { $0.occurredAt > $1.occurredAt }
@@ -238,19 +243,13 @@ final class TimelineService: ObservableObject {
     }
 
     /// Delete a non-assessment event. Assessment rows are system-managed
-    /// (linked to a processing_jobs row) and never deletable — guarded
-    /// here client-side and by RLS (2026-06-15 migration). On success the
-    /// local copy is removed.
+    /// (linked to a processing_jobs doc) and never deletable — guarded here
+    /// client-side and by firestore.rules. On success the local copy is removed.
     @discardableResult
     func deleteEvent(_ event: TimelineEvent) async -> Bool {
         guard event.type != .assessment else { return false }
-
         do {
-            try await supabase
-                .from("timeline_events")
-                .delete()
-                .eq("id", value: event.id.uuidString)
-                .execute()
+            try await db.collection(collectionName).document(event.id.uuidString).delete()
             events.removeAll { $0.id == event.id }
             return true
         } catch {
@@ -262,13 +261,44 @@ final class TimelineService: ObservableObject {
 
     // MARK: - Helpers
 
-    /// Postgres `date` column wants `YYYY-MM-DD`, no time component.
-    private static let dateFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.calendar = Calendar(identifier: .iso8601)
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = TimeZone(secondsFromGMT: 0)
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
+    /// Old Postgres `occurred_at` was a `date` column (no time-of-day).
+    /// Normalize to midnight UTC so behavior matches now that it's a
+    /// Firestore Timestamp.
+    private func dateOnly(_ date: Date) -> Date {
+        var calendar = Calendar(identifier: .iso8601)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return calendar.date(from: components) ?? date
+    }
+
+    private func decode(id: String, data: [String: Any]) -> TimelineEvent? {
+        guard
+            let uuid = UUID(uuidString: id),
+            let patientIdString = data["patient_id"] as? String,
+            let patientId = UUID(uuidString: patientIdString),
+            let typeRaw = data["type"] as? String,
+            let type = TimelineEventType(rawValue: typeRaw),
+            let notes = data["notes"] as? String,
+            let createdByString = data["created_by"] as? String,
+            let createdBy = UUID(uuidString: createdByString),
+            let occurredAtTimestamp = data["occurred_at"] as? Timestamp
+        else {
+            return nil
+        }
+        let createdAt = (data["created_at"] as? Timestamp)?.dateValue() ?? Date()
+        let updatedAt = (data["updated_at"] as? Timestamp)?.dateValue() ?? createdAt
+        let jobId = (data["job_id"] as? String).flatMap(UUID.init(uuidString:))
+
+        return TimelineEvent(
+            id: uuid,
+            patientId: patientId,
+            type: type,
+            occurredAt: occurredAtTimestamp.dateValue(),
+            notes: notes,
+            createdBy: createdBy,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            jobId: jobId
+        )
+    }
 }

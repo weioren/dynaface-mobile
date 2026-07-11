@@ -55,8 +55,8 @@ enum AnalysisDomain: String, CaseIterable, Identifiable {
         }
     }
 
-    /// v1 ships detail pages only for Eye + Synkinesis.
-    var hasDetailV1: Bool { self == .eye || self == .synkinesis }
+    /// All five domains now have detail pages.
+    var hasDetailV1: Bool { true }
 
     /// Synkinesis is a severity score (higher = worse); functional domains are
     /// the opposite (higher = better).
@@ -94,6 +94,29 @@ struct MetricRowVM: Identifiable {
     let severity: MetricSeverity?
 }
 
+/// A two-tone affected | normal comparison row (e.g. per-side Brow Elevation).
+struct CompareRowVM: Identifiable {
+    let id = UUID()
+    let label: String
+    let affectedValue: Double   // drives the affected (orange) bar segment
+    let normalValue: Double     // drives the normal (green) segment
+    let affectedText: String    // formatted label, e.g. "0.08" or "45%"
+    let normalText: String
+}
+
+/// A Brow/Midface detail row is either a single value or a two-tone compare
+/// bar, kept in prototype order.
+enum DetailRow: Identifiable {
+    case single(MetricRowVM)
+    case compare(CompareRowVM)
+    var id: UUID {
+        switch self {
+        case .single(let r): return r.id
+        case .compare(let r): return r.id
+        }
+    }
+}
+
 struct EyeDetailModel {
     let badgeText: String       // e.g. "76 Moderate"
     let badgeSeverity: MetricSeverity
@@ -122,14 +145,32 @@ struct SynkDetailModel {
     let rows: [SynkRowVM]
 }
 
+struct SmileDetailModel {
+    let badgeText: String
+    let badgeSeverity: MetricSeverity
+    let commissureLeft: Double      // max_commissure_exc_l
+    let commissureRight: Double     // max_commissure_exc_r
+    let rows: [MetricRowVM]
+}
+
+struct BrowDetailModel {
+    let badgeText: String
+    let badgeSeverity: MetricSeverity
+    let rows: [DetailRow]
+    let trend: [ChartPoint]         // per-frame brow elevation (affected side)
+    let note: String?               // nil once per-side data is present
+}
+
+struct MidfaceDetailModel {
+    let badgeText: String
+    let badgeSeverity: MetricSeverity
+    let rows: [DetailRow]
+    let contourCaption: String
+}
+
 // MARK: - Mapper
 
 enum AnalysisPresentation {
-
-    // Placeholder bar values for domains without a v1 formula (Smile/Brow/Midface).
-    // Mocked to the prototype's home values; replaced once those domains ship.
-    private static let placeholderPercents: [AnalysisDomain: Int] =
-        [.smile: 72, .brow: 63, .midface: 64]
 
     // MARK: Home
 
@@ -148,9 +189,15 @@ enum AnalysisPresentation {
                 bars.append(DomainBar(domain: .eye, percent: eyePct, severity: functionSeverity(eyePct)))
             case .synkinesis:
                 bars.append(DomainBar(domain: .synkinesis, percent: synkPct, severity: synkSeverity(synkVal).severity))
-            default:
-                let p = placeholderPercents[domain] ?? 0
-                bars.append(DomainBar(domain: domain, percent: p, severity: functionSeverity(p)))
+            case .smile:
+                let p = smileScore(report.summary.smile)
+                bars.append(DomainBar(domain: .smile, percent: p, severity: functionSeverity(p)))
+            case .brow:
+                let p = browScore(report.summary.brow)
+                bars.append(DomainBar(domain: .brow, percent: p, severity: functionSeverity(p)))
+            case .midface:
+                let p = midfaceScore(report.summary.midface)
+                bars.append(DomainBar(domain: .midface, percent: p, severity: functionSeverity(p)))
             }
         }
 
@@ -245,6 +292,163 @@ enum AnalysisPresentation {
         )
     }
 
+    // MARK: Smile detail (smile_module — fully data-backed)
+
+    static func smileDetail(_ report: FacialMetricsReport) -> SmileDetailModel {
+        let s = report.summary.smile
+        let symmetry = s?.meanSmileSymmetry ?? 0
+        let score = smileScore(s)
+        let sev = functionSeverity(score)
+        let vectorDiff = abs((s?.maxSmileVectorL ?? 0) - (s?.maxSmileVectorR ?? 0))
+        let rows: [MetricRowVM] = [
+            MetricRowVM(label: "Smile Symmetry Ratio", affected: num(symmetry), normal: nil,
+                        severity: functionSeverity(Int((symmetry * 100).rounded()))),
+            MetricRowVM(label: "FAI / Vector Difference", affected: mm(vectorDiff), normal: nil,
+                        severity: vectorDiff > 3 ? .caution : .normal),
+            MetricRowVM(label: "Dental Show", affected: mm(s?.maxDentalShow ?? 0), normal: nil, severity: nil),
+            MetricRowVM(label: "Smile Velocity", affected: speed(s?.meanSmileVelocity ?? 0), normal: nil, severity: nil),
+            MetricRowVM(label: "Smile Magnitude", affected: num(s?.maxSmileMagnitude ?? 0), normal: nil, severity: nil),
+        ]
+        return SmileDetailModel(
+            badgeText: "\(score) \(severityWord(sev))",
+            badgeSeverity: sev,
+            commissureLeft: s?.maxCommissureExcL ?? 0,
+            commissureRight: s?.maxCommissureExcR ?? 0,
+            rows: rows
+        )
+    }
+
+    // MARK: Brow detail (brow_module — per-side compare bars + recruitment)
+
+    static func browDetail(_ report: FacialMetricsReport, affected: AffectedSide) -> BrowDetailModel {
+        let b = report.summary.brow
+        let symmetry = b?.meanBrowSymmetry ?? 0
+        let score = browScore(b)
+        let sev = functionSeverity(score)
+        let affectedIsLeft = (affected != .right)
+        func split(_ l: Double?, _ r: Double?) -> (aff: Double, norm: Double) {
+            let lv = l ?? 0, rv = r ?? 0
+            return affectedIsLeft ? (lv, rv) : (rv, lv)
+        }
+        let hasPerSide = b?.maxBrowElevationL != nil || b?.maxBrowElevationR != nil
+
+        var rows: [DetailRow] = []
+
+        // 1. Brow Elevation — per-side compare bar (single fallback pre-update)
+        if hasPerSide {
+            let (aff, norm) = split(b?.maxBrowElevationL, b?.maxBrowElevationR)
+            rows.append(.compare(CompareRowVM(label: "Brow Elevation",
+                affectedValue: aff, normalValue: norm,
+                affectedText: num(aff), normalText: num(norm))))
+        } else {
+            rows.append(.single(MetricRowVM(label: "Brow Elevation (max)",
+                affected: num(b?.maxBrowElevation ?? 0), normal: nil, severity: nil)))
+        }
+
+        // 2. Brow Symmetry — single
+        rows.append(.single(MetricRowVM(label: "Brow Symmetry", affected: num(symmetry), normal: nil,
+            severity: functionSeverity(Int((symmetry * 100).rounded())))))
+
+        // 3-4. Medial / Lateral Recruitment — per-side compare bars (as %)
+        if b?.medialRecruitmentL != nil || b?.medialRecruitmentR != nil {
+            let (am, nm) = split(b?.medialRecruitmentL, b?.medialRecruitmentR)
+            rows.append(.compare(CompareRowVM(label: "Medial Recruitment",
+                affectedValue: am, normalValue: nm, affectedText: pct(am), normalText: pct(nm))))
+            let (al, nl) = split(b?.lateralRecruitmentL, b?.lateralRecruitmentR)
+            rows.append(.compare(CompareRowVM(label: "Lateral Recruitment",
+                affectedValue: al, normalValue: nl, affectedText: pct(al), normalText: pct(nl))))
+        } else {
+            rows.append(.single(MetricRowVM(label: "Recruitment Ratio",
+                affected: num(b?.meanRecruitmentRatio ?? 0), normal: nil, severity: nil)))
+        }
+
+        // Trend: affected-side per-frame brow elevation (else the aggregate series).
+        let trend = series(report) {
+            affectedIsLeft ? ($0.browElevationL ?? $0.browElevation)
+                           : ($0.browElevationR ?? $0.browElevation)
+        }
+
+        return BrowDetailModel(
+            badgeText: "\(score) \(severityWord(sev))",
+            badgeSeverity: sev,
+            rows: rows,
+            trend: trend,
+            note: hasPerSide ? nil
+                : "Per-side (left/right) and medial/lateral recruitment aren't in the current results yet."
+        )
+    }
+
+    // MARK: Midface detail (midface_module — per-side bars + signed cupid's bow)
+
+    static func midfaceDetail(_ report: FacialMetricsReport, affected: AffectedSide) -> MidfaceDetailModel {
+        let m = report.summary.midface
+        let alarSym = m?.meanAlarSymmetry ?? 0
+        let score = midfaceScore(m)
+        let sev = functionSeverity(score)
+        let affectedIsLeft = (affected != .right)
+        func split(_ l: Double?, _ r: Double?) -> (aff: Double, norm: Double) {
+            let lv = l ?? 0, rv = r ?? 0
+            return affectedIsLeft ? (lv, rv) : (rv, lv)
+        }
+
+        var rows: [DetailRow] = []
+
+        // 1. Alar Movement — per-side compare bar
+        if m?.maxAlarMovementL != nil || m?.maxAlarMovementR != nil {
+            let (aff, norm) = split(m?.maxAlarMovementL, m?.maxAlarMovementR)
+            rows.append(.compare(CompareRowVM(label: "Alar Movement",
+                affectedValue: aff, normalValue: norm, affectedText: num(aff), normalText: num(norm))))
+        } else {
+            rows.append(.single(MetricRowVM(label: "Alar Movement (max)",
+                affected: num(m?.maxAlarMovement ?? 0), normal: nil, severity: nil)))
+        }
+
+        // 2. Alar Symmetry — single
+        rows.append(.single(MetricRowVM(label: "Alar Symmetry", affected: num(alarSym), normal: nil,
+            severity: functionSeverity(Int((alarSym * 100).rounded())))))
+
+        // 3. Cupid's Bow Deviation — signed magnitude + direction
+        let cupidSigned = m?.maxCupidBowDeviation
+            ?? (report.perFrame.compactMap { $0.cupidBowDeviation }.max(by: { abs($0) < abs($1) }) ?? 0)
+        let direction = cupidSigned >= 0 ? "toward right" : "toward left"
+        rows.append(.single(MetricRowVM(label: "Cupid's Bow Deviation",
+            affected: "\(num(abs(cupidSigned))) \(direction)", normal: nil, severity: nil)))
+
+        // 4. Dynamic Cupid's Bow Shift — single
+        rows.append(.single(MetricRowVM(label: "Dynamic Cupid's Bow Shift",
+            affected: num(m?.meanDynamicShift ?? 0), normal: nil, severity: nil)))
+
+        // 5. Upper Lip 2D Area — symmetry %
+        if let uls = m?.upperLipSymmetry {
+            rows.append(.single(MetricRowVM(label: "Upper Lip 2D Area",
+                affected: "\(pct(uls)) symmetry", normal: nil,
+                severity: functionSeverity(Int((uls * 100).rounded())))))
+        }
+
+        // 6. Cheek Elevation — per-side compare bar
+        if m?.meanCheekElevationL != nil || m?.meanCheekElevationR != nil {
+            let (aff, norm) = split(m?.meanCheekElevationL, m?.meanCheekElevationR)
+            rows.append(.compare(CompareRowVM(label: "Cheek Elevation",
+                affectedValue: aff, normalValue: norm, affectedText: num(aff), normalText: num(norm))))
+        } else {
+            rows.append(.single(MetricRowVM(label: "Cheek Elevation (mean)",
+                affected: num(m?.meanCheekElevation ?? 0), normal: nil, severity: nil)))
+        }
+
+        // 7. Midface Contour — single (symmetry 0..1)
+        if let contour = m?.midfaceContour {
+            rows.append(.single(MetricRowVM(label: "Midface Contour", affected: num(contour), normal: nil,
+                severity: functionSeverity(Int((contour * 100).rounded())))))
+        }
+
+        return MidfaceDetailModel(
+            badgeText: "\(score) \(severityWord(sev))",
+            badgeSeverity: sev,
+            rows: rows,
+            contourCaption: "2D contour proxy — not true volumetric measurement"
+        )
+    }
+
     // MARK: - Scores & thresholds (v1-provisional; clinically uncalibrated)
 
     /// Eye composite 0-100. Per expert recommendation, ANCHORED ON THE
@@ -275,6 +479,31 @@ enum AnalysisPresentation {
                 + 0.20 * areaSymmetry
                 - 0.15 * eyelidSynk
         return Int((max(0, min(1, raw)) * 100).rounded())
+    }
+
+    /// Smile composite 0-100 (v1-provisional): symmetry + commissure symmetry.
+    static func smileScore(_ s: SmileSummary?) -> Int {
+        let symmetry = s?.meanSmileSymmetry ?? 0
+        let cl = s?.maxCommissureExcL ?? 0
+        let cr = s?.maxCommissureExcR ?? 0
+        let hi = max(cl, cr)
+        let commissureSym = hi > 0 ? min(cl, cr) / hi : 0
+        let raw = 0.6 * symmetry + 0.4 * commissureSym
+        return Int((max(0, min(1, raw)) * 100).rounded())
+    }
+
+    /// Brow composite 0-100 (v1-provisional): symmetry + recruitment.
+    static func browScore(_ b: BrowSummary?) -> Int {
+        let symmetry = b?.meanBrowSymmetry ?? 0
+        let recruit = min(max(b?.meanRecruitmentRatio ?? 0, 0), 1)
+        let raw = 0.7 * symmetry + 0.3 * recruit
+        return Int((max(0, min(1, raw)) * 100).rounded())
+    }
+
+    /// Midface composite 0-100 (v1-provisional): driven by alar symmetry.
+    static func midfaceScore(_ m: MidfaceSummary?) -> Int {
+        let alarSym = min(max(m?.meanAlarSymmetry ?? 0, 0), 1)
+        return Int((alarSym * 100).rounded())
     }
 
     /// Functional-domain color: higher % is better.
@@ -310,6 +539,7 @@ enum AnalysisPresentation {
     private static func pct(_ v: Double) -> String { "\(Int((v * 100).rounded()))%" }
     private static func num(_ v: Double) -> String { String(format: "%.2f", v) }
     private static func speed(_ v: Double) -> String { String(format: "%.1f /s", v) }
+    private static func mm(_ v: Double) -> String { String(format: "%.1fmm", v) }
 
     private static func series(_ report: FacialMetricsReport,
                                _ pick: (FrameMetrics) -> Double?) -> [ChartPoint] {

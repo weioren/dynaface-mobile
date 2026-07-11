@@ -113,10 +113,10 @@ struct SignIn: View {
                 }
             }
         }
-        .alert("Error", isPresented: $showingAlert) { Button("OK") { } } message: { Text(alertMessage) }
-        .onReceive(authService.$authState) { state in
-            if case .error(let msg) = state {
-                alertMessage = msg
+        .alert("Error", isPresented: $showingAlert) { Button("OK") { authService.authError = nil } } message: { Text(alertMessage) }
+        .onReceive(authService.$authError) { error in
+            if let error {
+                alertMessage = error
                 showingAlert = true
             }
         }
