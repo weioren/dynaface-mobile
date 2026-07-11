@@ -72,7 +72,16 @@ struct PatientHistoryTab: View {
                 .listStyle(.plain)
             }
         }
-        .task { await reloadIfNeeded() }
+        .task {
+            await reloadIfNeeded()
+            // Live-refresh while any job is still processing, so its badge
+            // flips to Completed without navigating away. Auto-cancels when
+            // the view disappears; no-op once every job is terminal.
+            while !Task.isCancelled, jobs.contains(where: \.isProcessing) {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                await load()
+            }
+        }
         .refreshable { await load() }
         .alert(
             "Couldn't load recordings",
@@ -299,7 +308,16 @@ struct PatientProcessedTab: View {
                 .listStyle(.plain)
             }
         }
-        .task { await reloadIfNeeded() }
+        .task {
+            await reloadIfNeeded()
+            // Live-refresh while any job is still processing, so its badge
+            // flips to Completed without navigating away. Auto-cancels when
+            // the view disappears; no-op once every job is terminal.
+            while !Task.isCancelled, jobs.contains(where: \.isProcessing) {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                await load()
+            }
+        }
         .refreshable { await load() }
         .alert(
             "Couldn't load processed videos",
@@ -741,6 +759,9 @@ struct PatientJobRow: Identifiable, Hashable {
     let output_csv_path: String?
     let input_video_path: String?
     let user_id: UUID?
+
+    /// Still in-flight (terminal = completed / failed). Drives live polling.
+    var isProcessing: Bool { !["completed", "failed"].contains(status ?? "") }
 }
 
 /// Internal (not private) — reused by ExerciseHistoryPage's ProcessedVideosPage

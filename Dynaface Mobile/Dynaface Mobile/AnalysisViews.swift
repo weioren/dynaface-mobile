@@ -1,5 +1,6 @@
 import SwiftUI
 import Charts
+import UIKit
 
 // MARK: - Analysis views (v1: Home + Eye + Synkinesis)
 //
@@ -182,19 +183,104 @@ private struct SeverityBadge: View {
     }
 }
 
+// MARK: - Metric formula drop-down (U5)
+
+/// Chevron indicator for an expandable metric row; rotates when open.
+private struct DisclosureChevron: View {
+    let expanded: Bool
+    var body: some View {
+        Image(systemName: "chevron.down")
+            .font(.caption2)
+            .foregroundColor(.secondary)
+            .rotationEffect(.degrees(expanded ? 180 : 0))
+    }
+}
+
+/// The expanded panel for a metric: what it measures, the LaTeX formula, a
+/// bullet per variable, and a worked example. Content comes from MetricInfo (D2).
+private struct FormulaPanel: View {
+    let explanation: MetricExplanation
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(explanation.measures)
+                .font(.footnote).foregroundColor(.secondary)
+                .textSelection(.enabled)
+
+            formulaRow(explanation.latex, fontSize: 18)
+
+            if !explanation.variables.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(explanation.variables) { v in
+                        HStack(alignment: .center, spacing: 8) {
+                            Text("•").font(.footnote).foregroundColor(.secondary)
+                            LaTeXView(latex: v.symbol, fontSize: 14)
+                                .contextMenu { copyButton(v.symbol) }
+                            Text(v.meaning).font(.footnote).foregroundColor(.secondary)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("EXAMPLE")
+                    .font(.caption2).fontWeight(.semibold)
+                    .foregroundColor(.secondary)
+                formulaRow(explanation.exampleLatex, fontSize: 16)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.gray.opacity(0.10))
+        .cornerRadius(10)
+        .padding(.top, 6)
+    }
+
+    /// A LaTeX formula in a horizontal scroll — wide formulas never clip or
+    /// misalign, and long-press copies the LaTeX source.
+    private func formulaRow(_ latex: String, fontSize: CGFloat) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LaTeXView(latex: latex, fontSize: fontSize)
+                .padding(.vertical, 2)
+                .contextMenu { copyButton(latex) }
+        }
+    }
+
+    private func copyButton(_ text: String) -> some View {
+        Button {
+            UIPasteboard.general.string = text
+        } label: {
+            Label("Copy LaTeX", systemImage: "doc.on.doc")
+        }
+    }
+}
+
 private struct MetricRowView: View {
     let row: MetricRowVM
+    @State private var expanded = false
+    private var info: MetricExplanation? { MetricInfo.forLabel(row.label) }
+
     var body: some View {
-        HStack {
-            Text(row.label).font(.body)
-            Spacer()
-            Text(row.affected)
-                .fontWeight(.semibold)
-                .foregroundColor(row.severity?.color ?? .primary)
-            if let normal = row.normal {
-                Text("|").foregroundColor(.secondary)
-                Text(normal).foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(row.label).font(.body)
+                if info != nil { DisclosureChevron(expanded: expanded) }
+                Spacer()
+                Text(row.affected)
+                    .fontWeight(.semibold)
+                    .foregroundColor(row.severity?.color ?? .primary)
+                if let normal = row.normal {
+                    Text("|").foregroundColor(.secondary)
+                    Text(normal).foregroundColor(.secondary)
+                }
             }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if info != nil { withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() } }
+            }
+
+            if expanded, let info { FormulaPanel(explanation: info) }
         }
         .padding(.vertical, 10)
     }
@@ -332,28 +418,7 @@ struct SynkinesisDetailView: View {
 
                 VStack(spacing: 0) {
                     ForEach(model.rows) { r in
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text(r.label).font(.body)
-                                Spacer()
-                                Text(String(format: "%.2f", r.value))
-                                    .fontWeight(.semibold).foregroundColor(r.severity.color)
-                                Text(r.word.uppercased())
-                                    .font(.caption2).fontWeight(.semibold)
-                                    .foregroundColor(r.severity.color)
-                            }
-                            // Per-row severity bar (matches the prototype's
-                            // colored track under each synkinesis metric).
-                            GeometryReader { geo in
-                                ZStack(alignment: .leading) {
-                                    Capsule().fill(Color.gray.opacity(0.18))
-                                    Capsule().fill(r.severity.color)
-                                        .frame(width: geo.size.width * CGFloat(min(max(r.value, 0), 1)))
-                                }
-                            }
-                            .frame(height: 6)
-                        }
-                        .padding(.vertical, 10)
+                        SynkMetricRowView(row: r)
                         if r.id != model.rows.last?.id { Divider() }
                     }
                 }
@@ -362,6 +427,44 @@ struct SynkinesisDetailView: View {
         }
         .navigationTitle("Synkinesis")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct SynkMetricRowView: View {
+    let row: SynkRowVM
+    @State private var expanded = false
+    private var info: MetricExplanation? { MetricInfo.forLabel(row.label) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(row.label).font(.body)
+                if info != nil { DisclosureChevron(expanded: expanded) }
+                Spacer()
+                Text(String(format: "%.2f", row.value))
+                    .fontWeight(.semibold).foregroundColor(row.severity.color)
+                Text(row.word.uppercased())
+                    .font(.caption2).fontWeight(.semibold)
+                    .foregroundColor(row.severity.color)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if info != nil { withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() } }
+            }
+            // Per-row severity bar (matches the prototype's colored track
+            // under each synkinesis metric).
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.gray.opacity(0.18))
+                    Capsule().fill(row.severity.color)
+                        .frame(width: geo.size.width * CGFloat(min(max(row.value, 0), 1)))
+                }
+            }
+            .frame(height: 6)
+
+            if expanded, let info { FormulaPanel(explanation: info) }
+        }
+        .padding(.vertical, 10)
     }
 }
 
@@ -551,16 +654,23 @@ private struct CompareRowView: View {
     let row: CompareRowVM
     private let affColor = Color(red: 0.95, green: 0.60, blue: 0.15)   // affected
     private let normColor = Color(red: 0.20, green: 0.70, blue: 0.45)  // normal
+    @State private var expanded = false
+    private var info: MetricExplanation? { MetricInfo.forLabel(row.label) }
 
     var body: some View {
         let total = max(row.affectedValue + row.normalValue, 0.0001)
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(row.label).font(.body)
+                if info != nil { DisclosureChevron(expanded: expanded) }
                 Spacer()
                 Text(row.affectedText).fontWeight(.semibold).foregroundColor(affColor)
                 Text("|").foregroundColor(.secondary)
                 Text(row.normalText).fontWeight(.semibold).foregroundColor(normColor)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if info != nil { withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() } }
             }
             GeometryReader { geo in
                 HStack(spacing: 2) {
@@ -570,6 +680,8 @@ private struct CompareRowView: View {
                 .clipShape(Capsule())
             }
             .frame(height: 8)
+
+            if expanded, let info { FormulaPanel(explanation: info) }
         }
         .padding(.vertical, 10)
     }
