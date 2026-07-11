@@ -78,6 +78,11 @@ def create_profile(request: Request):
         return _error("Missing or invalid Authorization bearer token", 401)
     firebase_uid = decoded_token["uid"]
 
+    # Email must be verified before a profile is minted. The client gates this
+    # too (SignupVerificationGate), but enforcing it here makes it unforgeable.
+    if not decoded_token.get("email_verified", False):
+        return _error("Please verify your email before finishing signup.", 403)
+
     body = request.get_json(silent=True) or {}
     email = (body.get("email") or "").strip()
     username = (body.get("username") or "").strip()
