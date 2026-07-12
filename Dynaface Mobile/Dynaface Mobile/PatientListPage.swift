@@ -239,10 +239,10 @@ struct InvitePatientSheet: View {
     @EnvironmentObject var authService: AuthenticationService
     @Environment(\.dismiss) private var dismiss
 
-    @State private var patientNote = ""
     @State private var code: String?
     @State private var isWorking = false
     @State private var errorMessage: String?
+    @State private var invites: [InviteSummary] = []
 
     private let accent = Color(red: 0.12, green: 0.29, blue: 0.64)
 
@@ -271,17 +271,9 @@ struct InvitePatientSheet: View {
 
                     if let code {
                         codeCard(code)
-                    } else {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Patient name (optional)")
-                                .font(.footnote).foregroundColor(.secondary)
-                            TextField("For your reference", text: $patientNote)
-                                .textInputAutocapitalization(.words)
-                                .autocorrectionDisabled()
-                                .padding()
-                                .background(Color(.systemGray6))
-                                .cornerRadius(10)
-                        }
+                    } else if isWorking {
+                        HStack { Spacer(); ProgressView(); Spacer() }
+                            .padding(.vertical, 24)
                     }
 
                     if let errorMessage {
@@ -306,6 +298,15 @@ struct InvitePatientSheet: View {
                     Text("Codes expire in 14 days and can be used once.")
                         .font(.caption).foregroundColor(.secondary)
 
+                    if !invites.isEmpty {
+                        Divider().padding(.top, 6)
+                        Text("Your invite codes")
+                            .font(.headline)
+                        VStack(spacing: 8) {
+                            ForEach(invites) { inviteRow($0) }
+                        }
+                    }
+
                     Spacer(minLength: 0)
                 }
                 .padding()
@@ -316,6 +317,10 @@ struct InvitePatientSheet: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") { dismiss() }
                 }
+            }
+            .task {
+                await loadInvites()
+                if code == nil { await generate() }   // generate a code directly on open
             }
         }
     }
@@ -350,6 +355,40 @@ struct InvitePatientSheet: View {
         }
     }
 
+    @ViewBuilder
+    private func inviteRow(_ invite: InviteSummary) -> some View {
+        HStack(spacing: 12) {
+            Text(invite.code)
+                .font(.system(.body, design: .monospaced)).fontWeight(.semibold)
+            Spacer()
+            Text(statusText(invite))
+                .font(.caption).fontWeight(.medium)
+                .foregroundColor(statusColor(invite))
+                .padding(.horizontal, 10).padding(.vertical, 4)
+                .background(statusColor(invite).opacity(0.15))
+                .cornerRadius(8)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(Color(.systemGray6))
+        .cornerRadius(10)
+    }
+
+    private func statusText(_ invite: InviteSummary) -> String {
+        switch invite.status {
+        case .active:  return "Active"
+        case .used:    return "Used by \(invite.redeemedByName ?? "patient")"
+        case .expired: return "Expired"
+        }
+    }
+
+    private func statusColor(_ invite: InviteSummary) -> Color {
+        switch invite.status {
+        case .active:  return accent          // blue
+        case .used:    return .green
+        case .expired: return .gray
+        }
+    }
+
     private func generate() async {
         guard let clinician else { return }
         isWorking = true
@@ -359,10 +398,21 @@ struct InvitePatientSheet: View {
             code = try await InviteService.createInvite(
                 clinicianId: clinician.id,
                 clinicianName: clinician.name,
-                patientName: patientNote
+                patientName: nil
             )
+            await loadInvites()
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private func loadInvites() async {
+        guard let clinician else { return }
+        do {
+            invites = try await InviteService.myInvites(clinicianAppUid: clinician.id)
+        } catch {
+            // The history list is a nicety — log and keep the generated code.
+            print("InvitePatientSheet.loadInvites failed: \(error)")
         }
     }
 }

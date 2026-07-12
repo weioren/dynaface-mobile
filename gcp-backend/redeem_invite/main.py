@@ -184,6 +184,7 @@ def redeem_invite(request: Request):
 
         txn.update(invite_ref, {
             "redeemed_by": app_uid,
+            "redeemed_by_name": patient_name,
             "redeemed_at": firestore.SERVER_TIMESTAMP,
         })
         return pid

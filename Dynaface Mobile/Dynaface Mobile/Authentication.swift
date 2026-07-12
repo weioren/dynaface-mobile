@@ -328,6 +328,10 @@ final class AuthenticationService: ObservableObject {
     // dance needed here — we just call the `create_profile` Cloud Function
     // with the current user's ID token.
     func completeProfile(email: String, surveyResponses: SurveyResponses?) async {
+        // Re-entry guard: ignore a second call while one is already in flight,
+        // so a double "Skip"/"Get started" can't create the profile twice (the
+        // server then rejects the duplicate as a taken username).
+        guard !isLoading else { return }
         isLoading = true
         authError = nil
         defer { isLoading = false }

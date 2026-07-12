@@ -294,6 +294,29 @@ struct ClinicianLink: Identifiable, Hashable {
     var id: String { documentId }
 }
 
+// MARK: - InviteSummary
+//
+// Clinician-side view of one of their own `patient_invites` rows, for the
+// "your invite codes" history list. Status is derived: used if it's been
+// redeemed, else expired past its TTL, else active.
+struct InviteSummary: Identifiable, Hashable {
+    enum Status { case active, used, expired }
+
+    let code: String
+    let createdAt: Date
+    let expiresAt: Date?
+    let redeemedByName: String?
+    let redeemedAt: Date?
+
+    var id: String { code }
+
+    var status: Status {
+        if redeemedAt != nil || redeemedByName != nil { return .used }
+        if let expiresAt, expiresAt < Date() { return .expired }
+        return .active
+    }
+}
+
 // MARK: - InviteError
 enum InviteError: LocalizedError {
     case notSignedIn
@@ -365,6 +388,18 @@ enum InviteService {
         try await db.collection("patient_invites").document(code).delete()
     }
 
+    /// Loads the codes this clinician has generated, newest first, for the
+    /// history list. Query pins `clinician_id == caller`, which is exactly what
+    /// the scoped `list` rule allows (the collection can't be enumerated).
+    static func myInvites(clinicianAppUid: String) async throws -> [InviteSummary] {
+        let snapshot = try await db.collection("patient_invites")
+            .whereField("clinician_id", isEqualTo: clinicianAppUid)
+            .getDocuments()
+        return snapshot.documents
+            .map { decodeInviteSummary(id: $0.documentID, data: $0.data()) }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
     // MARK: Patient — redeem an invite
 
     /// POSTs the code to the `redeem_invite` Cloud Function with the patient's
@@ -432,5 +467,15 @@ enum InviteService {
         let name = (data["clinician_name"] as? String) ?? "Your clinician"
         let connectedAt = (data["created_at"] as? Timestamp)?.dateValue() ?? Date()
         return ClinicianLink(documentId: id, clinicianName: name, connectedAt: connectedAt)
+    }
+
+    private static func decodeInviteSummary(id: String, data: [String: Any]) -> InviteSummary {
+        InviteSummary(
+            code: id,
+            createdAt: (data["created_at"] as? Timestamp)?.dateValue() ?? Date(),
+            expiresAt: (data["expires_at"] as? Timestamp)?.dateValue(),
+            redeemedByName: data["redeemed_by_name"] as? String,
+            redeemedAt: (data["redeemed_at"] as? Timestamp)?.dateValue()
+        )
     }
 }
