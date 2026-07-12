@@ -1,6 +1,4 @@
 import SwiftUI
-import UIKit
-import Combine
 
 // MARK: - PatientListPage
 //
@@ -24,7 +22,6 @@ struct PatientListPage: View {
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
     @State private var showingAddPatient = false
-    @State private var showingInvite = false
 
     private var filtered: [PatientRef] {
         patientService.searchedRoster(matching: searchText)
@@ -53,10 +50,6 @@ struct PatientListPage: View {
                 .environmentObject(patientService)
                 .environmentObject(authService)
         }
-        .sheet(isPresented: $showingInvite) {
-            InvitePatientSheet()
-                .environmentObject(authService)
-        }
         .alert(
             "Couldn't load patients",
             isPresented: Binding(
@@ -74,16 +67,10 @@ struct PatientListPage: View {
     // MARK: - Subviews
 
     private var header: some View {
-        HStack(spacing: 18) {
+        HStack {
             Text("Patients")
                 .font(.largeTitle).fontWeight(.bold)
             Spacer()
-            Button { showingInvite = true } label: {
-                Image(systemName: "person.badge.plus")
-                    .font(.title2)
-                    .foregroundColor(Color(red: 0.12, green: 0.29, blue: 0.64))
-            }
-            .accessibilityLabel("Invite patient")
             Button { showingAddPatient = true } label: {
                 Image(systemName: "plus.circle.fill")
                     .font(.title2)
@@ -230,253 +217,3 @@ private struct PatientRow: View {
     }
 }
 
-// MARK: - InvitePatientSheet
-//
-// Clinician-facing. Generates a short, single-use invite code and lets the
-// clinician copy / share it. The patient enters it under
-// Profile -> My clinicians -> "Connect with a clinician", which links them to
-// this clinician via the `redeem_invite` Cloud Function. No email infra.
-struct InvitePatientSheet: View {
-    @EnvironmentObject var authService: AuthenticationService
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var code: String?
-    @State private var isWorking = false
-    @State private var errorMessage: String?
-    @State private var invites: [InviteSummary] = []
-    @State private var now = Date()
-    private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-
-    private let accent = Color(red: 0.12, green: 0.29, blue: 0.64)
-
-    /// The signed-in clinician's app_uid + display name, or nil if somehow
-    /// not signed in (button is disabled in that case).
-    private var clinician: (id: String, name: String)? {
-        if case .signedIn(let profile) = authService.authState {
-            return (profile.id, profile.username)
-        }
-        return nil
-    }
-
-    private var shareMessage: String {
-        let name = clinician?.name ?? "Your clinician"
-        return "\(name) invited you to connect on Dynaface. Open the app and go to "
-            + "Profile → My clinicians → Connect with a clinician, then enter code: \(code ?? "")"
-    }
-
-    var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    Text("Share a code with your patient. When they enter it in the app, they'll be connected to you.")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-
-                    if let code {
-                        codeCard(code)
-                    } else if isWorking {
-                        HStack { Spacer(); ProgressView(); Spacer() }
-                            .padding(.vertical, 24)
-                    }
-
-                    if let errorMessage {
-                        Text(errorMessage).font(.footnote).foregroundColor(.red)
-                    }
-
-                    Button {
-                        Task { await generate() }
-                    } label: {
-                        HStack(spacing: 8) {
-                            if isWorking { ProgressView().tint(.white) }
-                            Text(code == nil ? "Generate code" : "Generate a new code")
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(accent)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
-                    }
-                    .disabled(isWorking || clinician == nil)
-
-                    Text("Codes expire in 48 hours and can be used once. Tap an active code below to share it.")
-                        .font(.caption).foregroundColor(.secondary)
-
-                    if !invites.isEmpty {
-                        Divider().padding(.top, 6)
-                        Text("Your invite codes")
-                            .font(.headline)
-                        VStack(spacing: 8) {
-                            ForEach(invites) { inviteRow($0) }
-                        }
-                    }
-
-                    Spacer(minLength: 0)
-                }
-                .padding()
-            }
-            .navigationTitle("Invite patient")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { dismiss() }
-                }
-            }
-            .onReceive(ticker) { now = $0 }
-            .task {
-                await loadInvites()
-                // Show the active code with the most time left (latest expiry)
-                // instead of minting a new one every open. Tapping another active
-                // code in the list switches to it; "Generate a new code" forces a
-                // fresh one.
-                if code == nil {
-                    let longestActive = invites
-                        .filter { $0.status == .active }
-                        .max { ($0.expiresAt ?? .distantPast) < ($1.expiresAt ?? .distantPast) }
-                    if let longestActive {
-                        code = longestActive.code
-                    } else {
-                        await generate()
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func codeCard(_ code: String) -> some View {
-        VStack(spacing: 14) {
-            Text(code)
-                .font(.system(size: 40, weight: .bold, design: .monospaced))
-                .kerning(4)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 24)
-                .background(Color(.systemGray6))
-                .cornerRadius(14)
-
-            // Live expiry for the currently-selected code; updates as you tap
-            // to switch and ticks down each second.
-            if let summary = invites.first(where: { $0.code == code }),
-               let remaining = remainingText(summary, status: liveStatus(summary)) {
-                Text("Expires in \(remaining)")
-                    .font(.footnote).foregroundColor(.secondary).monospacedDigit()
-            }
-
-            HStack(spacing: 12) {
-                Button {
-                    UIPasteboard.general.string = code
-                } label: {
-                    Label("Copy", systemImage: "doc.on.doc")
-                        .frame(maxWidth: .infinity).padding(.vertical, 10)
-                        .background(Color(.systemGray5)).cornerRadius(10)
-                }
-                ShareLink(item: shareMessage) {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                        .frame(maxWidth: .infinity).padding(.vertical, 10)
-                        .background(Color(.systemGray5)).cornerRadius(10)
-                }
-            }
-            .foregroundColor(accent)
-        }
-    }
-
-    @ViewBuilder
-    private func inviteRow(_ invite: InviteSummary) -> some View {
-        let isSelected = invite.code == code
-        let status = liveStatus(invite)
-        HStack(spacing: 10) {
-            Text(invite.code)
-                .font(.system(.body, design: .monospaced)).fontWeight(.semibold)
-            if isSelected {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.caption).foregroundColor(accent)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(statusText(status, invite))
-                    .font(.caption).fontWeight(.medium)
-                    .foregroundColor(statusColor(status))
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(statusColor(status).opacity(0.15))
-                    .cornerRadius(8)
-                if let remaining = remainingText(invite, status: status) {
-                    Text("\(remaining) left")
-                        .font(.caption2).foregroundColor(.secondary)
-                        .monospacedDigit()
-                }
-            }
-        }
-        .padding(.horizontal, 12).padding(.vertical, 10)
-        .background(isSelected ? accent.opacity(0.10) : Color(.systemGray6))
-        .cornerRadius(10)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            // Only active codes are worth sharing; switch the displayed code to it.
-            if status == .active { code = invite.code }
-        }
-    }
-
-    /// Status recomputed against the live clock (`now`) so a code flips to
-    /// Expired the moment its countdown reaches zero.
-    private func liveStatus(_ invite: InviteSummary) -> InviteSummary.Status {
-        if invite.redeemedAt != nil || invite.redeemedByName != nil { return .used }
-        if let exp = invite.expiresAt, exp <= now { return .expired }
-        return .active
-    }
-
-    /// Live time left for an active code as a bare duration, e.g. "1d 23h" /
-    /// "5h 12m" / "12m 34s". Callers add "left" / "Expires in" wording.
-    private func remainingText(_ invite: InviteSummary, status: InviteSummary.Status) -> String? {
-        guard status == .active, let exp = invite.expiresAt else { return nil }
-        let secs = Int(exp.timeIntervalSince(now))
-        guard secs > 0 else { return nil }
-        let d = secs / 86400, h = (secs % 86400) / 3600, m = (secs % 3600) / 60, s = secs % 60
-        if d > 0 { return "\(d)d \(h)h" }
-        if h > 0 { return "\(h)h \(m)m" }
-        if m > 0 { return "\(m)m \(s)s" }
-        return "\(s)s"
-    }
-
-    private func statusText(_ status: InviteSummary.Status, _ invite: InviteSummary) -> String {
-        switch status {
-        case .active:  return "Active"
-        case .used:    return "Used by \(invite.redeemedByName ?? "patient")"
-        case .expired: return "Expired"
-        }
-    }
-
-    private func statusColor(_ status: InviteSummary.Status) -> Color {
-        switch status {
-        case .active:  return accent          // blue
-        case .used:    return .green
-        case .expired: return .gray
-        }
-    }
-
-    private func generate() async {
-        guard let clinician else { return }
-        isWorking = true
-        errorMessage = nil
-        defer { isWorking = false }
-        do {
-            code = try await InviteService.createInvite(
-                clinicianId: clinician.id,
-                clinicianName: clinician.name,
-                patientName: nil
-            )
-            await loadInvites()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    private func loadInvites() async {
-        guard let clinician else { return }
-        do {
-            invites = try await InviteService.myInvites(clinicianAppUid: clinician.id)
-        } catch {
-            // The history list is a nicety — log and keep the generated code.
-            print("InvitePatientSheet.loadInvites failed: \(error)")
-        }
-    }
-}

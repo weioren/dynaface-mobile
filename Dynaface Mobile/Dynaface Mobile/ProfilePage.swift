@@ -11,7 +11,6 @@ struct ProfilePage: View {
     @State private var profileImage: UIImage?
     @State private var showingEditProfile = false
     @State private var showingGuide = false
-    @State private var showingClinicians = false
 
     // MARK: - Menu data model
     //
@@ -35,7 +34,6 @@ struct ProfilePage: View {
         case .patient:
             return [
                 edit,
-                MenuRow(text: "My clinicians") { showingClinicians = true },
                 guide,
             ]
         case .clinician:
@@ -169,10 +167,6 @@ struct ProfilePage: View {
             }
             .sheet(isPresented: $showingGuide) {
                 OnboardingFlow(steps: guideSteps, onDismiss: { showingGuide = false })
-                    .environmentObject(authService)
-            }
-            .sheet(isPresented: $showingClinicians) {
-                MyCliniciansView()
                     .environmentObject(authService)
             }
         }
@@ -380,212 +374,6 @@ struct FormField: View {
                 .cornerRadius(10 * widthScale)
                 .disabled(isDisabled)
                 .foregroundColor(isDisabled ? .gray : .black)
-        }
-    }
-}
-
-// MARK: - MyCliniciansView
-//
-// Patient-facing. Lists the clinicians this patient has connected to, lets
-// them connect to a new one (via an invite code) or disconnect from an
-// existing one. Backed by the patient's own `patients` rows (see InviteService).
-// Disconnect is a soft-archive; the patient can reconnect later with a new code.
-struct MyCliniciansView: View {
-    @EnvironmentObject var authService: AuthenticationService
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var links: [ClinicianLink] = []
-    @State private var isLoading = true
-    @State private var errorMessage: String?
-    @State private var showingConnect = false
-    @State private var pendingDisconnect: ClinicianLink?
-
-    private let accent = Color(red: 0.12, green: 0.29, blue: 0.64)
-
-    private var patientAppUid: String? {
-        if case .signedIn(let profile) = authService.authState { return profile.id }
-        return nil
-    }
-
-    var body: some View {
-        NavigationView {
-            Group {
-                if isLoading {
-                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    content
-                }
-            }
-            .navigationTitle("My clinicians")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { dismiss() }
-                }
-            }
-            .sheet(isPresented: $showingConnect) {
-                ConnectClinicianView { await load() }
-                    .environmentObject(authService)
-            }
-            .alert("Disconnect?", isPresented: Binding(
-                get: { pendingDisconnect != nil },
-                set: { if !$0 { pendingDisconnect = nil } }
-            ), presenting: pendingDisconnect) { link in
-                Button("Disconnect", role: .destructive) {
-                    Task { await disconnect(link) }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: { link in
-                Text("You'll no longer be connected to \(link.clinicianName). You can reconnect later with a new code.")
-            }
-        }
-        .task { await load() }
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        List {
-            Section {
-                Button {
-                    showingConnect = true
-                } label: {
-                    Label("Connect with a clinician", systemImage: "plus.circle.fill")
-                        .foregroundColor(accent)
-                }
-            }
-
-            if links.isEmpty {
-                Section {
-                    Text("You're not connected with any clinician yet. Ask your clinician for an invite code, then tap \"Connect with a clinician\".")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-            } else {
-                Section("Connected") {
-                    ForEach(links) { link in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(link.clinicianName).font(.body)
-                                Text("Connected \(link.connectedAt, style: .date)")
-                                    .font(.caption).foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            Button(role: .destructive) {
-                                pendingDisconnect = link
-                            } label: {
-                                Text("Disconnect").font(.subheadline)
-                            }
-                            .buttonStyle(.borderless)
-                        }
-                    }
-                }
-            }
-
-            if let errorMessage {
-                Section {
-                    Text(errorMessage).font(.footnote).foregroundColor(.red)
-                }
-            }
-        }
-    }
-
-    private func load() async {
-        guard let patientAppUid else { isLoading = false; return }
-        isLoading = true
-        defer { isLoading = false }
-        do {
-            links = try await InviteService.myClinicians(patientAppUid: patientAppUid)
-            errorMessage = nil
-        } catch {
-            errorMessage = "Couldn't load your clinicians: \(error.localizedDescription)"
-        }
-    }
-
-    private func disconnect(_ link: ClinicianLink) async {
-        do {
-            try await InviteService.disconnect(link)
-            links.removeAll { $0.id == link.id }
-        } catch {
-            errorMessage = "Couldn't disconnect: \(error.localizedDescription)"
-        }
-    }
-}
-
-// MARK: - ConnectClinicianView
-//
-// Patient enters an invite code to connect with the clinician who shared it.
-// On success it calls `onConnected` (so the parent list refreshes) and dismisses.
-struct ConnectClinicianView: View {
-    let onConnected: () async -> Void
-
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var code = ""
-    @State private var isWorking = false
-    @State private var errorMessage: String?
-
-    private let accent = Color(red: 0.12, green: 0.29, blue: 0.64)
-
-    private var trimmedCode: String {
-        code.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    var body: some View {
-        NavigationView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("Enter the invite code your clinician gave you.")
-                    .font(.subheadline).foregroundColor(.secondary)
-
-                TextField("Invite code", text: $code)
-                    .font(.system(.title2, design: .monospaced))
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
-
-                if let errorMessage {
-                    Text(errorMessage).font(.footnote).foregroundColor(.red)
-                }
-
-                Button {
-                    Task { await connect() }
-                } label: {
-                    HStack(spacing: 8) {
-                        if isWorking { ProgressView().tint(.white) }
-                        Text("Connect")
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(trimmedCode.isEmpty ? Color.gray : accent)
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
-                }
-                .disabled(isWorking || trimmedCode.isEmpty)
-
-                Spacer()
-            }
-            .padding()
-            .navigationTitle("Connect with a clinician")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
-        }
-    }
-
-    private func connect() async {
-        isWorking = true
-        errorMessage = nil
-        defer { isWorking = false }
-        do {
-            _ = try await InviteService.redeem(code: trimmedCode)
-            await onConnected()
-            dismiss()
-        } catch {
-            errorMessage = error.localizedDescription
         }
     }
 }

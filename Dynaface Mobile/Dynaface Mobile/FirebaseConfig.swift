@@ -27,11 +27,4 @@ struct FirebaseConfig {
     /// right after Auth.auth().createUser(), to mint the app-side profile
     /// UUID and set the `app_uid` custom claim.
     static let createProfileFunctionURL = "https://us-east4-dynaface-mobile-496023.cloudfunctions.net/create_profile"
-
-    /// HTTPS URL of the `redeem_invite` Cloud Function (see
-    /// dynaface-mobile/gcp-backend/redeem_invite/main.py). Called when a
-    /// patient enters an invite code a clinician shared with them, to record
-    /// the patient<->clinician association (writes the linked `patients` row
-    /// + consumes the invite via the Admin SDK).
-    static let redeemInviteFunctionURL = "https://us-east4-dynaface-mobile-496023.cloudfunctions.net/redeem_invite"
 }
