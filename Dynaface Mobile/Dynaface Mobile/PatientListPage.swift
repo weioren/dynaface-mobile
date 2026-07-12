@@ -295,7 +295,7 @@ struct InvitePatientSheet: View {
                     }
                     .disabled(isWorking || clinician == nil)
 
-                    Text("Codes expire in 14 days and can be used once.")
+                    Text("Codes expire in 3 days and can be used once. Tap an active code below to share it.")
                         .font(.caption).foregroundColor(.secondary)
 
                     if !invites.isEmpty {
@@ -320,13 +320,16 @@ struct InvitePatientSheet: View {
             }
             .task {
                 await loadInvites()
-                // Reuse an existing active (unused, unexpired) code instead of
-                // minting a new one every time the sheet opens — invites are
-                // newest-first, so this picks the most recent live code. The
-                // "Generate a new code" button still forces a fresh one.
+                // Show the active code with the most time left (latest expiry)
+                // instead of minting a new one every open. Tapping another active
+                // code in the list switches to it; "Generate a new code" forces a
+                // fresh one.
                 if code == nil {
-                    if let active = invites.first(where: { $0.status == .active }) {
-                        code = active.code
+                    let longestActive = invites
+                        .filter { $0.status == .active }
+                        .max { ($0.expiresAt ?? .distantPast) < ($1.expiresAt ?? .distantPast) }
+                    if let longestActive {
+                        code = longestActive.code
                     } else {
                         await generate()
                     }
@@ -367,9 +370,14 @@ struct InvitePatientSheet: View {
 
     @ViewBuilder
     private func inviteRow(_ invite: InviteSummary) -> some View {
-        HStack(spacing: 12) {
+        let isSelected = invite.code == code
+        HStack(spacing: 10) {
             Text(invite.code)
                 .font(.system(.body, design: .monospaced)).fontWeight(.semibold)
+            if isSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.caption).foregroundColor(accent)
+            }
             Spacer()
             Text(statusText(invite))
                 .font(.caption).fontWeight(.medium)
@@ -379,8 +387,13 @@ struct InvitePatientSheet: View {
                 .cornerRadius(8)
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
-        .background(Color(.systemGray6))
+        .background(isSelected ? accent.opacity(0.10) : Color(.systemGray6))
         .cornerRadius(10)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            // Only active codes are worth sharing; switch the displayed code to it.
+            if invite.status == .active { code = invite.code }
+        }
     }
 
     private func statusText(_ invite: InviteSummary) -> String {

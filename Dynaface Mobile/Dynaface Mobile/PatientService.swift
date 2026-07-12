@@ -300,7 +300,7 @@ struct ClinicianLink: Identifiable, Hashable {
 // "your invite codes" history list. Status is derived: used if it's been
 // redeemed, else expired past its TTL, else active.
 struct InviteSummary: Identifiable, Hashable {
-    enum Status { case active, used, expired }
+    enum Status: Equatable { case active, used, expired }
 
     let code: String
     let createdAt: Date
@@ -349,7 +349,7 @@ enum InviteService {
     /// Unambiguous alphabet — no 0/O/1/I/L, to avoid transcription errors.
     private static let codeAlphabet = Array("ABCDEFGHJKMNPQRSTUVWXYZ23456789")
     private static let codeLength = 6
-    private static let inviteTTL: TimeInterval = 14 * 24 * 60 * 60  // 14 days
+    private static let inviteTTL: TimeInterval = 3 * 24 * 60 * 60  // 3 days
 
     private static var db: Firestore { Firestore.firestore() }
 
