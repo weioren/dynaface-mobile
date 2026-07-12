@@ -95,7 +95,10 @@ def redeem_invite(request: Request):
         return _error("This account hasn't finished setup yet.", 403)
 
     body = request.get_json(silent=True) or {}
-    code = _normalize_code(body.get("code") or "")
+    raw_code = body.get("code")
+    if not isinstance(raw_code, str):
+        return _error("Enter an invite code.", 400)
+    code = _normalize_code(raw_code)
     if not code:
         return _error("Enter an invite code.", 400)
 

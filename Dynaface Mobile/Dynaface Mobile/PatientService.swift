@@ -212,7 +212,10 @@ final class PatientService: ObservableObject {
         let now = Date()
         let data: [String: Any] = [
             "clinician_id": clinicianId.uuidString,
-            "claimed_user_id": candidate.id.uuidString,
+            // Lowercased to match the app_uid casing used by redeem_invite and the
+            // patient-side "My clinicians" query (Firestore == is case-sensitive),
+            // so a clinician-linked patient can see + disconnect this link too.
+            "claimed_user_id": candidate.id.uuidString.lowercased(),
             "name": candidate.username,
             "created_at": FieldValue.serverTimestamp(),
             "updated_at": FieldValue.serverTimestamp(),

@@ -86,12 +86,14 @@ service cloud.firestore {
 
     // patient_invites/{code} — a short code a clinician generates and shares
     // so a patient can opt into that clinician (see redeem_invite). The doc id
-    // IS the code (a shared secret), so any signed-in user who has it may read
-    // it (to preview "Dr. X invited you"). Creating an invite is limited to a
-    // clinician creating their own; consuming it (setting redeemed_by) is
-    // Admin-SDK only, so client update is denied.
+    // IS the code (a shared secret): a single-doc `get` requires already knowing
+    // the exact code, so any signed-in user may `get` one — but `list` is denied
+    // so the collection can't be enumerated to harvest codes / clinician names /
+    // patient notes. Creating an invite is limited to a clinician creating their
+    // own; consuming it (setting redeemed_by) is Admin-SDK only (client update denied).
     match /patient_invites/{code} {
-      allow read:   if hasAppUid();
+      allow get:    if hasAppUid();
+      allow list:   if false;
       allow create: if isClinician() && isCaller(request.resource.data.clinician_id);
       allow update: if false;
       allow delete: if isClinician() && isCaller(resource.data.clinician_id);
