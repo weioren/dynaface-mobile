@@ -354,6 +354,14 @@ struct InvitePatientSheet: View {
                 .background(Color(.systemGray6))
                 .cornerRadius(14)
 
+            // Live expiry for the currently-selected code; updates as you tap
+            // to switch and ticks down each second.
+            if let summary = invites.first(where: { $0.code == code }),
+               let remaining = remainingText(summary, status: liveStatus(summary)) {
+                Text("Expires in \(remaining)")
+                    .font(.footnote).foregroundColor(.secondary).monospacedDigit()
+            }
+
             HStack(spacing: 12) {
                 Button {
                     UIPasteboard.general.string = code
@@ -392,7 +400,7 @@ struct InvitePatientSheet: View {
                     .background(statusColor(status).opacity(0.15))
                     .cornerRadius(8)
                 if let remaining = remainingText(invite, status: status) {
-                    Text(remaining)
+                    Text("\(remaining) left")
                         .font(.caption2).foregroundColor(.secondary)
                         .monospacedDigit()
                 }
@@ -416,16 +424,17 @@ struct InvitePatientSheet: View {
         return .active
     }
 
-    /// Live "time left" for an active code, e.g. "1d 23h left" / "5h 12m left".
+    /// Live time left for an active code as a bare duration, e.g. "1d 23h" /
+    /// "5h 12m" / "12m 34s". Callers add "left" / "Expires in" wording.
     private func remainingText(_ invite: InviteSummary, status: InviteSummary.Status) -> String? {
         guard status == .active, let exp = invite.expiresAt else { return nil }
         let secs = Int(exp.timeIntervalSince(now))
         guard secs > 0 else { return nil }
         let d = secs / 86400, h = (secs % 86400) / 3600, m = (secs % 3600) / 60, s = secs % 60
-        if d > 0 { return "\(d)d \(h)h left" }
-        if h > 0 { return "\(h)h \(m)m left" }
-        if m > 0 { return "\(m)m \(s)s left" }
-        return "\(s)s left"
+        if d > 0 { return "\(d)d \(h)h" }
+        if h > 0 { return "\(h)h \(m)m" }
+        if m > 0 { return "\(m)m \(s)s" }
+        return "\(s)s"
     }
 
     private func statusText(_ status: InviteSummary.Status, _ invite: InviteSummary) -> String {
