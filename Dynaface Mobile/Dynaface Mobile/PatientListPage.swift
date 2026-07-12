@@ -320,7 +320,17 @@ struct InvitePatientSheet: View {
             }
             .task {
                 await loadInvites()
-                if code == nil { await generate() }   // generate a code directly on open
+                // Reuse an existing active (unused, unexpired) code instead of
+                // minting a new one every time the sheet opens — invites are
+                // newest-first, so this picks the most recent live code. The
+                // "Generate a new code" button still forces a fresh one.
+                if code == nil {
+                    if let active = invites.first(where: { $0.status == .active }) {
+                        code = active.code
+                    } else {
+                        await generate()
+                    }
+                }
             }
         }
     }
