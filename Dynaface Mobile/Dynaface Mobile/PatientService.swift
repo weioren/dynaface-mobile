@@ -349,7 +349,7 @@ enum InviteService {
     /// Unambiguous alphabet — no 0/O/1/I/L, to avoid transcription errors.
     private static let codeAlphabet = Array("ABCDEFGHJKMNPQRSTUVWXYZ23456789")
     private static let codeLength = 6
-    private static let inviteTTL: TimeInterval = 3 * 24 * 60 * 60  // 3 days
+    private static let inviteTTL: TimeInterval = 48 * 60 * 60  // 48 hours (kept in sync with redeem_invite)
 
     private static var db: Firestore { Firestore.firestore() }
 

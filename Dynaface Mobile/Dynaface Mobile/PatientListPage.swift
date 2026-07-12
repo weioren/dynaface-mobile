@@ -295,7 +295,7 @@ struct InvitePatientSheet: View {
                     }
                     .disabled(isWorking || clinician == nil)
 
-                    Text("Codes expire in 3 days and can be used once. Tap an active code below to share it.")
+                    Text("Codes expire in 48 hours and can be used once. Tap an active code below to share it.")
                         .font(.caption).foregroundColor(.secondary)
 
                     if !invites.isEmpty {

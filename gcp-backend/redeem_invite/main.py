@@ -41,7 +41,7 @@ auth is verified inside the function.)
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import firebase_admin
@@ -55,6 +55,11 @@ firebase_admin.initialize_app()
 # Ambiguity-free alphabet is only enforced at generation time (client side);
 # on redeem we just normalize whatever the patient typed to match the doc id.
 _CODE_STRIP = {" ", "-", "\t"}
+
+# Server-side cap on invite validity, independent of the client-written
+# expires_at (keep in sync with InviteService.inviteTTL). Enforced against the
+# server-set created_at so a tampered/longer expires_at can't extend a code.
+INVITE_TTL_SECONDS = 48 * 60 * 60  # 48 hours
 
 
 class _AlreadyRedeemed(Exception):
@@ -122,8 +127,15 @@ def redeem_invite(request: Request):
     if invite.get("redeemed_by"):
         return _error("That invite code has already been used.", 409)
 
+    # Double-enforce validity: honor the client-written expiry AND independently
+    # reject anything older than INVITE_TTL_SECONDS from its server-set
+    # created_at, so a tampered/longer expires_at can't extend the window.
+    now = datetime.now(timezone.utc)
     expires_at = invite.get("expires_at")
-    if expires_at is not None and expires_at < datetime.now(timezone.utc):
+    created_at = invite.get("created_at")
+    if expires_at is not None and expires_at < now:
+        return _error("That invite code has expired.", 410)
+    if created_at is not None and (now - created_at) > timedelta(seconds=INVITE_TTL_SECONDS):
         return _error("That invite code has expired.", 410)
 
     clinician_id = invite.get("clinician_id")
