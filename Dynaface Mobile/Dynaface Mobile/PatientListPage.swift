@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import Combine
 
 // MARK: - PatientListPage
 //
@@ -243,6 +244,8 @@ struct InvitePatientSheet: View {
     @State private var isWorking = false
     @State private var errorMessage: String?
     @State private var invites: [InviteSummary] = []
+    @State private var now = Date()
+    private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private let accent = Color(red: 0.12, green: 0.29, blue: 0.64)
 
@@ -318,6 +321,7 @@ struct InvitePatientSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .onReceive(ticker) { now = $0 }
             .task {
                 await loadInvites()
                 // Show the active code with the most time left (latest expiry)
@@ -371,6 +375,7 @@ struct InvitePatientSheet: View {
     @ViewBuilder
     private func inviteRow(_ invite: InviteSummary) -> some View {
         let isSelected = invite.code == code
+        let status = liveStatus(invite)
         HStack(spacing: 10) {
             Text(invite.code)
                 .font(.system(.body, design: .monospaced)).fontWeight(.semibold)
@@ -379,12 +384,19 @@ struct InvitePatientSheet: View {
                     .font(.caption).foregroundColor(accent)
             }
             Spacer()
-            Text(statusText(invite))
-                .font(.caption).fontWeight(.medium)
-                .foregroundColor(statusColor(invite))
-                .padding(.horizontal, 10).padding(.vertical, 4)
-                .background(statusColor(invite).opacity(0.15))
-                .cornerRadius(8)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(statusText(status, invite))
+                    .font(.caption).fontWeight(.medium)
+                    .foregroundColor(statusColor(status))
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+                    .background(statusColor(status).opacity(0.15))
+                    .cornerRadius(8)
+                if let remaining = remainingText(invite, status: status) {
+                    Text(remaining)
+                        .font(.caption2).foregroundColor(.secondary)
+                        .monospacedDigit()
+                }
+            }
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
         .background(isSelected ? accent.opacity(0.10) : Color(.systemGray6))
@@ -392,20 +404,40 @@ struct InvitePatientSheet: View {
         .contentShape(Rectangle())
         .onTapGesture {
             // Only active codes are worth sharing; switch the displayed code to it.
-            if invite.status == .active { code = invite.code }
+            if status == .active { code = invite.code }
         }
     }
 
-    private func statusText(_ invite: InviteSummary) -> String {
-        switch invite.status {
+    /// Status recomputed against the live clock (`now`) so a code flips to
+    /// Expired the moment its countdown reaches zero.
+    private func liveStatus(_ invite: InviteSummary) -> InviteSummary.Status {
+        if invite.redeemedAt != nil || invite.redeemedByName != nil { return .used }
+        if let exp = invite.expiresAt, exp <= now { return .expired }
+        return .active
+    }
+
+    /// Live "time left" for an active code, e.g. "1d 23h left" / "5h 12m left".
+    private func remainingText(_ invite: InviteSummary, status: InviteSummary.Status) -> String? {
+        guard status == .active, let exp = invite.expiresAt else { return nil }
+        let secs = Int(exp.timeIntervalSince(now))
+        guard secs > 0 else { return nil }
+        let d = secs / 86400, h = (secs % 86400) / 3600, m = (secs % 3600) / 60, s = secs % 60
+        if d > 0 { return "\(d)d \(h)h left" }
+        if h > 0 { return "\(h)h \(m)m left" }
+        if m > 0 { return "\(m)m \(s)s left" }
+        return "\(s)s left"
+    }
+
+    private func statusText(_ status: InviteSummary.Status, _ invite: InviteSummary) -> String {
+        switch status {
         case .active:  return "Active"
         case .used:    return "Used by \(invite.redeemedByName ?? "patient")"
         case .expired: return "Expired"
         }
     }
 
-    private func statusColor(_ invite: InviteSummary) -> Color {
-        switch invite.status {
+    private func statusColor(_ status: InviteSummary.Status) -> Color {
+        switch status {
         case .active:  return accent          // blue
         case .used:    return .green
         case .expired: return .gray
