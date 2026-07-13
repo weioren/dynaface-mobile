@@ -62,16 +62,15 @@ struct CreateAccountView: View {
                                 .autocorrectionDisabled(true)
                                 .textContentType(.emailAddress)
 
-                            // Restrict to .edu / common providers; when the address is
-                            // otherwise fine, still nudge toward Gmail — the Firebase
-                            // verification email is frequently blocked or spam-filtered
-                            // by other providers (notably school / .edu inboxes).
+                            // Disallowed domains show a red prompt; otherwise nudge
+                            // toward Gmail, whose Firebase verification email reliably
+                            // arrives (other providers often block or spam-filter it).
                             if !authViewModel.email.isEmpty && !authViewModel.isEmailAllowed {
-                                Text("Use a .edu or common email (Gmail, Outlook, Yahoo, iCloud…).")
+                                Text("Please use a Gmail address to sign up.")
                                     .font(.system(size: 12 * w))
                                     .foregroundColor(.red)
                             } else if !authViewModel.email.lowercased().hasSuffix("@gmail.com") {
-                                Text("Tip: a Gmail address is recommended — verification emails can be blocked or land in spam on other providers (including .edu).")
+                                Text("We recommend a Gmail address so the verification email reaches you.")
                                     .font(.system(size: 12 * w))
                                     .foregroundColor(.secondary)
                             }
