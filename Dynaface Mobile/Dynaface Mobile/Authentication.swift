@@ -107,36 +107,23 @@ final class AuthViewModel: ObservableObject {
         hasMinLength && hasUpper && hasLower && hasDigit && hasSpecial
     }
 
-    // Email allow-list — signups must use a .edu / academic address or a common
-    // consumer provider (blocks throwaway / uncommon domains). Client-side gate;
-    // extend by editing `allowedEmailDomains`.
-    private static let allowedEmailDomains: Set<String> = [
-        "gmail.com", "googlemail.com",
-        "outlook.com", "hotmail.com", "live.com", "msn.com",
-        "yahoo.com", "ymail.com",
-        "icloud.com", "me.com", "mac.com",
-        "aol.com", "proton.me", "protonmail.com"
-    ]
-
-    var isEmailAllowed: Bool {
-        let e = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    // Email validation — accept ANY well-formed address. Gmail is only
+    // recommended (see the signup hint), not required. Unusable or throwaway
+    // addresses are filtered by the mandatory email-link verification, not by a
+    // domain allow-list.
+    var isEmailValid: Bool {
+        let e = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !e.contains(" "), !e.contains("\t") else { return false }
         let parts = e.split(separator: "@", omittingEmptySubsequences: false)
         guard parts.count == 2, !parts[0].isEmpty else { return false }
-        let domain = String(parts[1])
-        guard domain.contains("."), !domain.hasPrefix("."), !domain.hasSuffix(".") else { return false }
-        // Academic — check the trailing domain labels (not a loose substring),
-        // so a spoof like "foo.edu.evil.com" is NOT accepted.
-        let labels = domain.split(separator: ".").map(String.init)
-        if labels.last == "edu" { return true }                 // x.edu, mail.jhu.edu
-        if labels.count >= 2 {
-            let secondLevel = labels[labels.count - 2]
-            if secondLevel == "edu" || secondLevel == "ac" { return true }  // x.edu.au, x.ac.uk
-        }
-        return AuthViewModel.allowedEmailDomains.contains(domain)
+        // Domain must be dotted with non-empty labels and a 2+ character TLD.
+        let labels = parts[1].split(separator: ".", omittingEmptySubsequences: false)
+        guard labels.count >= 2, labels.allSatisfy({ !$0.isEmpty }) else { return false }
+        return (labels.last?.count ?? 0) >= 2
     }
 
     var isSignUpValid: Bool {
-        isEmailAllowed &&
+        isEmailValid &&
         !username.isEmpty &&
         password == confirmPassword &&
         isPasswordStrong

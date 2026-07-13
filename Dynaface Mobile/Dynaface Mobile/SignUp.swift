@@ -62,11 +62,12 @@ struct CreateAccountView: View {
                                 .autocorrectionDisabled(true)
                                 .textContentType(.emailAddress)
 
-                            // Disallowed domains show a red prompt; otherwise nudge
-                            // toward Gmail, whose Firebase verification email reliably
-                            // arrives (other providers often block or spam-filter it).
-                            if !authViewModel.email.isEmpty && !authViewModel.isEmailAllowed {
-                                Text("Please use a Gmail address to sign up.")
+                            // Any well-formed email is accepted. Only an invalid
+                            // format shows a red prompt; a valid non-Gmail address
+                            // still gets a gray nudge toward Gmail, whose verification
+                            // email reliably arrives.
+                            if !authViewModel.email.isEmpty && !authViewModel.isEmailValid {
+                                Text("Enter a valid email address.")
                                     .font(.system(size: 12 * w))
                                     .foregroundColor(.red)
                             } else if !authViewModel.email.lowercased().hasSuffix("@gmail.com") {
