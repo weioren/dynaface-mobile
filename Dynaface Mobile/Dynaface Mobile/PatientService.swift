@@ -274,3 +274,4 @@ final class PatientService: ObservableObject {
         return PatientCandidate(id: uuid, username: username, email: email, createdAt: createdAt)
     }
 }
+

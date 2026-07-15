@@ -202,57 +202,18 @@ private struct FormulaPanel: View {
     let explanation: MetricExplanation
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(explanation.measures)
-                .font(.footnote).foregroundColor(.secondary)
-                .textSelection(.enabled)
-
-            formulaRow(explanation.latex, fontSize: 18)
-
-            if !explanation.variables.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(explanation.variables) { v in
-                        HStack(alignment: .center, spacing: 8) {
-                            Text("•").font(.footnote).foregroundColor(.secondary)
-                            LaTeXView(latex: v.symbol, fontSize: 14)
-                                .contextMenu { copyButton(v.symbol) }
-                            Text(v.meaning).font(.footnote).foregroundColor(.secondary)
-                                .textSelection(.enabled)
-                        }
-                    }
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("EXAMPLE")
-                    .font(.caption2).fontWeight(.semibold)
-                    .foregroundColor(.secondary)
-                formulaRow(explanation.exampleLatex, fontSize: 16)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(Color.gray.opacity(0.10))
-        .cornerRadius(10)
-        .padding(.top, 6)
-    }
-
-    /// A LaTeX formula in a horizontal scroll — wide formulas never clip or
-    /// misalign, and long-press copies the LaTeX source.
-    private func formulaRow(_ latex: String, fontSize: CGFloat) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            LaTeXView(latex: latex, fontSize: fontSize)
-                .padding(.vertical, 2)
-                .contextMenu { copyButton(latex) }
-        }
-    }
-
-    private func copyButton(_ text: String) -> some View {
-        Button {
-            UIPasteboard.general.string = text
-        } label: {
-            Label("Copy LaTeX", systemImage: "doc.on.doc")
-        }
+        // Formulas hidden per clinical review (7/11): show only the plain-language
+        // description. The LaTeX formula / variables / example still live in
+        // MetricExplanation (and the D1 doc) — re-enable here to bring them back.
+        Text(explanation.measures)
+            .font(.footnote)
+            .foregroundColor(.secondary)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(Color.gray.opacity(0.10))
+            .cornerRadius(10)
+            .padding(.top, 6)
     }
 }
 

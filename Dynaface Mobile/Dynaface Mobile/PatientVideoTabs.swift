@@ -31,21 +31,11 @@ struct PatientHistoryTab: View {
     @EnvironmentObject private var authService: AuthenticationService
     @EnvironmentObject private var attributionService: JobAttributionService
 
-    // Mirrors the "Upload videos to cloud" toggle in ProfilePage. When
-    // OFF and the user is viewing their OWN My care, show an empty-state
-    // hint explaining recordings aren't synced — we don't fall back to
-    // local files per product decision.
-    @AppStorage("videoUploadsEnabled") private var videoUploadsEnabled = true
-
     @State private var jobs: [PatientJobRow] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var selectedVideo: PatientProcessedPlayback?
     @State private var activeDownloadJobId: UUID?
-
-    private var cloudDisabledForSelf: Bool {
-        isOwnDetail(patientId, authService: authService) && !videoUploadsEnabled
-    }
 
     var body: some View {
         Group {
@@ -106,38 +96,20 @@ struct PatientHistoryTab: View {
 
     @ViewBuilder
     private var emptyState: some View {
-        if cloudDisabledForSelf {
-            VStack(spacing: 12) {
-                Spacer()
-                Image(systemName: "icloud.slash")
-                    .font(.system(size: 50))
-                    .foregroundColor(.gray.opacity(0.5))
-                Text("Cloud uploads are off")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                Text("Turn on \"Upload videos to cloud\" in Profile to see your recordings here.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                Spacer()
-            }
-        } else {
-            VStack(spacing: 12) {
-                Spacer()
-                Image(systemName: "video.slash")
-                    .font(.system(size: 50))
-                    .foregroundColor(.gray.opacity(0.5))
-                Text("No recordings yet")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                Text("Recordings uploaded for this patient will appear here.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                Spacer()
-            }
+        VStack(spacing: 12) {
+            Spacer()
+            Image(systemName: "video.slash")
+                .font(.system(size: 50))
+                .foregroundColor(.gray.opacity(0.5))
+            Text("No recordings yet")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            Text("Recordings uploaded for this patient will appear here.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+            Spacer()
         }
     }
 
@@ -150,13 +122,6 @@ struct PatientHistoryTab: View {
     private func load() async {
         isLoading = true
         defer { isLoading = false }
-
-        // Patient with cloud upload disabled: don't hit the network —
-        // the empty-state hint handles UX.
-        if cloudDisabledForSelf {
-            self.jobs = []
-            return
-        }
 
         do {
             let merged = try await fetchAllJobs(
@@ -270,18 +235,12 @@ struct PatientProcessedTab: View {
     @EnvironmentObject private var authService: AuthenticationService
     @EnvironmentObject private var attributionService: JobAttributionService
 
-    @AppStorage("videoUploadsEnabled") private var videoUploadsEnabled = true
-
     @State private var jobs: [PatientJobRow] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
     // Playback state — mirrors ProcessedVideosPage in ExerciseHistoryPage.
     @State private var selectedVideo: PatientProcessedPlayback?
     @State private var activeDownloadJobId: UUID?
-
-    private var cloudDisabledForSelf: Bool {
-        isOwnDetail(patientId, authService: authService) && !videoUploadsEnabled
-    }
 
     var body: some View {
         Group {
@@ -342,38 +301,20 @@ struct PatientProcessedTab: View {
 
     @ViewBuilder
     private var emptyState: some View {
-        if cloudDisabledForSelf {
-            VStack(spacing: 12) {
-                Spacer()
-                Image(systemName: "icloud.slash")
-                    .font(.system(size: 50))
-                    .foregroundColor(.gray.opacity(0.5))
-                Text("Cloud uploads are off")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                Text("Processed results live in the cloud. Turn on \"Upload videos to cloud\" in Profile to view them here.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                Spacer()
-            }
-        } else {
-            VStack(spacing: 12) {
-                Spacer()
-                Image(systemName: "sparkles.tv")
-                    .font(.system(size: 50))
-                    .foregroundColor(.gray.opacity(0.5))
-                Text("No processed videos yet")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                Text("Annotated results from DynaFace appear here once processing finishes.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                Spacer()
-            }
+        VStack(spacing: 12) {
+            Spacer()
+            Image(systemName: "sparkles.tv")
+                .font(.system(size: 50))
+                .foregroundColor(.gray.opacity(0.5))
+            Text("No processed videos yet")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            Text("Annotated results from DynaFace appear here once processing finishes.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+            Spacer()
         }
     }
 
@@ -386,13 +327,6 @@ struct PatientProcessedTab: View {
     private func load() async {
         isLoading = true
         defer { isLoading = false }
-
-        // No cloud → nothing to show on Processed. Surface a hint via
-        // the empty state instead of running the query.
-        if cloudDisabledForSelf {
-            self.jobs = []
-            return
-        }
 
         do {
             let merged = try await fetchAllJobs(
@@ -550,6 +484,38 @@ func signedRawVideoURL(for job: PatientJobRow) async throws -> URL {
     }
     throw lastError ?? NSError(domain: "PatientOriginal", code: 404,
                               userInfo: [NSLocalizedDescriptionKey: "Original recording not found in storage."])
+}
+
+/// Peak-expression still image: `results/{user_id}/{job_id}/peak_frame.png` in
+/// the results bucket, written by the worker alongside annotated.mp4. Used by
+/// the Compare view's "Key image only" mode. Jobs processed before peak_frame
+/// existed will 404 here — callers surface a fallback.
+func signedPeakFrameURL(for job: PatientJobRow) async throws -> URL {
+    var candidates: [String] = []
+    // If the processed output path is known, peak_frame.png sits in its folder.
+    let base = job.output_video_path ?? job.output_csv_path ?? ""
+    let directory = (base as NSString).deletingLastPathComponent
+    if !directory.isEmpty {
+        candidates.append("\(directory)/peak_frame.png")
+    }
+    // Canonical worker output convention.
+    if let userId = job.user_id {
+        candidates.append("results/\(userId.uuidString)/\(job.id.uuidString)/peak_frame.png")
+    }
+    let deduped = dedupeNonEmpty(candidates)
+
+    let storage = Storage.storage(url: FirebaseConfig.resultsBucketURL)
+    var lastError: Error?
+    for path in deduped {
+        do {
+            return try await storage.reference(withPath: path).downloadURL()
+        } catch {
+            lastError = error
+            continue
+        }
+    }
+    throw lastError ?? NSError(domain: "PatientPeakFrame", code: 404,
+                              userInfo: [NSLocalizedDescriptionKey: "Key image not found in storage."])
 }
 
 private func dedupeNonEmpty(_ values: [String]) -> [String] {

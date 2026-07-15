@@ -93,12 +93,40 @@ final class AuthViewModel: ObservableObject {
     @Published var accountType: AccountType = .clinician
     @Published var surveyResponses: SurveyResponses?
 
+    // Password strength — new signups must include an uppercase, a lowercase, a
+    // number, and a special character, and be at least 8 chars. Sign-in is NOT
+    // re-checked (existing accounts keep whatever they have).
+    var hasMinLength: Bool { password.count >= 8 }
+    var hasUpper: Bool { password.rangeOfCharacter(from: .uppercaseLetters) != nil }
+    var hasLower: Bool { password.rangeOfCharacter(from: .lowercaseLetters) != nil }
+    var hasDigit: Bool { password.rangeOfCharacter(from: .decimalDigits) != nil }
+    var hasSpecial: Bool {
+        password.rangeOfCharacter(from: CharacterSet(charactersIn: "!@#$%^&*()_-+=[]{}|;:,.<>?/~`")) != nil
+    }
+    var isPasswordStrong: Bool {
+        hasMinLength && hasUpper && hasLower && hasDigit && hasSpecial
+    }
+
+    // Email validation — accept ANY well-formed address. Gmail is only
+    // recommended (see the signup hint), not required. Unusable or throwaway
+    // addresses are filtered by the mandatory email-link verification, not by a
+    // domain allow-list.
+    var isEmailValid: Bool {
+        let e = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !e.contains(" "), !e.contains("\t") else { return false }
+        let parts = e.split(separator: "@", omittingEmptySubsequences: false)
+        guard parts.count == 2, !parts[0].isEmpty else { return false }
+        // Domain must be dotted with non-empty labels and a 2+ character TLD.
+        let labels = parts[1].split(separator: ".", omittingEmptySubsequences: false)
+        guard labels.count >= 2, labels.allSatisfy({ !$0.isEmpty }) else { return false }
+        return (labels.last?.count ?? 0) >= 2
+    }
+
     var isSignUpValid: Bool {
-        !email.isEmpty &&
+        isEmailValid &&
         !username.isEmpty &&
-        !password.isEmpty &&
         password == confirmPassword &&
-        password.count >= 6
+        isPasswordStrong
     }
 
     var isSignInValid: Bool {
@@ -116,6 +144,10 @@ final class AuthenticationService: ObservableObject {
     /// the whole UI and stranded the user. Cleared at the start of each
     /// attempt and when the form's alert is dismissed.
     @Published var authError: String?
+    /// Whether the signed-in Firebase user's email is verified. Drives the
+    /// non-blocking "Verify your email" banner. Refreshed on session checks and
+    /// by refreshEmailVerification() (which reloads the user first).
+    @Published var emailVerified: Bool = false
 
     // Store account creation data temporarily across the two-step signup flow
     private var pendingUsername: String = ""
@@ -140,6 +172,7 @@ final class AuthenticationService: ObservableObject {
             authState = .signedOut
             return
         }
+        emailVerified = user.isEmailVerified
         do {
             let tokenResult = try await user.getIDTokenResult()
             guard let appUid = tokenResult.claims["app_uid"] as? String else {
@@ -182,6 +215,7 @@ final class AuthenticationService: ObservableObject {
             throw AuthError.userNotFound
         }
         authState = .signedIn(profile)
+        emailVerified = Auth.auth().currentUser?.isEmailVerified ?? false
     }
 
     // MARK: - Update Profile
@@ -258,17 +292,15 @@ final class AuthenticationService: ObservableObject {
         do {
             let result = try await Auth.auth().createUser(withEmail: email, password: password)
             print("Firebase auth user created with UID: \(result.user.uid)")
+            // Fire the verification email at signup. Non-blocking — the user can
+            // still proceed; a banner nudges them to verify. Best-effort.
+            try? await result.user.sendEmailVerification()
+            emailVerified = false
             authState = .accountCreated(email: email, accountType: accountType)
         } catch {
             print("Firebase signup failed: \(error)")
             clearPendingSignupState()
-
-            let msg = error.localizedDescription.lowercased()
-            if msg.contains("already") || msg.contains("registered") || msg.contains("exists") || msg.contains("in use") {
-                authError = "Email has been registered"
-            } else {
-                authError = "Failed to create account: \(error.localizedDescription)"
-            }
+            authError = signUpErrorMessage(for: error)
         }
     }
 
@@ -283,6 +315,10 @@ final class AuthenticationService: ObservableObject {
     // dance needed here — we just call the `create_profile` Cloud Function
     // with the current user's ID token.
     func completeProfile(email: String, surveyResponses: SurveyResponses?) async {
+        // Re-entry guard: ignore a second call while one is already in flight,
+        // so a double "Skip"/"Get started" can't create the profile twice (the
+        // server then rejects the duplicate as a taken username).
+        guard !isLoading else { return }
         isLoading = true
         authError = nil
         defer { isLoading = false }
@@ -296,7 +332,10 @@ final class AuthenticationService: ObservableObject {
 
         do {
             print("Completing profile for email: \(email), accountType: \(pendingAccountType.rawValue)")
-            let idToken = try await user.getIDToken()
+            // Force-refresh so the token carries the up-to-date `email_verified`
+            // claim (the user just clicked the verification link); create_profile
+            // rejects an unverified token.
+            let idToken = try await user.getIDToken(forcingRefresh: true)
             let appUid = try await callCreateProfile(
                 idToken: idToken,
                 email: email,
@@ -315,7 +354,7 @@ final class AuthenticationService: ObservableObject {
         } catch {
             print("Profile completion error: \(error)")
             // Stay on the survey (.accountCreated) so the user can retry submit.
-            authError = "Failed to create account. Please try again or contact support."
+            authError = completeProfileErrorMessage(for: error)
         }
     }
 
@@ -323,6 +362,70 @@ final class AuthenticationService: ObservableObject {
         pendingUsername = ""
         pendingPassword = ""
         pendingAccountType = .patient
+    }
+
+    // MARK: - Error messages
+    //
+    // Map raw Firebase / network errors to a clear, user-facing line so the
+    // signup alerts say what actually went wrong instead of a generic
+    // "Failed to create account". FirebaseAuth surfaces its AuthErrorCode as a
+    // stable integer on the NSError (matching the code is more robust than
+    // scanning the localized message text, which can be reworded/localized).
+    private func signUpErrorMessage(for error: Error) -> String {
+        let nsError = error as NSError
+        switch nsError.code {
+        case 17007: return "Email has been registered"            // emailAlreadyInUse
+        case 17008: return "That email address looks invalid"     // invalidEmail
+        case 17026: return "Password is too weak"                 // weakPassword
+        case 17020: return "No connection. Check your network and try again."  // networkError
+        default:
+            if nsError.domain == NSURLErrorDomain {
+                return "No connection. Check your network and try again."
+            }
+            return "Couldn't create the account: \(error.localizedDescription)"
+        }
+    }
+
+    private func completeProfileErrorMessage(for error: Error) -> String {
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain || nsError.code == 17020 {  // network
+            return "No connection. Check your network and try again."
+        }
+        // Errors thrown by callCreateProfile carry the function's response text.
+        if nsError.domain == "create_profile" {
+            let detail = nsError.localizedDescription.lowercased()
+            // create_profile returns 403 with "verify" when email_verified is false.
+            if detail.contains("verify") {
+                return "Please verify your email first."
+            }
+            if detail.contains("username") {
+                return "Username has been registered"
+            }
+            return "Couldn't finish setup: \(nsError.localizedDescription)"
+        }
+        return "Couldn't finish setup. Please try again or contact support."
+    }
+
+    // MARK: - Email verification
+    //
+    // Firebase sends the verification email (a link) at signup (createAccount).
+    // SignupVerificationGate hard-blocks the rest of onboarding until
+    // `emailVerified`, and create_profile enforces it server-side too (403 if
+    // the token's email_verified is false). The Dashboard banner is a fallback
+    // nudge for any pre-existing unverified account.
+
+    /// Re-send the verification email to the currently signed-in user.
+    func resendVerificationEmail() async {
+        guard let user = Auth.auth().currentUser else { return }
+        try? await user.sendEmailVerification()
+    }
+
+    /// Reload the Firebase user and republish `emailVerified` — the gate polls
+    /// this so Continue enables once the user taps the emailed link.
+    func refreshEmailVerification() async {
+        guard let user = Auth.auth().currentUser else { return }
+        try? await user.reload()
+        emailVerified = Auth.auth().currentUser?.isEmailVerified ?? false
     }
 
     // MARK: - create_profile Cloud Function call
@@ -405,6 +508,18 @@ final class AuthenticationService: ObservableObject {
     func signOut() async {
         try? Auth.auth().signOut()
         authState = .signedOut
+    }
+
+    /// Abandon a half-finished signup (Firebase user created but email not yet
+    /// verified and no profile written): delete the auth user so the address is
+    /// free to sign up again, then sign out. Falls back to a plain sign-out if
+    /// the delete fails (e.g. requires-recent-login).
+    func cancelPendingSignup() async {
+        if let user = Auth.auth().currentUser {
+            try? await user.delete()
+        }
+        emailVerified = false
+        await signOut()
     }
 
     // MARK: - Password Reset
