@@ -26,6 +26,15 @@ APP_NAME = "dynaface-google-cloud-run-job-worker"
 MODEL_CACHE_DIR = Path(os.environ.get("DYNAFACE_MODEL_PATH", "/opt/dynaface-models"))
 JOBS_COLLECTION = os.environ.get("JOBS_COLLECTION", "processing_jobs")
 
+# Opt-in single-pass pipeline: computes the annotated video and the per-frame
+# metrics in one MTCNN+SPIGA pass instead of two. Defaults to off so existing
+# deployments keep today's (legacy two-pass) behavior until this is validated.
+SINGLE_PASS_PIPELINE = os.environ.get("DYNAFACE_SINGLE_PASS", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+}
+
 
 def _detect_workspace_root() -> Path:
     file_path = Path(__file__).resolve()
@@ -457,11 +466,37 @@ def _process_uploaded_object(object_name: str) -> dict[str, Any]:
         print(f"Running Dynaface on {video_file}")
         initialize_models()
 
-        ok = render_annotated_video(video_file, annotated_video_file, crop=False, forced_rotation=None, frame_step=1)
-        if not ok:
-            raise RuntimeError("Dynaface returned no valid frames while rendering annotated video")
+        if SINGLE_PASS_PIPELINE:
+            print("Pipeline mode: single-pass (DYNAFACE_SINGLE_PASS=true)")
+            raw_rows: list[dict[str, Any]] = []
+            ok = render_annotated_video(
+                video_file, annotated_video_file, crop=False, forced_rotation=None,
+                frame_step=1, measures=all_measures(), records_out=raw_rows,
+            )
+            if not ok:
+                raise RuntimeError("Dynaface returned no valid frames while rendering annotated video")
 
-        records = process_video_in_memory(video_file, crop=False)
+            records: list[FrameRecord] = []
+            for row in raw_rows:
+                landmarks = parse_landmarks(row)
+                if not landmarks:
+                    continue
+                records.append(
+                    FrameRecord(
+                        frame=row["frame"],
+                        time_sec=row["time_sec"],
+                        landmarks=landmarks,
+                        measures=parse_measurements(row),
+                    )
+                )
+        else:
+            print("Pipeline mode: legacy two-pass")
+            ok = render_annotated_video(video_file, annotated_video_file, crop=False, forced_rotation=None, frame_step=1)
+            if not ok:
+                raise RuntimeError("Dynaface returned no valid frames while rendering annotated video")
+
+            records = process_video_in_memory(video_file, crop=False)
+
         computed = compute_metrics(records)
         summary = extract_summary_metrics(computed)
 
@@ -477,6 +512,7 @@ def _process_uploaded_object(object_name: str) -> dict[str, Any]:
             job_id,
             status="completed",
             exercise_name=exercise_name,
+            pipeline_mode="single_pass" if SINGLE_PASS_PIPELINE else "legacy",
             output_video_path=result_paths["output_video_path"],
             output_json_path=result_paths["output_json_path"],
             peak_frame_path=result_paths["peak_frame_path"] or None,

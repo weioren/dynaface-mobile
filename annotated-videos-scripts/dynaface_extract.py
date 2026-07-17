@@ -284,6 +284,8 @@ def process_video(
     crop: bool = True,
     forced_rotation=None,
     frame_step: int = 1,
+    measures: list | None = None,
+    records_out: list | None = None,
 ) -> bool:
     """
     Run Dynaface on every frame of *video_path* and write an annotated video to *output_video*.
@@ -291,8 +293,13 @@ def process_video(
     Returns True if at least one frame was successfully analysed.
     forced_rotation: a (rotation_code, rotation_name) tuple to skip auto-detection,
                      or None to auto-detect.
+    measures: enabled measures to compute (defaults to the module-level MEASUREMENTS
+              subset used for the annotated-video overlay).
+    records_out: if provided, each frame's raw measurement dict (frame/time_sec plus
+                 whatever `measures` produced) is appended to this list, letting a
+                 caller collect per-frame metrics from this same pass.
     """
-    analyzer = AnalyzeFace(MEASUREMENTS)
+    analyzer = AnalyzeFace(measures if measures is not None else MEASUREMENTS)
 
     if forced_rotation is not None:
         rotation_code, rotation_name = forced_rotation
@@ -374,6 +381,9 @@ def process_video(
                 measurements["time_sec"] = (
                     round(frame_num / frame_rate, 3) if frame_rate > 0 else 0
                 )
+
+                if records_out is not None:
+                    records_out.append(dict(measurements))
 
                 overlay_lines(
                     analyzer,
