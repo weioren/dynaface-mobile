@@ -81,7 +81,10 @@ service cloud.firestore {
       allow create: if hasAppUid()
         && isCaller(request.resource.data.user_id)
         && request.resource.data.status == "queued";
-      allow update, delete: if false;
+      allow update: if false;
+      // A clinician may delete a job when removing its assessment from the
+      // timeline (full delete). The worker still owns all status updates.
+      allow delete: if isClinician();
     }
 
     // job_patient_attributions/{jobId} — doc id == processing_jobs id, so
@@ -101,7 +104,7 @@ service cloud.firestore {
         && isCaller(request.resource.data.created_by)
         && (isClinician() || isCaller(request.resource.data.patient_id));
       allow update: if isClinician();
-      allow delete: if false;
+      allow delete: if isClinician();
     }
   }
 }

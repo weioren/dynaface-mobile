@@ -33,6 +33,12 @@ struct TimelinePage: View {
     @State private var selectedFilter: TimelineEventType?
     /// Manual (non-assessment) event awaiting delete confirmation.
     @State private var eventPendingDelete: TimelineEvent?
+    /// Assessment day-group awaiting delete confirmation (full delete).
+    @State private var groupPendingDelete: AssessmentGroupDelete?
+    /// Day-groups currently mid-delete — drives the row's "Deleting…" spinner.
+    @State private var deletingDays: Set<Date> = []
+    /// Transient success/failure toast shown after a delete completes.
+    @State private var deleteToast: DeleteToast?
 
     // MARK: - Compare-assessments mode
     //
@@ -100,7 +106,17 @@ struct TimelinePage: View {
         .refreshable {
             await timelineService.loadEvents()   // includes statuses now
         }
-        .task { await reloadIfNeeded() }
+        .task {
+            await reloadIfNeeded()
+            // Live-refresh while any assessment job is still processing, so the
+            // badge flips to Completed without navigating away. Auto-cancels on
+            // disappear; stops once every status is terminal.
+            while !Task.isCancelled,
+                  timelineService.jobStatusByJobId.values.contains(where: { $0 == "queued" || $0 == "processing" }) {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                await timelineService.loadJobStatuses()
+            }
+        }
         .alert(
             "Couldn't load timeline",
             isPresented: Binding(
@@ -131,8 +147,18 @@ struct TimelinePage: View {
                         isSelected: selectedAssessmentDays.contains(day),
                         statusByJobId: timelineService.jobStatusByJobId,
                         onPlay: { e in presentAssessmentVideo(e) },
-                        onToggleSelection: { toggleAssessmentDaySelection(day) }
+                        onToggleSelection: { toggleAssessmentDaySelection(day) },
+                        isDeleting: deletingDays.contains(day)
                     )
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        if !isComparing {
+                            Button(role: .destructive) {
+                                groupPendingDelete = AssessmentGroupDelete(day: day, events: events)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -152,6 +178,54 @@ struct TimelinePage: View {
             Button("Cancel", role: .cancel) { eventPendingDelete = nil }
         } message: { event in
             Text("This permanently deletes this \(event.type.displayName.lowercased()). This can't be undone.")
+        }
+        .alert(
+            "Delete assessment?",
+            isPresented: Binding(
+                get: { groupPendingDelete != nil },
+                set: { if !$0 { groupPendingDelete = nil } }
+            ),
+            presenting: groupPendingDelete
+        ) { pending in
+            Button("Delete", role: .destructive) {
+                let day = pending.day
+                let events = pending.events
+                deletingDays.insert(day)
+                Task {
+                    let ok = await timelineService.deleteAssessmentGroup(events)
+                    deletingDays.remove(day)
+                    // Show our own toast for this action; suppress the generic
+                    // error alert so feedback isn't doubled.
+                    timelineService.errorMessage = nil
+                    withAnimation {
+                        deleteToast = ok
+                            ? DeleteToast(text: "Assessment deleted", isError: false)
+                            : DeleteToast(text: "Couldn't delete assessment", isError: true)
+                    }
+                }
+                groupPendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { groupPendingDelete = nil }
+        } message: { pending in
+            Text("This permanently deletes this assessment and its \(pending.events.count) \(pending.events.count == 1 ? "recording" : "recordings"), including the processed video and analysis. This can't be undone.")
+        }
+        .overlay(alignment: .bottom) {
+            if let toast = deleteToast {
+                HStack(spacing: 8) {
+                    Image(systemName: toast.isError ? "xmark.circle.fill" : "checkmark.circle.fill")
+                        .foregroundColor(toast.isError ? .red : Color(red: 0.18, green: 0.59, blue: 0.31))
+                    Text(toast.text).font(.subheadline).fontWeight(.medium)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 12)
+                .background(.regularMaterial, in: Capsule())
+                .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
+                .padding(.bottom, 24)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .task(id: toast.id) {
+                    try? await Task.sleep(nanoseconds: 2_500_000_000)
+                    withAnimation { deleteToast = nil }
+                }
+            }
         }
     }
 
@@ -442,6 +516,25 @@ struct TimelinePage: View {
     }
 }
 
+// MARK: - AssessmentGroupDelete
+//
+// The day-group of assessment events awaiting delete confirmation. Carries
+// the events so the confirm action can cascade-delete each one's job too.
+private struct AssessmentGroupDelete: Identifiable {
+    let id = UUID()
+    let day: Date
+    let events: [TimelineEvent]
+}
+
+// MARK: - DeleteToast
+//
+// Transient success/failure banner shown after a delete completes.
+private struct DeleteToast: Identifiable {
+    let id = UUID()
+    let text: String
+    let isError: Bool
+}
+
 // MARK: - CompareSelection
 //
 // Snapshot of the two day-groups handed to the setup sheet. Created on
@@ -608,6 +701,8 @@ private struct TimelineAssessmentGroupRow: View {
     let statusByJobId: [UUID: String]
     let onPlay: (TimelineEvent) -> Void
     let onToggleSelection: () -> Void
+    /// True while this group's cascade delete is in flight (shows a spinner).
+    let isDeleting: Bool
 
     @State private var expanded = false
     private let accent = Color(red: 0.12, green: 0.29, blue: 0.64)
@@ -632,7 +727,7 @@ private struct TimelineAssessmentGroupRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: 8) {
             if isCompareMode {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
@@ -644,14 +739,16 @@ private struct TimelineAssessmentGroupRow: View {
                 Text(timelineDateFormatter.string(from: day))
                     .font(.caption).fontWeight(.medium)
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
-            .frame(width: 90, alignment: .trailing)
+            .frame(width: 64, alignment: .trailing)
 
             ZStack(alignment: .top) {
                 Rectangle().fill(Color.gray.opacity(0.25)).frame(width: 2)
                 Circle().fill(accent).frame(width: 10, height: 10).offset(y: 6)
             }
-            .frame(width: 12)
+            .frame(width: 10)
 
             VStack(alignment: .leading, spacing: 8) {
                 Button {
@@ -665,11 +762,14 @@ private struct TimelineAssessmentGroupRow: View {
                         Image(systemName: "video.fill")
                             .font(.caption).foregroundColor(accent)
                         Text(title)
-                            .font(.subheadline).fontWeight(.semibold)
+                            .font(.footnote).fontWeight(.semibold)
                             .foregroundColor(.primary)
-                        Spacer()
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
                         Text("\(events.count) \(events.count == 1 ? "movement" : "movements")")
                             .font(.caption).foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .layoutPriority(1)
                         if !isCompareMode {
                             Image(systemName: expanded ? "chevron.down" : "chevron.right")
                                 .font(.caption2).foregroundColor(.secondary)
@@ -718,6 +818,19 @@ private struct TimelineAssessmentGroupRow: View {
             // same path so VoiceOver hit-targets stay intact.
             if isCompareMode { onToggleSelection() }
         }
+        .opacity(isDeleting ? 0.5 : 1)
+        .allowsHitTesting(!isDeleting)
+        .overlay {
+            if isDeleting {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Deleting…").font(.subheadline).foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: isDeleting)
     }
 }
 
@@ -734,14 +847,16 @@ private struct TimelineEventRow: View {
     }()
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: 8) {
             // Date column on the left so eyes can scan vertically by date.
             VStack(alignment: .trailing, spacing: 2) {
                 Text(timelineDateFormatter.string(from: event.occurredAt))
                     .font(.caption).fontWeight(.medium)
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
-            .frame(width: 90, alignment: .trailing)
+            .frame(width: 64, alignment: .trailing)
 
             // Vertical guideline + dot, the timeline rail.
             ZStack(alignment: .top) {
@@ -753,7 +868,7 @@ private struct TimelineEventRow: View {
                     .frame(width: 10, height: 10)
                     .offset(y: 6)
             }
-            .frame(width: 12)
+            .frame(width: 10)
 
             // Event card.
             VStack(alignment: .leading, spacing: 4) {
@@ -762,7 +877,7 @@ private struct TimelineEventRow: View {
                         .font(.caption)
                         .foregroundColor(Color(red: 0.12, green: 0.29, blue: 0.64))
                     Text(event.type.displayName)
-                        .font(.subheadline).fontWeight(.semibold)
+                        .font(.footnote).fontWeight(.semibold)
                         .foregroundColor(.primary)
                 }
                 if !event.notes.isEmpty {

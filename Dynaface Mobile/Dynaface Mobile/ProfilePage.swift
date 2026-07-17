@@ -7,10 +7,10 @@ struct ProfilePage: View {
     let baseHeight: CGFloat = 844
 
     @EnvironmentObject var authService: AuthenticationService
-    @AppStorage("videoUploadsEnabled") private var videoUploadsEnabled = true
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var profileImage: UIImage?
     @State private var showingEditProfile = false
+    @State private var showingGuide = false
 
     // MARK: - Menu data model
     //
@@ -27,14 +27,14 @@ struct ProfilePage: View {
     /// separately (red styling) below this list, not as a row here.
     private func menuItems(for accountType: AccountType) -> [MenuRow] {
         let edit     = MenuRow(text: "Edit profile") { showingEditProfile = true }
-        let faq      = MenuRow(text: "FAQ") { /* TODO: FAQ */ }
+        let guide    = MenuRow(text: "Guide") { showingGuide = true }
         let upcoming = MenuRow(text: "Upcoming appointments") { /* stub — button only */ }
 
         switch accountType {
         case .patient:
             return [
                 edit,
-                faq,
+                guide,
             ]
         case .clinician:
             return [
@@ -46,9 +46,18 @@ struct ProfilePage: View {
                     NotificationCenter.default.post(name: .navigateToPatientsTab, object: nil)
                 },
                 upcoming,
-                faq,
+                guide,
             ]
         }
+    }
+
+    /// Steps for the replayable "How it works" guide, chosen by role.
+    private var guideSteps: [OnboardingStep] {
+        if case .signedIn(let profile) = authService.authState,
+           profile.accountType == .clinician {
+            return clinicianOnboardingSteps
+        }
+        return patientOnboardingSteps
     }
 
     var body: some View {
@@ -113,24 +122,6 @@ struct ProfilePage: View {
 
                 // Menu items — rendered by role; Sign out is a separate sibling below.
                 VStack(spacing: 20 * heightScale) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Cloud video upload")
-                                .font(.system(size: 18 * widthScale))
-                                .foregroundColor(.black)
-                            Text(videoUploadsEnabled ? "Processed videos will be uploaded to the cloud." : "Uploads are disabled. Videos stay local only.")
-                                .font(.system(size: 12 * widthScale))
-                                .foregroundColor(.gray)
-                        }
-                        Spacer()
-                        Toggle("", isOn: $videoUploadsEnabled)
-                            .labelsHidden()
-                    }
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color.gray.opacity(0.2))
-                    .cornerRadius(10 * widthScale)
-
                     if case .signedIn(let profile) = authService.authState {
                         ForEach(menuItems(for: profile.accountType)) { item in
                             ProfileMenuItem(
@@ -172,6 +163,10 @@ struct ProfilePage: View {
             .frame(width: geometry.size.width, height: geometry.size.height)
             .sheet(isPresented: $showingEditProfile) {
                 EditProfilePage()
+                    .environmentObject(authService)
+            }
+            .sheet(isPresented: $showingGuide) {
+                OnboardingFlow(steps: guideSteps, onDismiss: { showingGuide = false })
                     .environmentObject(authService)
             }
         }

@@ -1,2 +1,9 @@
 .claude/
 .DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Google
+Dynaface Mobile/Dynaface Mobile/GoogleService-Info.plst

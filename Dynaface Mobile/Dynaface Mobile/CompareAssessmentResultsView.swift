@@ -13,8 +13,8 @@ import FirebaseFirestore
 // uses for single-exercise playback (`signedRawVideoURL` /
 // `signedProcessedVideoURL`), so playback behavior stays identical.
 //
-// `keyImageOnly` is plumbed through but unused in V1 — reserved for the
-// follow-up that swaps the player for a single key-frame image.
+// When `keyImageOnly` is on, each cell shows the job's peak-frame still image
+// (results/{uid}/{jobId}/peak_frame.png) instead of a video player.
 
 struct CompareAssessmentResultsView: View {
     let patientName: String
@@ -74,23 +74,28 @@ struct CompareAssessmentResultsView: View {
         ZStack(alignment: .topLeading) {
             Color.black
             if let url {
-                // `.id(url)` forces a fresh AVPlayerViewController instance
-                // when the URL changes (e.g. if state ever reloads), matching
-                // AssessmentVideoDetailView's behavior on segment swap.
-                PlainAVPlayerControllerView(url: url).id(url)
+                if keyImageOnly {
+                    // Show the peak-frame still image instead of a player.
+                    AsyncImage(url: url) { phase in
+                        if let image = phase.image {
+                            image.resizable().scaledToFit()
+                        } else if phase.error != nil {
+                            unavailable("Key image unavailable.")
+                        } else {
+                            ProgressView().tint(.white)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    // `.id(url)` forces a fresh AVPlayerViewController instance
+                    // when the URL changes (e.g. if state ever reloads), matching
+                    // AssessmentVideoDetailView's behavior on segment swap.
+                    PlainAVPlayerControllerView(url: url).id(url)
+                }
             } else if isLoading {
                 ProgressView().tint(.white)
             } else {
-                VStack(spacing: 8) {
-                    Image(systemName: "video.slash")
-                        .font(.system(size: 32))
-                        .foregroundColor(.gray.opacity(0.7))
-                    Text(error ?? "Video unavailable.")
-                        .font(.subheadline)
-                        .foregroundColor(.gray.opacity(0.85))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
-                }
+                unavailable(error ?? (keyImageOnly ? "Key image unavailable." : "Video unavailable."))
             }
             Text(Self.dateLabelFormatter.string(from: day))
                 .font(.caption).fontWeight(.medium)
@@ -101,6 +106,20 @@ struct CompareAssessmentResultsView: View {
                 .padding(10)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func unavailable(_ message: String) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: keyImageOnly ? "photo" : "video.slash")
+                .font(.system(size: 32))
+                .foregroundColor(.gray.opacity(0.7))
+            Text(message)
+                .font(.subheadline)
+                .foregroundColor(.gray.opacity(0.85))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+        }
     }
 
     // MARK: - Loading
@@ -151,19 +170,24 @@ struct CompareAssessmentResultsView: View {
                 .getDocument()
             guard let data = snapshot.data(),
                   let job = decodeJobRow(id: jobId.uuidString, data: data) else {
-                commit(nil, showAnnotations
-                    ? "Processed video isn't ready yet."
-                    : "Original video unavailable.")
+                commit(nil, keyImageOnly
+                    ? "Key image unavailable for this assessment."
+                    : (showAnnotations ? "Processed video isn't ready yet." : "Original video unavailable."))
                 return
             }
-            let url: URL = try await (showAnnotations
-                ? signedProcessedVideoURL(for: job)
-                : signedRawVideoURL(for: job))
+            let url: URL
+            if keyImageOnly {
+                url = try await signedPeakFrameURL(for: job)
+            } else if showAnnotations {
+                url = try await signedProcessedVideoURL(for: job)
+            } else {
+                url = try await signedRawVideoURL(for: job)
+            }
             commit(url, nil)
         } catch {
-            commit(nil, showAnnotations
-                ? "Processed video isn't ready yet."
-                : "Original video unavailable.")
+            commit(nil, keyImageOnly
+                ? "Key image unavailable for this assessment."
+                : (showAnnotations ? "Processed video isn't ready yet." : "Original video unavailable."))
         }
     }
 }

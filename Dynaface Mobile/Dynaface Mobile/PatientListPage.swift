@@ -216,3 +216,4 @@ private struct PatientRow: View {
         .padding(.vertical, 4)
     }
 }
+
