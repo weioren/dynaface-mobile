@@ -8,6 +8,7 @@ struct SignIn: View {
     @State private var showingAlert = false
     @State private var alertMessage = ""
     @State private var showingSignUp = false
+    @State private var showingResetSent = false
 
     let baseWidth: CGFloat = 390
     let baseHeight: CGFloat = 844
@@ -67,7 +68,7 @@ struct SignIn: View {
 
                         // Forgot Password
                         Button("Forgot Password?") {
-                            Task { await authService.resetPassword(email: authViewModel.email) }
+                            Task { await sendPasswordReset() }
                         }
                         .font(.system(size: 14 * widthScale))
                         .foregroundColor(Color(red: 0.12, green: 0.29, blue: 0.64))
@@ -114,6 +115,11 @@ struct SignIn: View {
             }
         }
         .alert("Error", isPresented: $showingAlert) { Button("OK") { authService.authError = nil } } message: { Text(alertMessage) }
+        .alert("Check your email", isPresented: $showingResetSent) {
+            Button("OK") {}
+        } message: {
+            Text("If an account exists for \(authViewModel.email), a password reset link has been sent. Check your inbox and spam.")
+        }
         .onReceive(authService.$authError) { error in
             if let error {
                 alertMessage = error
@@ -142,6 +148,21 @@ struct SignIn: View {
     private func signIn() {
         Task {
             await authService.signIn(email: authViewModel.email, password: authViewModel.password)
+        }
+    }
+
+    /// Sends the reset link for whatever is in the Email field. Guards an empty
+    /// or malformed address up front so Firebase isn't called with junk, then
+    /// confirms on success (failures surface through the shared error alert).
+    private func sendPasswordReset() async {
+        hideKeyboard()
+        guard authViewModel.isEmailValid else {
+            alertMessage = "Enter your email address above, then tap Forgot Password."
+            showingAlert = true
+            return
+        }
+        if await authService.resetPassword(email: authViewModel.email) {
+            showingResetSent = true
         }
     }
 

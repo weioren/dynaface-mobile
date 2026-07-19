@@ -527,14 +527,23 @@ final class AuthenticationService: ObservableObject {
     // Firebase sends its own templated reset email; the continuation/action
     // URL is configured in the Firebase console (Auth > Templates) rather
     // than passed per-call like Supabase's `redirectTo`.
-    func resetPassword(email: String) async {
+    /// Returns true when the reset email was accepted, so the caller can show a
+    /// confirmation. A missing account is reported as success on purpose: the
+    /// screen must not double as a probe for which emails are registered.
+    @discardableResult
+    func resetPassword(email: String) async -> Bool {
         isLoading = true
         authError = nil
         defer { isLoading = false }
         do {
             try await Auth.auth().sendPasswordReset(withEmail: email)
+            return true
         } catch {
+            // 17011 = ERROR_USER_NOT_FOUND. Matched by code, like the signup
+            // error mapping, rather than by localized message text.
+            if (error as NSError).code == 17011 { return true }
             authError = error.localizedDescription
+            return false
         }
     }
 }
