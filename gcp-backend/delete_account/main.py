@@ -2,8 +2,18 @@
 delete_account Cloud Function.
 
 Called by the iOS app when a signed-in user (patient OR clinician) deletes their
-own account from Profile. It erases everything that belongs to them and then the
-Firebase Auth user itself.
+own account from Profile.
+
+How far the cascade reaches depends on the role, because "their data" differs:
+  - A PATIENT erases their whole record: profile, assessments (including ones a
+    clinician recorded FOR them, which are owned by the clinician's user_id and so
+    are reached through the attributions), timeline, attributions, the roster rows
+    pointing at them, and their Storage blobs.
+  - A CLINICIAN loses only their login and their roster. The assessments,
+    attributions, and timeline notes they authored are part of their PATIENTS'
+    records and stay behind. Deleting them would gut patient history and leave
+    timeline entries pointing at missing jobs.
+The Firebase Auth user is removed in both cases.
 
 Why this must run server-side (Admin SDK, bypasses firestore.rules /
 storage.rules):
@@ -118,6 +128,36 @@ def _delete_matching(db, collection: str, field: str, values: list[str]) -> int:
     return deleted
 
 
+def _attributed_job_ids(db, values: list[str]) -> list[str]:
+    """Job ids attributed to this patient. The attribution doc id IS the job id,
+    which is how we reach assessments a clinician recorded for them (those jobs
+    carry the clinician's user_id, not the patient's)."""
+    try:
+        docs = db.collection("job_patient_attributions").where("patient_id", "in", values).stream()
+        return [doc.id for doc in docs]
+    except Exception as exc:  # noqa: BLE001
+        print(f"⚠️ Attribution lookup failed: {exc}")
+        return []
+
+
+def _delete_docs_by_id(db, collection: str, doc_ids: list[str]) -> int:
+    """Batched delete of specific document ids. Best-effort, like _delete_matching."""
+    deleted = 0
+    for start in range(0, len(doc_ids), _BATCH_SIZE):
+        chunk = doc_ids[start:start + _BATCH_SIZE]
+        batch = db.batch()
+        for doc_id in chunk:
+            batch.delete(db.collection(collection).document(doc_id))
+        try:
+            batch.commit()
+            deleted += len(chunk)
+        except Exception as exc:  # noqa: BLE001
+            print(f"⚠️ Batch delete by id on {collection} failed: {exc}")
+    if deleted:
+        print(f"🧹 {collection}: deleted {deleted} doc(s) by id")
+    return deleted
+
+
 def _delete_prefix(bucket_name: str | None, prefix: str) -> int:
     """Best-effort delete of every blob under `prefix` (same shape as
     cleanup_job_storage._delete_prefix). Never raises."""
@@ -163,29 +203,43 @@ def delete_account(request: Request):
     ids = list({app_uid.lower(), app_uid.upper()})
 
     db = firestore.client()
-    print(f"🗑️ Deleting account app_uid={app_uid} auth_uid={firebase_uid}")
 
-    # 1. Firestore. processing_jobs first: each delete fires cleanup_job_storage,
+    # Read the role before the profile goes; it decides the cascade's reach.
+    profile_ref = db.collection("profiles").document(app_uid)
+    profile_snap = profile_ref.get()
+    account_type = (profile_snap.to_dict() or {}).get("account_type") if profile_snap.exists else None
+    is_clinician = account_type == "clinician"
+
+    print(f"🗑️ Deleting account app_uid={app_uid} auth_uid={firebase_uid} role={account_type}")
+
+    # 1. Firestore. Deleting a processing_jobs doc also fires cleanup_job_storage,
     #    which removes that job's results/ + uploads/ blobs.
-    _delete_matching(db, "processing_jobs", "user_id", ids)
-    _delete_matching(db, "timeline_events", "patient_id", ids)
-    _delete_matching(db, "timeline_events", "created_by", ids)
-    _delete_matching(db, "job_patient_attributions", "patient_id", ids)
-    _delete_matching(db, "job_patient_attributions", "attributed_by", ids)
-    _delete_matching(db, "patients", "clinician_id", ids)
-    _delete_matching(db, "patients", "claimed_user_id", ids)
+    if is_clinician:
+        # Only their own organisational data. Their assessments, attributions and
+        # timeline notes stay with the patients they belong to.
+        _delete_matching(db, "patients", "clinician_id", ids)
+    else:
+        # Assessments recorded FOR this patient carry the clinician's user_id, so
+        # collect them via the attributions BEFORE those attributions are deleted.
+        _delete_docs_by_id(db, "processing_jobs", _attributed_job_ids(db, ids))
+        _delete_matching(db, "processing_jobs", "user_id", ids)
+        _delete_matching(db, "timeline_events", "patient_id", ids)
+        _delete_matching(db, "job_patient_attributions", "patient_id", ids)
+        _delete_matching(db, "patients", "claimed_user_id", ids)
 
     try:
-        db.collection("profiles").document(app_uid).delete()
+        profile_ref.delete()
         print(f"🧹 profiles/{app_uid} deleted")
     except Exception as exc:  # noqa: BLE001
         print(f"⚠️ Failed to delete profiles/{app_uid}: {exc}")
 
-    # 2. Storage sweep for anything the per-job trigger missed (orphans, or jobs
-    #    whose doc was already gone).
-    for uid in ids:
-        _delete_prefix(RESULTS_BUCKET, f"results/{uid}/")
-        _delete_prefix(RAW_BUCKET, f"uploads/{uid}/")
+    # 2. Storage sweep, patients only: a clinician's blobs back the assessments we
+    #    just kept. Per-job blobs are already handled by the delete trigger; this
+    #    catches orphans under the user's own prefix.
+    if not is_clinician:
+        for uid in ids:
+            _delete_prefix(RESULTS_BUCKET, f"results/{uid}/")
+            _delete_prefix(RAW_BUCKET, f"uploads/{uid}/")
 
     # 3. Auth user last.
     try:
