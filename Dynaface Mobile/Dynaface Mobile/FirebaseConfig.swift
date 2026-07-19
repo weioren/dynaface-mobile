@@ -27,4 +27,10 @@ struct FirebaseConfig {
     /// right after Auth.auth().createUser(), to mint the app-side profile
     /// UUID and set the `app_uid` custom claim.
     static let createProfileFunctionURL = "https://us-east4-dynaface-mobile-496023.cloudfunctions.net/create_profile"
+
+    /// HTTPS URL of the `delete_account` Cloud Function (see
+    /// dynaface-mobile/gcp-backend/delete_account/main.py). Called from Profile
+    /// after the user re-authenticates; erases all of their Firestore documents
+    /// and Storage blobs, then the Firebase Auth user itself.
+    static let deleteAccountFunctionURL = "https://us-east4-dynaface-mobile-496023.cloudfunctions.net/delete_account"
 }

@@ -10,6 +10,7 @@ struct ProfilePage: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var profileImage: UIImage?
     @State private var showingEditProfile = false
+    @State private var showingDeleteAccount = false
     @State private var showingGuide = false
 
     // MARK: - Menu data model
@@ -152,6 +153,23 @@ struct ProfilePage: View {
                         .background(Color.gray.opacity(0.2))
                         .cornerRadius(10 * widthScale)
                     }
+
+                    // Delete account — permanent, so it sits below Sign out and
+                    // opens a sheet that requires typing DELETE and the password.
+                    Button(action: { showingDeleteAccount = true }) {
+                        HStack {
+                            Text("Delete account")
+                                .font(.system(size: 18 * widthScale))
+                                .foregroundColor(.red)
+                            Spacer()
+                            Image(systemName: "trash")
+                                .foregroundColor(.red)
+                        }
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.red.opacity(0.10))
+                        .cornerRadius(10 * widthScale)
+                    }
                 }
 
             }
@@ -163,6 +181,10 @@ struct ProfilePage: View {
             .frame(width: geometry.size.width, height: geometry.size.height)
             .sheet(isPresented: $showingEditProfile) {
                 EditProfilePage()
+                    .environmentObject(authService)
+            }
+            .sheet(isPresented: $showingDeleteAccount) {
+                DeleteAccountSheet()
                     .environmentObject(authService)
             }
             .sheet(isPresented: $showingGuide) {
@@ -375,6 +397,109 @@ struct FormField: View {
                 .disabled(isDisabled)
                 .foregroundColor(isDisabled ? .gray : .black)
         }
+    }
+}
+
+// MARK: - DeleteAccountSheet
+//
+// Permanent account deletion. Two-factor by design: the user types DELETE to
+// confirm intent, then enters their password, which `AuthenticationService
+// .deleteAccount` uses to re-authenticate. The `delete_account` Cloud Function
+// separately requires a verified email, then erases every Firestore document
+// and Storage blob for the account before removing the Auth user.
+//
+// On success the service signs out, so RootContainer swaps to the login screen
+// and this sheet goes away with the rest of the signed-in UI.
+struct DeleteAccountSheet: View {
+    @EnvironmentObject var authService: AuthenticationService
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var confirmation = ""
+    @State private var password = ""
+
+    private let requiredPhrase = "DELETE"
+
+    private var canDelete: Bool {
+        confirmation.trimmingCharacters(in: .whitespaces).uppercased() == requiredPhrase
+            && !password.isEmpty
+            && !authService.isLoading
+    }
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Label("This cannot be undone", systemImage: "exclamationmark.triangle.fill")
+                        .font(.headline)
+                        .foregroundColor(.red)
+
+                    Text("Deleting your account permanently removes your profile, every assessment you recorded, and all of their videos, analyses, and results. You cannot recover them.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Type DELETE to confirm")
+                            .font(.footnote).foregroundColor(.secondary)
+                        TextField("DELETE", text: $confirmation)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .cornerRadius(10)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Confirm your password")
+                            .font(.footnote).foregroundColor(.secondary)
+                        SecureField("Password", text: $password)
+                            .textContentType(.password)
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .cornerRadius(10)
+                    }
+
+                    if let error = authService.authError {
+                        Text(error).font(.footnote).foregroundColor(.red)
+                    }
+
+                    Button {
+                        Task { await deleteAccount() }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if authService.isLoading { ProgressView().tint(.white) }
+                            Text("Delete my account")
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(canDelete ? Color.red : Color.gray)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                    }
+                    .disabled(!canDelete)
+
+                    Spacer(minLength: 0)
+                }
+                .padding()
+            }
+            .navigationTitle("Delete account")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        authService.authError = nil
+                        dismiss()
+                    }
+                    .disabled(authService.isLoading)
+                }
+            }
+        }
+    }
+
+    private func deleteAccount() async {
+        // On success the service signs out and the whole signed-in tree is
+        // replaced, so there is nothing to dismiss here.
+        _ = await authService.deleteAccount(password: password)
     }
 }
 

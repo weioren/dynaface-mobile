@@ -546,4 +546,78 @@ final class AuthenticationService: ObservableObject {
             return false
         }
     }
+
+    // MARK: - Delete Account
+    //
+    // Two-factor: the user re-enters their password (Firebase reauthenticate,
+    // which also refreshes the recent-login window) and `delete_account`
+    // independently requires a verified email. The Admin SDK does the cascade
+    // delete of every Firestore doc + Storage blob and finally the Auth user —
+    // the client can't, because rules deny those deletes outright.
+    /// Returns true once the account is gone and the session is signed out.
+    func deleteAccount(password: String) async -> Bool {
+        guard !isLoading else { return false }
+        isLoading = true
+        authError = nil
+        defer { isLoading = false }
+
+        guard let user = Auth.auth().currentUser, let email = user.email else {
+            authError = "You need to be signed in."
+            return false
+        }
+
+        do {
+            // Factor 1 — prove possession of the password.
+            let credential = EmailAuthProvider.credential(withEmail: email, password: password)
+            try await user.reauthenticate(with: credential)
+
+            // Fresh token so the backend sees an up-to-date email_verified claim.
+            let idToken = try await user.getIDToken(forcingRefresh: true)
+            try await callDeleteAccount(idToken: idToken)
+
+            await signOut()
+            return true
+        } catch {
+            authError = deleteAccountErrorMessage(for: error)
+            return false
+        }
+    }
+
+    private func callDeleteAccount(idToken: String) async throws {
+        guard let url = URL(string: FirebaseConfig.deleteAccountFunctionURL) else {
+            throw NSError(domain: "delete_account", code: -1,
+                          userInfo: [NSLocalizedDescriptionKey: "Couldn't reach the server."])
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [String: Any]())
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            let message = (json?["error"] as? String) ?? "Failed to delete the account."
+            throw NSError(domain: "delete_account",
+                          code: (response as? HTTPURLResponse)?.statusCode ?? -1,
+                          userInfo: [NSLocalizedDescriptionKey: message])
+        }
+    }
+
+    /// The server's own message passes through; Firebase reauth failures are
+    /// mapped by error code (same approach as the signup errors).
+    private func deleteAccountErrorMessage(for error: Error) -> String {
+        let nsError = error as NSError
+        if nsError.domain == "delete_account" { return nsError.localizedDescription }
+        if nsError.domain == NSURLErrorDomain {
+            return "No internet connection. Check your network and try again."
+        }
+        switch nsError.code {
+        case 17004, 17009: return "That password is incorrect."   // INVALID_CREDENTIAL / WRONG_PASSWORD
+        case 17011:        return "This account no longer exists."
+        case 17014:        return "Please sign out, sign in again, and retry."
+        default:           return "Couldn't delete the account: \(nsError.localizedDescription)"
+        }
+    }
 }
