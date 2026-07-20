@@ -275,3 +275,78 @@ final class PatientService: ObservableObject {
     }
 }
 
+// MARK: - ClinicianDirectoryEntry
+//
+// One clinician as shown on the patient's "Who can see me" list. `id` is the
+// clinician's app_uid, i.e. their `profiles` document id (lowercase).
+struct ClinicianDirectoryEntry: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let email: String
+}
+
+// MARK: - VisibilityService
+//
+// Patient-side control over which clinicians can see them. Visibility is
+// OPT-OUT: every clinician can see a patient by default (unchanged behavior),
+// and the patient switches individual clinicians OFF. Switching off writes
+// `patient_blocks/{patientAppUid}__{clinicianAppUid}`, which firestore.rules
+// checks before letting a clinician read that patient's jobs, timeline, or
+// attributions. Removing the doc restores access.
+//
+// Static funcs (no ObservableObject) because the patient side is not inside the
+// clinician's PatientService environment; views own their own loading state.
+enum VisibilityService {
+
+    private static var db: Firestore { Firestore.firestore() }
+
+    /// Ids are lowercased so the doc id matches what the rules build from
+    /// `callerAppUid()` and the patient id stored on each document.
+    private static func blockId(patient: String, clinician: String) -> String {
+        "\(patient.lowercased())__\(clinician.lowercased())"
+    }
+
+    /// Every clinician-role profile, for the patient to choose from.
+    static func clinicians() async throws -> [ClinicianDirectoryEntry] {
+        let snapshot = try await db.collection("profiles")
+            .whereField("account_type", isEqualTo: "clinician")
+            .getDocuments()
+        return snapshot.documents
+            .compactMap { doc -> ClinicianDirectoryEntry? in
+                let data = doc.data()
+                guard let name = data["username"] as? String else { return nil }
+                return ClinicianDirectoryEntry(
+                    id: doc.documentID,
+                    name: name,
+                    email: (data["email"] as? String) ?? ""
+                )
+            }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    /// The clinician app_uids this patient has switched OFF (lowercased).
+    static func blockedClinicianIds(patientAppUid: String) async throws -> Set<String> {
+        let snapshot = try await db.collection("patient_blocks")
+            .whereField("patient_id", isEqualTo: patientAppUid.lowercased())
+            .getDocuments()
+        return Set(
+            snapshot.documents.compactMap { ($0.data()["clinician_id"] as? String)?.lowercased() }
+        )
+    }
+
+    /// Turns one clinician off (writes a block) or back on (removes it).
+    static func setBlocked(_ blocked: Bool, patientAppUid: String, clinicianAppUid: String) async throws {
+        let ref = db.collection("patient_blocks")
+            .document(blockId(patient: patientAppUid, clinician: clinicianAppUid))
+        if blocked {
+            try await ref.setData([
+                "patient_id": patientAppUid.lowercased(),
+                "clinician_id": clinicianAppUid.lowercased(),
+                "blocked_at": FieldValue.serverTimestamp(),
+            ])
+        } else {
+            try await ref.delete()
+        }
+    }
+}
+

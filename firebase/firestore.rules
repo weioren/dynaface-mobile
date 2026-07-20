@@ -50,16 +50,44 @@ service cloud.firestore {
         && isCaller(get(/databases/$(database)/documents/job_patient_attributions/$(jobId)).data.patient_id);
     }
 
+    // A patient can switch a specific clinician OFF. The block doc id is
+    // {patientAppUid}__{clinicianAppUid}, both lowercased, so the check is one
+    // exists() built from the caller plus the patient id already on the document
+    // being read. With no block docs every clause below is true, i.e. behavior is
+    // exactly what it was before this collection existed.
+    function blockedByPatient(pid) {
+      return exists(/databases/$(database)/documents/patient_blocks/$(pid.lower() + '__' + callerAppUid().lower()));
+    }
+
     // profiles/{app_uid}
     // Created exclusively by the create_profile Cloud Function (Admin
     // SDK, bypasses these rules) so app_uid minting can't be spoofed by
     // a client — `allow create: if false` is intentional.
     match /profiles/{profileId} {
+      // Clinician-role profiles are readable by any signed-in user: that is the
+      // directory a patient picks from when choosing who to switch off. Names
+      // and emails of providers only; patient profiles stay clinician-only.
       allow read: if hasAppUid()
-        && (isCaller(profileId) || (isClinician() && resource.data.account_type == "patient"));
+        && (isCaller(profileId)
+            || resource.data.account_type == "clinician"
+            || (isClinician() && resource.data.account_type == "patient"));
       allow create: if false;
       allow update: if hasAppUid() && isCaller(profileId);
       allow delete: if false;
+    }
+
+    // patient_blocks/{patientAppUid}__{clinicianAppUid} — the patient's own
+    // visibility switch, one doc per clinician they turned OFF. Only the patient
+    // creates or removes one; the targeted clinician may read it so a client can
+    // filter if we ever hide blocked patients from the roster.
+    match /patient_blocks/{blockId} {
+      allow read: if hasAppUid()
+        && (isCaller(resource.data.patient_id) || isCaller(resource.data.clinician_id));
+      allow create: if hasAppUid()
+        && isCaller(request.resource.data.patient_id)
+        && request.resource.data.clinician_id is string;
+      allow update: if false;
+      allow delete: if hasAppUid() && isCaller(resource.data.patient_id);
     }
 
     // patients/{patientId} — clinician-owned roster rows. Patients never
@@ -77,7 +105,9 @@ service cloud.firestore {
     // the worker (Admin SDK) advances it from there.
     match /processing_jobs/{jobId} {
       allow read: if hasAppUid()
-        && (isCaller(resource.data.user_id) || isClinician() || isAttributedToCaller(jobId));
+        && (isCaller(resource.data.user_id)
+            || isAttributedToCaller(jobId)
+            || (isClinician() && !blockedByPatient(resource.data.user_id)));
       allow create: if hasAppUid()
         && isCaller(request.resource.data.user_id)
         && request.resource.data.status == "queued";
@@ -90,7 +120,9 @@ service cloud.firestore {
     // job_patient_attributions/{jobId} — doc id == processing_jobs id, so
     // `set()` is naturally an upsert.
     match /job_patient_attributions/{jobId} {
-      allow read: if hasAppUid() && (isClinician() || isCaller(resource.data.patient_id));
+      allow read: if hasAppUid()
+        && (isCaller(resource.data.patient_id)
+            || (isClinician() && !blockedByPatient(resource.data.patient_id)));
       allow create, update: if hasAppUid()
         && isCaller(request.resource.data.attributed_by)
         && (isClinician() || isCaller(request.resource.data.patient_id));
@@ -99,7 +131,9 @@ service cloud.firestore {
 
     // timeline_events/{eventId}
     match /timeline_events/{eventId} {
-      allow read: if hasAppUid() && (isClinician() || isCaller(resource.data.patient_id));
+      allow read: if hasAppUid()
+        && (isCaller(resource.data.patient_id)
+            || (isClinician() && !blockedByPatient(resource.data.patient_id)));
       allow create: if hasAppUid()
         && isCaller(request.resource.data.created_by)
         && (isClinician() || isCaller(request.resource.data.patient_id));
