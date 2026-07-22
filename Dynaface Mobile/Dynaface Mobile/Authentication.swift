@@ -386,6 +386,27 @@ final class AuthenticationService: ObservableObject {
         }
     }
 
+    /// Sign-in failures. Firebase's Email Enumeration Protection reports a wrong
+    /// password, an unknown email, and a malformed credential all as
+    /// INVALID_CREDENTIAL ("The supplied auth credential is malformed or has
+    /// expired"), which is unreadable. Collapse those three into one sentence:
+    /// it stays accurate and keeps the form from revealing which emails exist.
+    private func signInErrorMessage(for error: Error) -> String {
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            return "No connection. Check your network and try again."
+        }
+        switch nsError.code {
+        case 17004, 17009, 17011:                                  // invalidCredential / wrongPassword / userNotFound
+            return "Incorrect email or password."
+        case 17008: return "That email address looks invalid"      // invalidEmail
+        case 17005: return "This account has been disabled."       // userDisabled
+        case 17010: return "Too many attempts. Try again in a few minutes."  // tooManyRequests
+        case 17020: return "No connection. Check your network and try again."  // networkError
+        default:    return error.localizedDescription
+        }
+    }
+
     private func completeProfileErrorMessage(for error: Error) -> String {
         let nsError = error as NSError
         if nsError.domain == NSURLErrorDomain || nsError.code == 17020 {  // network
@@ -500,7 +521,7 @@ final class AuthenticationService: ObservableObject {
             }
             try await loadProfile(for: appUid)
         } catch {
-            authError = error.localizedDescription
+            authError = signInErrorMessage(for: error)
         }
     }
 
