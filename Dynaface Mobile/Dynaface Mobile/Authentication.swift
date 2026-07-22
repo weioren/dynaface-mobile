@@ -422,6 +422,10 @@ final class AuthenticationService: ObservableObject {
             if detail.contains("username") {
                 return "Username has been registered"
             }
+            // 409 when a leftover profile already claims this address.
+            if detail.contains("email has been registered") {
+                return "That email is already in use. Please contact support."
+            }
             return "Couldn't finish setup: \(nsError.localizedDescription)"
         }
         return "Couldn't finish setup. Please try again or contact support."
