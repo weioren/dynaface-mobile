@@ -46,7 +46,7 @@ final class JobAttributionService: ObservableObject {
         } catch is CancellationError {
             return []
         } catch {
-            errorMessage = "Couldn't load attributions: \(error.localizedDescription)"
+            errorMessage = loadErrorMessage(error, subject: "attributions")
             return []
         }
     }

@@ -1,6 +1,26 @@
 import Foundation
 import FirebaseFirestore
 
+// MARK: - Load error wording
+//
+// Firestore reports a denied read as "Missing or insufficient permissions",
+// which reads like a crash or an outage. When a patient has switched a clinician
+// off (see patient_blocks) that denial is the expected outcome and there is
+// nothing to retry, so name the cause instead of leaking the raw text.
+// Covers both layers, since a block is enforced in firestore.rules AND
+// storage.rules: Firestore permission-denied is code 7, Cloud Storage
+// unauthorized is -13021. Matched numerically like the auth errors elsewhere in
+// this app, so a renamed SDK symbol can't silently break the check.
+func loadErrorMessage(_ error: Error, subject: String) -> String {
+    let nsError = error as NSError
+    let deniedByFirestore = nsError.domain == FirestoreErrorDomain && nsError.code == 7
+    let deniedByStorage = nsError.code == -13021
+    if deniedByFirestore || deniedByStorage {
+        return "This patient has turned off your access to their data."
+    }
+    return "Couldn't load \(subject): \(error.localizedDescription)"
+}
+
 // MARK: - PatientService
 //
 // Owns the clinician's patient list. Reads from / writes to the

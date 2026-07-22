@@ -518,7 +518,7 @@ struct ProcessedVideosPage: View {
             if isCancellationLike(error) {
                 return
             }
-            errorMessage = error.localizedDescription
+            errorMessage = loadErrorMessage(error, subject: "processed videos")
         }
     }
 
@@ -543,7 +543,7 @@ struct ProcessedVideosPage: View {
             if isCancellationLike(error) {
                 return
             }
-            errorMessage = error.localizedDescription
+            errorMessage = loadErrorMessage(error, subject: "this video")
         }
     }
 
