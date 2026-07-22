@@ -118,7 +118,7 @@ struct TimelinePage: View {
             }
         }
         .alert(
-            "Couldn't load timeline",
+            "Timeline unavailable",
             isPresented: Binding(
                 get: { timelineService.errorMessage != nil },
                 set: { if !$0 { timelineService.errorMessage = nil } }

@@ -86,6 +86,13 @@ def create_profile(request: Request):
     body = request.get_json(silent=True) or {}
     email = (body.get("email") or "").strip()
     username = (body.get("username") or "").strip()
+
+    # The address on the verified token is authoritative. The body value is
+    # client supplied, so on its own it would let a caller file a profile under
+    # someone else's address.
+    token_email = (decoded_token.get("email") or "").strip()
+    if token_email:
+        email = token_email
     account_type = (body.get("account_type") or "").strip()
     symptoms_location = body.get("symptoms_location") or ""
     symptoms_area = body.get("symptoms_area") or ""
@@ -98,15 +105,30 @@ def create_profile(request: Request):
 
     db = firestore.client()
     username_lower = username.lower()
+    email_lower = email.lower()
 
     profiles = db.collection("profiles")
     existing = list(profiles.where("username_lower", "==", username_lower).limit(1).stream())
     if existing:
         return _error("Username has been registered", 409)
 
+    # Email uniqueness. Firebase Auth already allows one account per address, so
+    # normally createUser blocks a repeat. It does NOT cover the orphan case: if
+    # an auth user is deleted but its profile document is left behind, that
+    # address becomes free in Auth and could be re-registered under a different
+    # username, leaving two profiles sharing one email. Check email_lower for
+    # profiles written from here on, and fall back to the raw email field so
+    # documents created before email_lower existed are still caught.
+    duplicate = list(profiles.where("email_lower", "==", email_lower).limit(1).stream())
+    if not duplicate:
+        duplicate = list(profiles.where("email", "==", email).limit(1).stream())
+    if duplicate:
+        return _error("Email has been registered", 409)
+
     app_uid = str(uuid.uuid4())
     profiles.document(app_uid).set({
         "email": email,
+        "email_lower": email_lower,
         "username": username,
         "username_lower": username_lower,
         "account_type": account_type,

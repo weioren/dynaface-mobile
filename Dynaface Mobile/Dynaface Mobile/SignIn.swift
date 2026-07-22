@@ -8,6 +8,7 @@ struct SignIn: View {
     @State private var showingAlert = false
     @State private var alertMessage = ""
     @State private var showingSignUp = false
+    @State private var showingForgotPassword = false
 
     let baseWidth: CGFloat = 390
     let baseHeight: CGFloat = 844
@@ -65,9 +66,11 @@ struct SignIn: View {
                         }
                         .padding(.horizontal, 20 * widthScale)
 
-                        // Forgot Password
+                        // Forgot Password opens its own screen rather than
+                        // reusing the sign-in email field.
                         Button("Forgot Password?") {
-                            Task { await authService.resetPassword(email: authViewModel.email) }
+                            authService.authError = nil
+                            showingForgotPassword = true
                         }
                         .font(.system(size: 14 * widthScale))
                         .foregroundColor(Color(red: 0.12, green: 0.29, blue: 0.64))
@@ -115,7 +118,9 @@ struct SignIn: View {
         }
         .alert("Error", isPresented: $showingAlert) { Button("OK") { authService.authError = nil } } message: { Text(alertMessage) }
         .onReceive(authService.$authError) { error in
-            if let error {
+            // The reset screen shows its own inline error, so don't also queue an
+            // alert behind the sheet.
+            if let error, !showingForgotPassword {
                 alertMessage = error
                 showingAlert = true
             }
@@ -137,6 +142,9 @@ struct SignIn: View {
         .sheet(isPresented: $showingSignUp) {
             NavigationStack { CreateAccountView() }
         }
+        .sheet(isPresented: $showingForgotPassword) {
+            NavigationStack { ForgotPasswordView() }
+        }
     }
 
     private func signIn() {
@@ -147,6 +155,162 @@ struct SignIn: View {
 
     private func hideKeyboard() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+}
+
+// MARK: - ForgotPasswordView
+//
+// Its own screen, opened from Sign In, so the reset flow no longer piggybacks on
+// the sign-in email field. Two states: enter the address, then a confirmation
+// laid out exactly like SignupVerificationGate so both emailed-link flows look
+// the same.
+struct ForgotPasswordView: View {
+    @EnvironmentObject var authService: AuthenticationService
+    @Environment(\.dismiss) private var dismiss
+
+    // Reused purely for its email validation.
+    @StateObject private var authViewModel = AuthViewModel()
+    @State private var sent = false
+    @State private var resendConfirmation = false
+
+    let baseWidth: CGFloat = 390
+    let baseHeight: CGFloat = 844
+    private let accent = Color(red: 0.12, green: 0.29, blue: 0.64)
+
+    var body: some View {
+        GeometryReader { geometry in
+            let w = geometry.size.width / baseWidth
+            let h = geometry.size.height / baseHeight
+
+            if sent {
+                sentView(w: w, h: h)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .background(Color.white)
+            } else {
+                formView(w: w, h: h)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .background(Color.white)
+            }
+        }
+        // The confirmation is a full-bleed screen like the signup gate, so the
+        // navigation chrome only belongs on the form step.
+        .navigationTitle(sent ? "" : "Reset password")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(sent ? .hidden : .visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Cancel") { dismiss() }
+                    .disabled(authService.isLoading)
+            }
+        }
+    }
+
+    // MARK: Step 1, enter the address
+
+    private func formView(w: CGFloat, h: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 18 * h) {
+            Text("Enter the email you signed up with. We'll send you a link to choose a new password.")
+                .font(.system(size: 16 * w))
+                .foregroundColor(.gray)
+                .padding(.top, 24 * h)
+
+            VStack(alignment: .leading, spacing: 8 * h) {
+                Text("Email")
+                    .font(.system(size: 14 * w, weight: .medium))
+                    .foregroundColor(.black)
+
+                TextField("Enter your email", text: $authViewModel.email)
+                    .textFieldStyle(CustomTextFieldStyle())
+                    .keyboardType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+                    .textContentType(.emailAddress)
+            }
+
+            if let error = authService.authError {
+                Text(error)
+                    .font(.system(size: 12 * w))
+                    .foregroundColor(.red)
+            }
+
+            Button(action: { Task { await send() } }) {
+                Group {
+                    if authService.isLoading {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text("Send reset link")
+                            .font(.system(size: 18 * w, weight: .semibold))
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 48 * h)
+                .background(authViewModel.isEmailValid ? accent : Color.gray)
+                .foregroundColor(.white)
+                .cornerRadius(24 * w)
+            }
+            .disabled(!authViewModel.isEmailValid || authService.isLoading)
+
+            Spacer()
+        }
+        .padding(.horizontal, 24 * w)
+    }
+
+    // MARK: Step 2, confirmation mirroring SignupVerificationGate
+
+    private func sentView(w: CGFloat, h: CGFloat) -> some View {
+        VStack(spacing: 18 * h) {
+            Spacer()
+
+            Image(systemName: "envelope.badge")
+                .font(.system(size: 60 * w))
+                .foregroundColor(accent)
+
+            Text("Check your email")
+                .font(.system(size: 24 * w, weight: .bold))
+                .foregroundColor(.black)
+
+            Text("If an account exists for \(authViewModel.email), we sent a password reset link. Open it to choose a new password, and check your spam folder.")
+                .font(.system(size: 16 * w))
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40 * w)
+
+            if resendConfirmation {
+                Text("Reset email sent.")
+                    .font(.system(size: 13 * w))
+                    .foregroundColor(.gray)
+            }
+
+            Spacer()
+
+            Button(action: { dismiss() }) {
+                Text("Back to sign in")
+                    .font(.system(size: 18 * w, weight: .semibold))
+                    .frame(width: 282 * w, height: 48 * h)
+                    .background(accent)
+                    .foregroundColor(.white)
+                    .cornerRadius(24 * w)
+            }
+
+            Button("Resend email") {
+                Task {
+                    if await authService.resetPassword(email: authViewModel.email) {
+                        resendConfirmation = true
+                    }
+                }
+            }
+            .font(.system(size: 14 * w, weight: .medium))
+            .foregroundColor(accent)
+            .disabled(authService.isLoading)
+            .padding(.bottom, 40 * h)
+        }
+    }
+
+    private func send() async {
+        authService.authError = nil
+        if await authService.resetPassword(email: authViewModel.email) {
+            sent = true
+        }
     }
 }
 

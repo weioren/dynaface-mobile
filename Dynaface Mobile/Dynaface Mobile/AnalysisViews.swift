@@ -32,7 +32,7 @@ struct AnalysisHomeView: View {
             await service.loadIfNeeded()
         }
         .alert(
-            "Couldn't load analysis",
+            "Analysis unavailable",
             isPresented: Binding(
                 get: { service.errorMessage != nil },
                 set: { if !$0 { service.errorMessage = nil } }

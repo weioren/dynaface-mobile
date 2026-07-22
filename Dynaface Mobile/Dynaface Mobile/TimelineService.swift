@@ -66,7 +66,7 @@ final class TimelineService: ObservableObject {
             self.events = fetched
             self.jobStatusByJobId = statuses
         } catch {
-            errorMessage = "Couldn't load timeline: \(error.localizedDescription)"
+            errorMessage = loadErrorMessage(error, subject: "timeline")
         }
     }
 

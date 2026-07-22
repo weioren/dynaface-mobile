@@ -386,6 +386,27 @@ final class AuthenticationService: ObservableObject {
         }
     }
 
+    /// Sign-in failures. Firebase's Email Enumeration Protection reports a wrong
+    /// password, an unknown email, and a malformed credential all as
+    /// INVALID_CREDENTIAL ("The supplied auth credential is malformed or has
+    /// expired"), which is unreadable. Collapse those three into one sentence:
+    /// it stays accurate and keeps the form from revealing which emails exist.
+    private func signInErrorMessage(for error: Error) -> String {
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            return "No connection. Check your network and try again."
+        }
+        switch nsError.code {
+        case 17004, 17009, 17011:                                  // invalidCredential / wrongPassword / userNotFound
+            return "Incorrect email or password."
+        case 17008: return "That email address looks invalid"      // invalidEmail
+        case 17005: return "This account has been disabled."       // userDisabled
+        case 17010: return "Too many attempts. Try again in a few minutes."  // tooManyRequests
+        case 17020: return "No connection. Check your network and try again."  // networkError
+        default:    return error.localizedDescription
+        }
+    }
+
     private func completeProfileErrorMessage(for error: Error) -> String {
         let nsError = error as NSError
         if nsError.domain == NSURLErrorDomain || nsError.code == 17020 {  // network
@@ -400,6 +421,10 @@ final class AuthenticationService: ObservableObject {
             }
             if detail.contains("username") {
                 return "Username has been registered"
+            }
+            // 409 when a leftover profile already claims this address.
+            if detail.contains("email has been registered") {
+                return "That email is already in use. Please contact support."
             }
             return "Couldn't finish setup: \(nsError.localizedDescription)"
         }
@@ -500,7 +525,7 @@ final class AuthenticationService: ObservableObject {
             }
             try await loadProfile(for: appUid)
         } catch {
-            authError = error.localizedDescription
+            authError = signInErrorMessage(for: error)
         }
     }
 
@@ -527,14 +552,106 @@ final class AuthenticationService: ObservableObject {
     // Firebase sends its own templated reset email; the continuation/action
     // URL is configured in the Firebase console (Auth > Templates) rather
     // than passed per-call like Supabase's `redirectTo`.
-    func resetPassword(email: String) async {
+    /// Returns true when the reset email was accepted, so the caller can show a
+    /// confirmation. A missing account is reported as success on purpose: the
+    /// screen must not double as a probe for which emails are registered.
+    @discardableResult
+    func resetPassword(email: String) async -> Bool {
         isLoading = true
         authError = nil
         defer { isLoading = false }
         do {
-            try await Auth.auth().sendPasswordReset(withEmail: email)
+            // Trim first: the keyboard can leave a trailing space, which Firebase
+            // treats as a different (invalid) address.
+            let address = email.trimmingCharacters(in: .whitespacesAndNewlines)
+            print("Password reset requested for \(address)")
+            try await Auth.auth().sendPasswordReset(withEmail: address)
+            return true
         } catch {
-            authError = error.localizedDescription
+            let nsError = error as NSError
+            // Logged, not shown: the UI must stay silent about which addresses
+            // exist, but 17011 in the console is how you tell "no such account"
+            // apart from a real delivery or config problem.
+            print("Password reset failed: code=\(nsError.code) \(nsError.localizedDescription)")
+            // 17011 = ERROR_USER_NOT_FOUND. Matched by code, like the signup
+            // error mapping, rather than by localized message text.
+            if nsError.code == 17011 { return true }
+            authError = nsError.localizedDescription
+            return false
+        }
+    }
+
+    // MARK: - Delete Account
+    //
+    // Two-factor: the user re-enters their password (Firebase reauthenticate,
+    // which also refreshes the recent-login window) and `delete_account`
+    // independently requires a verified email. The Admin SDK does the cascade
+    // delete of every Firestore doc + Storage blob and finally the Auth user —
+    // the client can't, because rules deny those deletes outright.
+    /// Returns true once the account is gone and the session is signed out.
+    func deleteAccount(password: String) async -> Bool {
+        guard !isLoading else { return false }
+        isLoading = true
+        authError = nil
+        defer { isLoading = false }
+
+        guard let user = Auth.auth().currentUser, let email = user.email else {
+            authError = "You need to be signed in."
+            return false
+        }
+
+        do {
+            // Factor 1 — prove possession of the password.
+            let credential = EmailAuthProvider.credential(withEmail: email, password: password)
+            try await user.reauthenticate(with: credential)
+
+            // Fresh token so the backend sees an up-to-date email_verified claim.
+            let idToken = try await user.getIDToken(forcingRefresh: true)
+            try await callDeleteAccount(idToken: idToken)
+
+            await signOut()
+            return true
+        } catch {
+            authError = deleteAccountErrorMessage(for: error)
+            return false
+        }
+    }
+
+    private func callDeleteAccount(idToken: String) async throws {
+        guard let url = URL(string: FirebaseConfig.deleteAccountFunctionURL) else {
+            throw NSError(domain: "delete_account", code: -1,
+                          userInfo: [NSLocalizedDescriptionKey: "Couldn't reach the server."])
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [String: Any]())
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            let message = (json?["error"] as? String) ?? "Failed to delete the account."
+            throw NSError(domain: "delete_account",
+                          code: (response as? HTTPURLResponse)?.statusCode ?? -1,
+                          userInfo: [NSLocalizedDescriptionKey: message])
+        }
+    }
+
+    /// The server's own message passes through; Firebase reauth failures are
+    /// mapped by error code (same approach as the signup errors).
+    private func deleteAccountErrorMessage(for error: Error) -> String {
+        let nsError = error as NSError
+        if nsError.domain == "delete_account" { return nsError.localizedDescription }
+        if nsError.domain == NSURLErrorDomain {
+            return "No internet connection. Check your network and try again."
+        }
+        switch nsError.code {
+        case 17004, 17009: return "That password is incorrect."   // INVALID_CREDENTIAL / WRONG_PASSWORD
+        case 17011:        return "This account no longer exists."
+        case 17014:        return "Please sign out, sign in again, and retry."
+        default:           return "Couldn't delete the account: \(nsError.localizedDescription)"
         }
     }
 }

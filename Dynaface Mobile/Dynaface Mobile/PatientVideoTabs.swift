@@ -74,7 +74,7 @@ struct PatientHistoryTab: View {
         }
         .refreshable { await load() }
         .alert(
-            "Couldn't load recordings",
+            "Recordings unavailable",
             isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { if !$0 { errorMessage = nil } }
@@ -133,7 +133,7 @@ struct PatientHistoryTab: View {
         } catch is CancellationError {
             return
         } catch {
-            errorMessage = "Couldn't load recordings: \(error.localizedDescription)"
+            errorMessage = loadErrorMessage(error, subject: "recordings")
         }
     }
 
@@ -152,7 +152,7 @@ struct PatientHistoryTab: View {
         } catch is CancellationError {
             return
         } catch {
-            errorMessage = "Couldn't load this recording: \(error.localizedDescription)"
+            errorMessage = loadErrorMessage(error, subject: "this recording")
         }
     }
 

@@ -170,7 +170,7 @@ final class AnalysisService: ObservableObject {
         } catch is CancellationError {
             return
         } catch {
-            errorMessage = "Couldn't load analysis: \(error.localizedDescription)"
+            errorMessage = loadErrorMessage(error, subject: "analysis")
         }
     }
 }

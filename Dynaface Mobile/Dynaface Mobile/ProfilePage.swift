@@ -10,6 +10,8 @@ struct ProfilePage: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var profileImage: UIImage?
     @State private var showingEditProfile = false
+    @State private var showingDeleteAccount = false
+    @State private var showingVisibility = false
     @State private var showingGuide = false
 
     // MARK: - Menu data model
@@ -34,6 +36,7 @@ struct ProfilePage: View {
         case .patient:
             return [
                 edit,
+                MenuRow(text: "Who can see me") { showingVisibility = true },
                 guide,
             ]
         case .clinician:
@@ -152,6 +155,23 @@ struct ProfilePage: View {
                         .background(Color.gray.opacity(0.2))
                         .cornerRadius(10 * widthScale)
                     }
+
+                    // Delete account — permanent, so it sits below Sign out and
+                    // opens a sheet that requires typing DELETE and the password.
+                    Button(action: { showingDeleteAccount = true }) {
+                        HStack {
+                            Text("Delete account")
+                                .font(.system(size: 18 * widthScale))
+                                .foregroundColor(.red)
+                            Spacer()
+                            Image(systemName: "trash")
+                                .foregroundColor(.red)
+                        }
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.red.opacity(0.10))
+                        .cornerRadius(10 * widthScale)
+                    }
                 }
 
             }
@@ -163,6 +183,14 @@ struct ProfilePage: View {
             .frame(width: geometry.size.width, height: geometry.size.height)
             .sheet(isPresented: $showingEditProfile) {
                 EditProfilePage()
+                    .environmentObject(authService)
+            }
+            .sheet(isPresented: $showingDeleteAccount) {
+                DeleteAccountSheet()
+                    .environmentObject(authService)
+            }
+            .sheet(isPresented: $showingVisibility) {
+                ClinicianVisibilitySheet()
                     .environmentObject(authService)
             }
             .sheet(isPresented: $showingGuide) {
@@ -375,6 +403,233 @@ struct FormField: View {
                 .disabled(isDisabled)
                 .foregroundColor(isDisabled ? .gray : .black)
         }
+    }
+}
+
+// MARK: - ClinicianVisibilitySheet
+//
+// Patient-facing. Visibility is OPT-OUT: every clinician can see this patient by
+// default, and each row's toggle starts ON. Switching one OFF writes a
+// `patient_blocks` doc, which firestore.rules checks before letting that
+// clinician read the patient's assessments, analyses, videos, or timeline.
+// Switching back ON deletes the doc and restores access immediately.
+struct ClinicianVisibilitySheet: View {
+    @EnvironmentObject var authService: AuthenticationService
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var clinicians: [ClinicianDirectoryEntry] = []
+    @State private var blocked: Set<String> = []
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+
+    private var patientAppUid: String? {
+        if case .signedIn(let profile) = authService.authState { return profile.id }
+        return nil
+    }
+
+    var body: some View {
+        NavigationView {
+            Group {
+                if isLoading {
+                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    content
+                }
+            }
+            .navigationTitle("Who can see me")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .task { await load() }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        List {
+            Section {
+                Text("Clinicians can see your assessments by default. Turn one off to hide your data from that clinician. You can turn it back on any time.")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
+
+            if clinicians.isEmpty {
+                Section {
+                    Text("No clinicians found.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                Section("Clinicians") {
+                    ForEach(clinicians) { clinician in
+                        Toggle(isOn: allowedBinding(for: clinician)) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(clinician.name).font(.body)
+                                if !clinician.email.isEmpty {
+                                    Text(clinician.email)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let errorMessage {
+                Section {
+                    Text(errorMessage).font(.footnote).foregroundColor(.red)
+                }
+            }
+        }
+    }
+
+    /// ON means visible. The stored state is the inverse (a block doc exists).
+    private func allowedBinding(for clinician: ClinicianDirectoryEntry) -> Binding<Bool> {
+        Binding(
+            get: { !blocked.contains(clinician.id.lowercased()) },
+            set: { allowed in
+                Task { await setAllowed(allowed, for: clinician) }
+            }
+        )
+    }
+
+    private func load() async {
+        guard let patientAppUid else { isLoading = false; return }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            async let directory = VisibilityService.clinicians()
+            async let blocks = VisibilityService.blockedClinicianIds(patientAppUid: patientAppUid)
+            clinicians = try await directory
+            blocked = try await blocks
+            errorMessage = nil
+        } catch {
+            errorMessage = "Couldn't load clinicians: \(error.localizedDescription)"
+        }
+    }
+
+    private func setAllowed(_ allowed: Bool, for clinician: ClinicianDirectoryEntry) async {
+        guard let patientAppUid else { return }
+        let key = clinician.id.lowercased()
+        // Flip locally first so the switch responds immediately, then roll back
+        // if the write fails.
+        if allowed { blocked.remove(key) } else { blocked.insert(key) }
+        do {
+            try await VisibilityService.setBlocked(!allowed,
+                                                   patientAppUid: patientAppUid,
+                                                   clinicianAppUid: clinician.id)
+            errorMessage = nil
+        } catch {
+            if allowed { blocked.insert(key) } else { blocked.remove(key) }
+            errorMessage = "Couldn't update \(clinician.name): \(error.localizedDescription)"
+        }
+    }
+}
+
+// MARK: - DeleteAccountSheet
+//
+// Permanent account deletion. Two-factor by design: the user types DELETE to
+// confirm intent, then enters their password, which `AuthenticationService
+// .deleteAccount` uses to re-authenticate. The `delete_account` Cloud Function
+// separately requires a verified email, then erases every Firestore document
+// and Storage blob for the account before removing the Auth user.
+//
+// On success the service signs out, so RootContainer swaps to the login screen
+// and this sheet goes away with the rest of the signed-in UI.
+struct DeleteAccountSheet: View {
+    @EnvironmentObject var authService: AuthenticationService
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var confirmation = ""
+    @State private var password = ""
+
+    private let requiredPhrase = "DELETE"
+
+    private var canDelete: Bool {
+        confirmation.trimmingCharacters(in: .whitespaces).uppercased() == requiredPhrase
+            && !password.isEmpty
+            && !authService.isLoading
+    }
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Label("This cannot be undone", systemImage: "exclamationmark.triangle.fill")
+                        .font(.headline)
+                        .foregroundColor(.red)
+
+                    Text("Deleting your account permanently removes your profile, every assessment you recorded, and all of their videos, analyses, and results. You cannot recover them.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Type DELETE to confirm")
+                            .font(.footnote).foregroundColor(.secondary)
+                        TextField("DELETE", text: $confirmation)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .cornerRadius(10)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Confirm your password")
+                            .font(.footnote).foregroundColor(.secondary)
+                        SecureField("Password", text: $password)
+                            .textContentType(.password)
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .cornerRadius(10)
+                    }
+
+                    if let error = authService.authError {
+                        Text(error).font(.footnote).foregroundColor(.red)
+                    }
+
+                    Button {
+                        Task { await deleteAccount() }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if authService.isLoading { ProgressView().tint(.white) }
+                            Text("Delete my account")
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(canDelete ? Color.red : Color.gray)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                    }
+                    .disabled(!canDelete)
+
+                    Spacer(minLength: 0)
+                }
+                .padding()
+            }
+            .navigationTitle("Delete account")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        authService.authError = nil
+                        dismiss()
+                    }
+                    .disabled(authService.isLoading)
+                }
+            }
+        }
+    }
+
+    private func deleteAccount() async {
+        // On success the service signs out and the whole signed-in tree is
+        // replaced, so there is nothing to dismiss here.
+        _ = await authService.deleteAccount(password: password)
     }
 }
 
