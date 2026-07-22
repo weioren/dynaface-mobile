@@ -4,12 +4,10 @@ rules_version = '2';
 // bucket (see firebase.json's two storage targets) — the path prefix
 // ("uploads/" vs "results/") is what differs, not the bucket.
 //
-// NOTE: `firestore.get(...)` cross-service rule reads are a real Firebase
-// Storage Rules v2 feature, but I couldn't deploy/test this myself (no
-// GCP console access) — please verify the exact path syntax for your
-// Firestore database id (it's usually "(default)") the first time you
-// run `firebase deploy --only storage` and fix up if the syntax has
-// drifted from this version.
+// `firestore.get(...)` / `firestore.exists(...)` cross-service reads are used
+// below to resolve role, attribution, and blocks. The syntax against database
+// id "(default)" is proven in production: isClinician() already relies on it,
+// which is what lets clinicians review a patient's recording today.
 service firebase.storage {
   match /b/{bucket}/o {
 
@@ -38,11 +36,32 @@ service firebase.storage {
         && firestore.get(/databases/(default)/documents/profiles/$(callerAppUid())).data.account_type == "clinician";
     }
 
+    // A patient may read the artifacts of a job attributed to them. Object paths
+    // are namespaced by whoever RECORDED the video, so a clinician recording for
+    // a patient writes under the CLINICIAN's uid. Without this the patient is
+    // locked out of their own assessment even though firestore.rules lets them
+    // read the job doc. Mirrors isAttributedToCaller in firestore.rules, and the
+    // attribution document id IS the jobId.
+    function isAttributedToCaller(jobId) {
+      return firestore.exists(/databases/(default)/documents/job_patient_attributions/$(jobId))
+        && isCaller(firestore.get(/databases/(default)/documents/job_patient_attributions/$(jobId)).data.patient_id);
+    }
+
+    // A patient can switch a specific clinician off (patient_blocks in
+    // firestore.rules). With no block documents this is always false, so
+    // behavior is unchanged.
+    function blockedByPatient(pid) {
+      return firestore.exists(/databases/(default)/documents/patient_blocks/$(pid.lower() + '__' + callerAppUid().lower()));
+    }
+
     // Raw uploads: uploads/{userId}/{jobId}/video.{ext}
     // Owner read/write (the upload itself); clinicians read-only so they
     // can review a patient's original recording.
     match /uploads/{userId}/{jobId}/{fileName} {
-      allow read: if hasAppUid() && (isCaller(userId) || isClinician());
+      allow read: if hasAppUid()
+        && (isCaller(userId)
+            || isAttributedToCaller(jobId)
+            || (isClinician() && !blockedByPatient(userId)));
       allow write: if hasAppUid() && isCaller(userId);
     }
 
@@ -51,7 +70,10 @@ service firebase.storage {
     // account (Admin SDK / GCS client — bypasses these rules entirely).
     // Clients only ever read.
     match /results/{userId}/{jobId}/{fileName} {
-      allow read: if hasAppUid() && (isCaller(userId) || isClinician());
+      allow read: if hasAppUid()
+        && (isCaller(userId)
+            || isAttributedToCaller(jobId)
+            || (isClinician() && !blockedByPatient(userId)));
       allow write: if false;
     }
   }
