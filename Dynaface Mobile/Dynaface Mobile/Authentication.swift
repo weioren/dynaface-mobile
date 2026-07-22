@@ -536,13 +536,22 @@ final class AuthenticationService: ObservableObject {
         authError = nil
         defer { isLoading = false }
         do {
-            try await Auth.auth().sendPasswordReset(withEmail: email)
+            // Trim first: the keyboard can leave a trailing space, which Firebase
+            // treats as a different (invalid) address.
+            let address = email.trimmingCharacters(in: .whitespacesAndNewlines)
+            print("Password reset requested for \(address)")
+            try await Auth.auth().sendPasswordReset(withEmail: address)
             return true
         } catch {
+            let nsError = error as NSError
+            // Logged, not shown: the UI must stay silent about which addresses
+            // exist, but 17011 in the console is how you tell "no such account"
+            // apart from a real delivery or config problem.
+            print("Password reset failed: code=\(nsError.code) \(nsError.localizedDescription)")
             // 17011 = ERROR_USER_NOT_FOUND. Matched by code, like the signup
             // error mapping, rather than by localized message text.
-            if (error as NSError).code == 17011 { return true }
-            authError = error.localizedDescription
+            if nsError.code == 17011 { return true }
+            authError = nsError.localizedDescription
             return false
         }
     }
