@@ -38,11 +38,21 @@ service firebase.storage {
         && firestore.get(/databases/(default)/documents/profiles/$(callerAppUid())).data.account_type == "clinician";
     }
 
+    // Mirrors firestore.rules' isAttributedToCaller: lets a patient read a
+    // video/result whose job was recorded by a clinician (so the storage
+    // path's {userId} is the clinician's uid, not theirs) but has since
+    // been attributed to the patient via job_patient_attributions.
+    function isAttributedToCaller(jobId) {
+      return firestore.exists(/databases/(default)/documents/job_patient_attributions/$(jobId))
+        && isCaller(firestore.get(/databases/(default)/documents/job_patient_attributions/$(jobId)).data.patient_id);
+    }
+
     // Raw uploads: uploads/{userId}/{jobId}/video.{ext}
     // Owner read/write (the upload itself); clinicians read-only so they
-    // can review a patient's original recording.
+    // can review a patient's original recording; attributed patients
+    // read-only for videos a clinician recorded on their behalf.
     match /uploads/{userId}/{jobId}/{fileName} {
-      allow read: if hasAppUid() && (isCaller(userId) || isClinician());
+      allow read: if hasAppUid() && (isCaller(userId) || isClinician() || isAttributedToCaller(jobId));
       allow write: if hasAppUid() && isCaller(userId);
     }
 
@@ -51,7 +61,7 @@ service firebase.storage {
     // account (Admin SDK / GCS client — bypasses these rules entirely).
     // Clients only ever read.
     match /results/{userId}/{jobId}/{fileName} {
-      allow read: if hasAppUid() && (isCaller(userId) || isClinician());
+      allow read: if hasAppUid() && (isCaller(userId) || isClinician() || isAttributedToCaller(jobId));
       allow write: if false;
     }
   }
